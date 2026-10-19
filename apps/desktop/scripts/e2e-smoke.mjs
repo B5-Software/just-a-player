@@ -60,7 +60,7 @@ try {
   if (await page.evaluate(() => window.__jap.useUi.getState().lyricsAdjusting))
     throw new Error('First onboarding step must only drag visualization')
   if (errors.length) throw new Error(errors.join('\n'))
-  console.log(JSON.stringify({ ok: true, ...info }))
+  console.log(JSON.stringify({ ok: true, architecture: process.arch, packaged, ...info }))
 } finally {
   await app.close()
 }

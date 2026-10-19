@@ -72,6 +72,7 @@ for (const name of [
   ...Object.keys(p.dependencies),
   'react',
   'react-dom',
+  'three',
   'zustand',
   'motion',
   '@phosphor-icons/react'

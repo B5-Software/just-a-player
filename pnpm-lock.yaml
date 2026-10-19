@@ -168,6 +168,13 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@jap/engine':
+        specifier: workspace:*
+        version: link:../../crates/jap-napi
+      fontkit:
+        specifier: ^2.0.4
+        version: 2.0.4
+    devDependencies:
       '@fontsource/liu-jian-mao-cao':
         specifier: ^5.3.0
         version: 5.3.0
@@ -201,16 +208,6 @@ importers:
       '@fontsource/zhi-mang-xing':
         specifier: ^5.3.0
         version: 5.3.0
-      '@jap/engine':
-        specifier: workspace:*
-        version: link:../../crates/jap-napi
-      fontkit:
-        specifier: ^2.0.4
-        version: 2.0.4
-      three:
-        specifier: ^0.186.1
-        version: 0.186.1
-    devDependencies:
       '@phosphor-icons/react':
         specifier: ^2.1.10
         version: 2.1.10(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -262,6 +259,9 @@ importers:
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
+      three:
+        specifier: ^0.186.1
+        version: 0.186.1
       typescript:
         specifier: ^7.0.2
         version: 7.0.2

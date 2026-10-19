@@ -2,10 +2,16 @@
   "name": "desktop",
   "version": "0.1.0",
   "private": true,
-  "author": { "name": "B5-Software", "url": "https://github.com/B5-Software" },
+  "author": {
+    "name": "B5-Software",
+    "url": "https://github.com/B5-Software"
+  },
   "license": "GPL-3.0-or-later",
   "homepage": "https://github.com/B5-Software/just-a-player#readme",
-  "repository": { "type": "git", "url": "https://github.com/B5-Software/just-a-player.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/B5-Software/just-a-player.git"
+  },
   "description": "Just A Player",
   "main": "./out/main/index.js",
   "scripts": {
@@ -14,6 +20,7 @@
     "package": "node scripts/prepare-package.mjs && electron-builder --config electron-builder.yml",
     "test:e2e:release": "node scripts/e2e-release.mjs",
     "test:e2e:smoke": "node scripts/e2e-smoke.mjs",
+    "test:e2e:memory": "node scripts/e2e-memory.mjs",
     "preview": "node scripts/ensure-electron.mjs && electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test:e2e:audio": "node scripts/e2e-audio.mjs",
@@ -25,6 +32,10 @@
     "fonts:vendor": "node scripts/vendor-fonts.mjs"
   },
   "dependencies": {
+    "@jap/engine": "workspace:*",
+    "fontkit": "^2.0.4"
+  },
+  "devDependencies": {
     "@fontsource/liu-jian-mao-cao": "^5.3.0",
     "@fontsource/long-cang": "^5.3.0",
     "@fontsource/lxgw-wenkai": "^5.3.0",
@@ -36,11 +47,6 @@
     "@fontsource/zcool-qingke-huangyou": "^5.3.0",
     "@fontsource/zcool-xiaowei": "^5.3.0",
     "@fontsource/zhi-mang-xing": "^5.3.0",
-    "@jap/engine": "workspace:*",
-    "fontkit": "^2.0.4",
-    "three": "^0.186.1"
-  },
-  "devDependencies": {
     "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/vite": "^4.3.3",
     "@types/fontkit": "^2.0.9",
@@ -58,6 +64,7 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "tailwindcss": "^4.3.3",
+    "three": "^0.186.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
     "zustand": "^5.0.15"

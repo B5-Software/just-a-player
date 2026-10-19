@@ -7,6 +7,10 @@ directories:
 files:
   - out/**
   - package.json
+  - '!**/*.node.*'
+  - '!node_modules/@jap/engine/src/**'
+  - '!node_modules/@jap/engine/*.rs'
+  - '!node_modules/@jap/engine/Cargo.toml'
 asar: true
 asarUnpack:
   - '**/*.node'
