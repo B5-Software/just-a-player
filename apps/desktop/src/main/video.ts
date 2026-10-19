@@ -7,6 +7,7 @@ import { join, resolve, dirname, basename } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { IPC } from '../shared/ipc'
 import { queueTarget } from './video-queue'
+import { ffmpegPath } from './tools'
 const exec = promisify(execFile)
 interface Options {
   queueId?: string
@@ -49,7 +50,7 @@ async function encoder(request: string): Promise<string> {
   for (const name of choices) {
     try {
       await exec(
-        'ffmpeg',
+        ffmpegPath(),
         [
           '-v',
           'error',
@@ -141,7 +142,7 @@ export function registerVideoIpc(trusted: (event: Electron.IpcMainInvokeEvent) =
             ? ['-global_quality', String(options.quality)]
             : ['-qp_i', String(options.quality), '-qp_p', String(options.quality)]
     const child = spawn(
-      'ffmpeg',
+      ffmpegPath(),
       [
         '-v',
         'error',
@@ -237,7 +238,7 @@ export function registerVideoIpc(trusted: (event: Electron.IpcMainInvokeEvent) =
         // Cut before applying the intro offset. FFmpeg input -t also counts
         // itsoffset; combining them would silently shorten the original audio.
         await exec(
-          'ffmpeg',
+          ffmpegPath(),
           [
             '-v',
             'error',
@@ -292,7 +293,7 @@ export function registerVideoIpc(trusted: (event: Electron.IpcMainInvokeEvent) =
               `atrim=duration=${musicDuration},asetpts=PTS-STARTPTS+${j.options.intro}/TB,apad`
             ]
       await exec(
-        'ffmpeg',
+        ffmpegPath(),
         [
           '-v',
           'error',

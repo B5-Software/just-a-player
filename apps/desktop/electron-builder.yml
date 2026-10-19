@@ -15,12 +15,15 @@ asar: true
 asarUnpack:
   - '**/*.node'
 npmRebuild: false
+afterPack: scripts/verify-media-package.cjs
 extraMetadata:
   name: just-a-player
-  version: 0.1.0
+  version: 0.1.1
 extraResources:
   - from: build/notices
     to: licenses
+  - from: build/media-tools
+    to: media-tools
 publish:
   provider: github
   owner: B5-Software

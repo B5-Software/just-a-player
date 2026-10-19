@@ -8,7 +8,14 @@ use std::{
 };
 
 fn command(program: &str) -> Command {
-    let c = Command::new(program);
+    let variable = match program {
+        "ffmpeg" => "JAP_FFMPEG_PATH",
+        "ffprobe" => "JAP_FFPROBE_PATH",
+        _ => unreachable!(),
+    };
+    // Electron provides absolute bundled paths; the standalone CLI can use PATH.
+    let executable = std::env::var_os(variable).filter(|p| !p.is_empty());
+    let c = Command::new(executable.as_deref().unwrap_or_else(|| program.as_ref()));
     #[cfg(windows)]
     let c = {
         use std::os::windows::process::CommandExt;
@@ -40,7 +47,9 @@ impl FfmpegSource {
             .arg(path)
             .output()
             .map_err(|e| {
-                DecodeError::Unsupported(format!("此格式需要已安装的 FFmpeg / ffprobe：{e}"))
+                DecodeError::Unsupported(format!(
+                    "无法启动 FFprobe，请修复安装或检查命令行工具路径：{e}"
+                ))
             })?;
         let value: serde_json::Value = serde_json::from_slice(&output.stdout)
             .map_err(|_| DecodeError::Unsupported("FFprobe 无法识别音轨".into()))?;

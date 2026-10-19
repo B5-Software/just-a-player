@@ -1,6 +1,6 @@
 {
   "name": "desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "author": {
     "name": "B5-Software",
@@ -15,14 +15,16 @@
   "description": "Just A Player",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "node scripts/ensure-electron.mjs && electron-vite dev",
-    "build": "electron-vite build",
-    "package": "node scripts/prepare-package.mjs && electron-builder --config electron-builder.yml",
+    "dev": "node scripts/ensure-electron.mjs && node scripts/prepare-media-tools.mjs && electron-vite dev",
+    "build": "node scripts/prepare-media-tools.mjs && electron-vite build",
+    "package": "node scripts/prepare-media-tools.mjs && node scripts/prepare-package.mjs && electron-builder --config electron-builder.yml",
+    "media:prepare": "node scripts/prepare-media-tools.mjs",
+    "test:e2e:media": "node scripts/e2e-media.mjs",
     "test:e2e:release": "node scripts/e2e-release.mjs",
     "test:e2e:smoke": "node scripts/e2e-smoke.mjs",
     "test:e2e:memory": "node scripts/e2e-memory.mjs",
     "test:e2e:fallback": "node scripts/e2e-fallback.mjs",
-    "preview": "node scripts/ensure-electron.mjs && electron-vite preview",
+    "preview": "node scripts/ensure-electron.mjs && node scripts/prepare-media-tools.mjs && electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test:e2e:audio": "node scripts/e2e-audio.mjs",
     "test:e2e:features": "node scripts/e2e-features.mjs",

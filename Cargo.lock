@@ -556,7 +556,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jap-analysis"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "jap-core",
  "realfft",
@@ -564,7 +564,7 @@ dependencies = [
 
 [[package]]
 name = "jap-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -578,7 +578,7 @@ dependencies = [
 
 [[package]]
 name = "jap-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "ts-rs",
@@ -586,7 +586,7 @@ dependencies = [
 
 [[package]]
 name = "jap-decode"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aes",
  "base64",
@@ -601,7 +601,7 @@ dependencies = [
 
 [[package]]
 name = "jap-engine"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "crossbeam-channel",
  "hound",
@@ -618,7 +618,7 @@ dependencies = [
 
 [[package]]
 name = "jap-napi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hound",
  "jap-analysis",
@@ -636,7 +636,7 @@ dependencies = [
 
 [[package]]
 name = "jap-output"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "alsa",
  "cpal",

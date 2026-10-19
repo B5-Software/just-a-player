@@ -2,11 +2,12 @@
 import { _electron as electron } from 'playwright-core'
 import electronPath from 'electron'
 import { resolve, join } from 'node:path'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { graphicsArgs } from './e2e-graphics.mjs'
 const cwd = resolve(fileURLToPath(import.meta.url), '../..')
 const packaged = process.argv.includes('--packaged')
+const expectedVersion = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')).version
 const folder =
   process.platform === 'win32'
     ? process.arch === 'arm64'
@@ -58,7 +59,8 @@ try {
       platform = window.jap.platform
     return { version, platform, output: j.usePlayer.getState().output.api }
   })
-  if (info.version !== '0.1.0' || info.output !== 'null') throw new Error(JSON.stringify(info))
+  if (info.version !== expectedVersion || info.output !== 'null')
+    throw new Error(JSON.stringify(info))
   await page.waitForFunction(
     () =>
       (window.__japLyrics?.preview && window.__japLyrics.lines.length > 0) ||

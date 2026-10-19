@@ -60,7 +60,7 @@ macOS 与 Linux 的后端由原生 CI 编译和空设备冒烟测试覆盖；具
 
 ### 本地曲库，好好整理
 
-FLAC、WAV、AIFF、ALAC、MP3、AAC、Ogg 等常见格式，另支持 APE、DTS、DSD、SACD ISO、CD ISO / CUE。SACD ISO 当前按连续音频区域播放，优先立体声区域。APE / DTS 等扩展解码通过系统 FFmpeg 完成。
+FLAC、WAV、AIFF、ALAC、MP3、AAC、Ogg 等常见格式，另支持 APE、DTS、DSD、SACD ISO、CD ISO / CUE。SACD ISO 当前按连续音频区域播放，优先立体声区域。APE / DTS 等扩展解码通过内置 FFmpeg 完成。
 
 **NCM 直接导入、直接播放**：Rust 内置可寻址解密数据源，基于 [ncmdump-js-b5s](https://github.com/B5-Software/ncmdump-js-b5s) 实现，读取解码器所需的数据，不生成转换后的音频文件。
 
@@ -92,17 +92,11 @@ HDR 默认关闭，支持的设备与图形路径可开启；提供帧率上限�
 
 发布页附有 `SHA256SUMS.txt`。社区构建暂未使用商业代码签名证书或 Apple 公证。桌面壁纸与 Windows 系统媒体集成为 Windows 功能；其他平台可使用全屏、小窗、媒体键和原生音频输出。
 
-基础无损播放与可视化不需要额外解码工具。**视频导出及部分扩展格式需要 FFmpeg 与 ffprobe**，安装后让它们位于 PATH 中，或位于 macOS 的 `/opt/homebrew/bin`、`/usr/local/bin`：
+**从 v0.1.1 起，六个平台安装包均内置 FFmpeg / ffprobe 9.0.2 及所需运行库。安装后即可播放 APE / DTS、使用视频导出及全部音轨选项，无需另装解码工具、配置 PATH 或联网下载组件。** 播放、后台编码和音轨封装使用安装目录内的固定版本。
 
-```sh
-# macOS
-brew install ffmpeg
+FFmpeg 来自 [TAS-FFMPEG v9.0.2](https://github.com/NevermindNilas/TAS-FFMPEG/releases/tag/v9.0.2)，构建包含 x264、Opus 等编码器，并禁用 nonfree 组件。安装目录附带许可证、构建配置与来源说明；本项目每个新版发布页同时提供 `tas-ffmpeg-9.0.2-corresponding-source.tar.xz`，含完整对应源码、依赖和构建脚本。普通用户只需下载安装包，无需下载源码压缩包。
 
-# Debian / Ubuntu
-sudo apt install ffmpeg
-```
-
-Windows 可安装 [FFmpeg](https://ffmpeg.org/download.html) 并将其 `bin` 目录加入 PATH，随后重启播放器。本项目不捆绑 FFmpeg 二进制。ARGB 联动需要单独运行 [OpenRGB](https://openrgb.org/) 的 SDK 服务。
+Windows ARM64 播放器、Rust 音频引擎与输出后端为原生 ARM64；随附 FFmpeg / ffprobe 是 x64 辅助进程，通过 Windows 11 ARM 的兼容层运行。其余五个平台的辅助工具与应用架构一致。GPU 硬件编码、DAC 独占 / DSD 档位仍需要相应设备和驱动；ARGB 联动需要运行 [OpenRGB](https://openrgb.org/) SDK 服务。
 
 默认设置：**3D 歌词、音量 20%、原生渲染精度、不限制帧率、后处理开启；HDR、桌面壁纸与 ARGB 联动关闭**。最小化暂停绘制，后台音频按设置继续播放。
 
@@ -122,7 +116,7 @@ pnpm build
 pnpm dev
 ```
 
-开发入口会检查并补齐 Electron 可执行文件，避免 pnpm 依赖变体缺少二进制时出现 `Electron uninstall`。若只修改界面，后续直接运行 `pnpm dev`；修改 Rust 后先运行 `pnpm engine:build`。
+开发入口会检查并补齐 Electron 可执行文件，避免 pnpm 依赖变体缺少二进制时出现 `Electron uninstall`。首次 `pnpm build` / `pnpm dev` 也会下载并验证本平台的 FFmpeg 工具包，缓存于 `apps/desktop/build/media-cache/`；后续使用缓存，已安装应用不会下载组件。下载地址和 SHA-256 固定于 `apps/desktop/scripts/media-tools.lock.json`。解压需要系统 `tar`（Windows 10/11 已内置）。若只修改界面，后续直接运行 `pnpm dev`；修改 Rust 后先运行 `pnpm engine:build`。
 
 ```sh
 pnpm typecheck
@@ -130,12 +124,13 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --locked
 pnpm --filter desktop test:e2e:smoke
+pnpm --filter desktop test:e2e:media
 
 # 构建本机安装包，产物位于 apps/desktop/release/
 pnpm package
 ```
 
-CI 在 Windows、macOS、Linux 的 x64 与 ARM64 原生 runner 上编译 Rust、检查类型、执行测试、打包，并启动打包后的程序验证引擎与界面。推送 `v*` 标签后，全部平台成功才上传 Release。
+CI 在 Windows、macOS、Linux 的 x64 与 ARM64 原生 runner 上编译 Rust、检查类型、执行测试、打包，并启动打包后的程序验证引擎与界面。内置工具测试清空系统 PATH，实际验证 Rust DTS 播放和 H.264 视频编码，以及 AAC / Opus / FLAC / PCM / 原始音轨封装；源码运行和安装包分别检查。推送 `v*` 标签后，全部平台成功且对应源码下载与校验完成，才上传 Release。
 
 Intel macOS 的托管虚拟机无法初始化可用的图形设备时，CI 会明确记录并验证封面 / 2D 歌词回退，保留能力报告与截图；其他五项要求正常 3D 启动。Intel Mac 的实际 GPU 效果仍需实机验证。3D 视效需要可用的 WebGL 2 图形环境，图形不可用时播放器仍能播放和控制音频。
 
