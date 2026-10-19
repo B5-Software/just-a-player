@@ -29,9 +29,13 @@ pub(crate) enum ProducerCmd {
     Load {
         track: TrackHandoff,
         resume: bool,
+        request: u64,
     },
     QueueNext(Option<TrackHandoff>),
-    Seek(u64),
+    Seek {
+        ms: u64,
+        request: u64,
+    },
     Shutdown,
 }
 
@@ -149,24 +153,39 @@ impl Worker {
     fn handle(&mut self, cmd: ProducerCmd) -> bool {
         match cmd {
             ProducerCmd::Shutdown => return false,
-            ProducerCmd::Load { track, resume } => {
+            ProducerCmd::Load {
+                track,
+                resume,
+                request,
+            } => {
                 if self.ctx.shared.started.load(Ordering::Acquire) {
                     self.flush();
                 }
                 self.pending.clear();
                 self.pending_off = 0;
                 self.next = None;
+                self.ctx.timeline.lock().clear();
                 self.activate(track);
                 if resume {
                     self.ctx.shared.paused.store(false, Ordering::Release);
                 }
+                self.ctx
+                    .shared
+                    .control_ack
+                    .store(request, Ordering::Release);
             }
             ProducerCmd::QueueNext(track) => match track {
                 // 当前曲目早已写完（短曲目）时，新预载的曲目直接接上
                 Some(track) if self.current.is_none() => self.activate(track),
                 other => self.next = other,
             },
-            ProducerCmd::Seek(ms) => self.seek(ms),
+            ProducerCmd::Seek { ms, request } => {
+                self.seek(ms);
+                self.ctx
+                    .shared
+                    .control_ack
+                    .store(request, Ordering::Release);
+            }
         }
         true
     }
@@ -220,6 +239,7 @@ impl Worker {
         match active.source.seek(ms) {
             Ok(_) => {
                 let (info, pos) = (Arc::clone(&active.info), active.source.position_frames());
+                self.ctx.timeline.lock().clear();
                 self.push_segment(&info, pos);
             }
             Err(e) => {

@@ -143,6 +143,8 @@ struct Core {
     underrun_window: Instant,
     underrun_count: u32,
     pending_recovery: bool,
+    control_request: u64,
+    pending_control: Option<u64>,
 }
 
 impl Core {
@@ -168,6 +170,8 @@ impl Core {
             underrun_window: Instant::now(),
             underrun_count: 0,
             pending_recovery: false,
+            control_request: 0,
+            pending_control: None,
         }
     }
 
@@ -253,6 +257,7 @@ impl Core {
 
         self.pending_next = None;
         self.queued_next_path = None;
+        self.last_position_ms = start_ms;
         if let Err(e) = self.start_track(loaded) {
             self.error(e);
             self.stop();
@@ -265,6 +270,9 @@ impl Core {
 
     /// 能复用现有设备流就复用（无缝衔接），否则重建。
     fn start_track(&mut self, mut loaded: Loaded) -> Result<(), String> {
+        self.control_request = self.control_request.wrapping_add(1);
+        let request = self.control_request;
+        self.pending_control = Some(request);
         let candidates = self.candidates(&loaded)?;
         if candidates.first().is_some_and(|c| c.format.is_dsd())
             && self.output.api != OutputApi::Null
@@ -299,6 +307,7 @@ impl Core {
             session.send(ProducerCmd::Load {
                 track,
                 resume: true,
+                request,
             });
             return Ok(());
         }
@@ -327,6 +336,7 @@ impl Core {
         session.send(ProducerCmd::Load {
             track,
             resume: false,
+            request,
         });
         self.session = Some(session);
         self.seen_underruns = 0;
@@ -525,6 +535,7 @@ impl Core {
     }
 
     fn stop(&mut self) {
+        self.pending_control = None;
         self.session = None;
         self.pending_next = None;
         self.queued_next_path = None;
@@ -539,7 +550,12 @@ impl Core {
             && session.shared.current_serial.load(Ordering::Acquire) == session.emitted_serial;
 
         if in_place {
-            session.send(ProducerCmd::Seek(position_ms));
+            self.control_request = self.control_request.wrapping_add(1);
+            self.pending_control = Some(self.control_request);
+            session.send(ProducerCmd::Seek {
+                ms: position_ms,
+                request: self.control_request,
+            });
             self.last_position_ms = position_ms;
             self.emit_position();
         } else if let Some(path) = self.current_path.clone() {
@@ -616,6 +632,18 @@ impl Core {
         let producer_errors: Vec<String> = session.errors.try_iter().collect();
 
         session.start_if_primed();
+        // Never re-publish the old timeline while a manual load/seek is in flight.
+        // In particular, an immediate Pause must retain the requested seek position.
+        if self
+            .pending_control
+            .is_some_and(|request| session.shared.control_ack.load(Ordering::Acquire) != request)
+        {
+            for message in producer_errors {
+                self.error(message);
+            }
+            return;
+        }
+        self.pending_control = None;
 
         let underruns = session.shared.underruns.load(Ordering::Relaxed);
         let new_underruns = underruns.wrapping_sub(self.seen_underruns);

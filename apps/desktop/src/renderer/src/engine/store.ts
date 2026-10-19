@@ -94,7 +94,7 @@ export const usePlayer = create<PlayerStore>((set, get) => ({
   resetBuffer: () => engine.send({ type: 'resetBuffer' }),
 
   play: (path, startMs = 0) => {
-    set({ error: null })
+    set({ error: null, position: { ms: startMs, at: performance.now() } })
     engine.send({ type: 'play', path, startMs: Math.max(0, Math.round(startMs)) })
   },
 
@@ -128,7 +128,8 @@ export const usePlayer = create<PlayerStore>((set, get) => ({
   refreshDevices: async () => {
     const api = get().output.api
     const response = await engine.query({
-      type: 'listOutputDevices', api
+      type: 'listOutputDevices',
+      api
     })
     if (response.type === 'devices' && get().output.api === api) set({ devices: response.devices })
   },

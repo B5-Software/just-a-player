@@ -178,6 +178,109 @@ fn cfg(rate: u32, channels: u16, format: SampleFormat) -> StreamConfig {
 }
 
 #[test]
+fn seek_then_immediate_pause_retains_the_acknowledged_position() {
+    let h = harness("seek-pause-order", vec![cfg(48000, 2, SampleFormat::I16)]);
+    let samples = vec![1000; 48000 * 20 * 2];
+    let path = write_wav(h.dir(), "seek-pause.wav", 48000, 2, 16, &samples);
+    h.engine.send(Command::Play {
+        path: path.display().to_string(),
+        start_ms: None,
+    });
+    h.wait_for(Duration::from_secs(5), |event| {
+        matches!(event, Event::Position {position_ms,..} if *position_ms > 0).then_some(())
+    });
+    for target in [7000, 12000, 3000] {
+        h.engine.send(Command::Seek {
+            position_ms: target,
+        });
+        h.engine.send(Command::Pause);
+        h.wait_for(Duration::from_secs(5), |event| {
+            matches!(
+                event,
+                Event::State {
+                    state: jap_core::PlaybackState::Paused
+                }
+            )
+            .then_some(())
+        });
+        let paused = h.wait_for(Duration::from_secs(5), |event| match event {
+            Event::Position { position_ms, .. } => Some(*position_ms),
+            _ => None,
+        });
+        assert!(
+            paused >= target.saturating_sub(20) && paused < target + 200,
+            "stale paused position {paused}, expected {target}"
+        );
+        std::thread::sleep(Duration::from_millis(60));
+        h.engine.send(Command::Resume);
+        let resumed = h.wait_for(Duration::from_secs(5), |event| match event {
+            Event::Position { position_ms, .. } => Some(*position_ms),
+            _ => None,
+        });
+        assert!(
+            resumed >= target.saturating_sub(20) && resumed < target + 500,
+            "seek timeline regressed to {resumed}, expected {target}"
+        );
+    }
+}
+
+#[test]
+fn negotiated_shared_format_rebuilds_the_ring_before_applying_volume() {
+    use jap_output::{OpenRequest, OpenedStream, OutputBackend, RenderSource};
+    struct NativeShared(CaptureBackend);
+    impl OutputBackend for NativeShared {
+        fn list_devices(&self, api: OutputApi) -> jap_output::Result<Vec<jap_core::DeviceInfo>> {
+            self.0.list_devices(api)
+        }
+        fn probe_exclusive(&self, id: Option<&str>) -> jap_output::Result<Vec<StreamConfig>> {
+            self.0.probe_exclusive(id)
+        }
+        fn open(
+            &self,
+            request: &OpenRequest,
+            source: Box<dyn RenderSource>,
+        ) -> jap_output::Result<OpenedStream> {
+            let mut native = request.clone();
+            native.candidates = vec![cfg(48000, 2, SampleFormat::I16)];
+            let mut stream = self.0.open(&native, source)?;
+            stream.exclusive = false;
+            Ok(stream)
+        }
+    }
+    let backend = CaptureBackend::new(true);
+    let captured = backend.captured();
+    let (tx, events) = unbounded();
+    let engine = Engine::with_backend(
+        Arc::new(NativeShared(backend)),
+        Arc::new(move |event| {
+            let _ = tx.send(event);
+        }),
+    );
+    engine.send(Command::SetOutput {
+        config: OutputConfig {
+            api: OutputApi::CoreAudio,
+            ..Default::default()
+        },
+    });
+    engine.send(Command::SetVolume { gain: 0.5 });
+    let h = Harness {
+        engine,
+        events,
+        captured,
+        _dir: tempfile_dir::TempDir::new("native-format-layout"),
+    };
+    let samples = vec![10000; 48000 / 2];
+    let path = write_wav(h.dir(), "shared.wav", 48000, 2, 16, &samples);
+    h.play_to_end(&path);
+    let expected = expected_bytes(&vec![5000; samples.len()], 16, SampleFormat::I16);
+    assert_eq!(
+        h.captured_prefix(expected.len()),
+        expected,
+        "gain used the requested format instead of the negotiated device format"
+    );
+}
+
+#[test]
 fn enabling_dsp_changes_captured_samples_and_removes_bit_perfect_verdict() {
     let h = harness("dsp-capture", vec![cfg(44100, 2, SampleFormat::I16)]);
     let samples = vec![10000; 44100];

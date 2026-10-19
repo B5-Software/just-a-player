@@ -28,6 +28,8 @@ pub struct RingShared {
     pub underruns: AtomicU32,
     /// 生产者当前正在写入的曲目序号。
     pub current_serial: AtomicU64,
+    /// Completed manual load/seek request, published after its timeline is installed.
+    pub control_ack: AtomicU64,
     pub volume: AtomicU32,
 }
 

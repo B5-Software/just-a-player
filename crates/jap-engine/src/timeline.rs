@@ -27,6 +27,10 @@ pub struct Timeline {
 }
 
 impl Timeline {
+    /// A manual load/seek discards the old queued audio, including its timeline.
+    pub fn clear(&mut self) {
+        self.segments.clear();
+    }
     pub fn push(&mut self, segment: Segment) {
         self.segments.push_back(segment);
     }

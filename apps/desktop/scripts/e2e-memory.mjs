@@ -100,11 +100,11 @@ try {
   const before = await page.evaluate(() => window.__jap.useLibrary.getState().memories)
   assert(
     before[ids.a].itemId === ids.ai[1] && before[ids.a].positionMs >= 6800,
-    'First list lost its own position'
+    'First list lost its own position: ' + JSON.stringify({ ids, before })
   )
   assert(
     before[ids.b].itemId === ids.bi[2] && before[ids.b].positionMs >= 10800,
-    'Second list position missing'
+    'Second list position missing: ' + JSON.stringify({ ids, before })
   )
   await app.close()
   app = null
