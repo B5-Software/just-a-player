@@ -149,15 +149,15 @@ export class LyricsRenderer {
     this.canvas.style.pointerEvents = 'none'
     this.canvas.style.touchAction = 'none'
     this.canvas.dataset.lyricsCanvas = ''
-    host.appendChild(this.canvas)
-    this.hdr = new HdrPresenter(host, true)
-    this.canvas.addEventListener('webglcontextrestored', () => this.hdr.invalidate())
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
       antialias: true,
       alpha: true,
       preserveDrawingBuffer: true
     })
+    host.appendChild(this.canvas)
+    this.hdr = new HdrPresenter(host, true)
+    this.canvas.addEventListener('webglcontextrestored', () => this.hdr.invalidate())
     this.renderer.setClearColor(0x000000, 0)
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.root.rotation.order = 'ZXY'

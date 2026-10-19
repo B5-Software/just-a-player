@@ -23,7 +23,8 @@ import { useViz } from './viz/store'
 import { useDsp } from './audio/dsp-store'
 import { useQuality } from './audio/quality-store'
 import { exportVideo, useVideoExport, useVideoQueue } from './video/export'
-import { WallpaperApp } from './WallpaperApp'
+import { WallpaperApp, WallpaperFallback } from './WallpaperApp'
+import { GraphicsBoundary } from './components/GraphicsBoundary'
 import { TrayApp } from './TrayApp'
 import { ExportApp } from './ExportApp'
 import { engine } from './engine/client'
@@ -107,7 +108,9 @@ if (surface === 'main' && !navigator.userAgent.includes('Windows') && 'mediaSess
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {surface === 'wallpaper' ? (
-      <WallpaperApp />
+      <GraphicsBoundary fallback={() => <WallpaperFallback />}>
+        <WallpaperApp />
+      </GraphicsBoundary>
     ) : surface === 'tray' ? (
       <TrayApp />
     ) : surface === 'export' ? (

@@ -10,6 +10,8 @@ import { useLyrics } from './lyrics/store'
 import { useSettings } from './settings/store'
 import { HdrPresenter } from './viz/hdr'
 import { livePositionMs } from './engine/clock'
+import { CoverBackdrop } from './components/GraphicsBoundary'
+import { useCover } from './cover/store'
 
 const useWallpaper = create<WallpaperState>(() => ({ live: false, snapshot: null, token: 0 }))
 if (window.jap.surface === 'wallpaper') {
@@ -217,6 +219,70 @@ export function WallpaperApp(): React.JSX.Element {
           frozen={frozen}
           register={register}
         />
+      ))}
+    </div>
+  )
+}
+
+/** Without a GPU, keep every monitor covered and acknowledge the normal hand-off. */
+export function WallpaperFallback(): React.JSX.Element {
+  const wall = useWallpaper(),
+    art = useCover((state) => state.art)
+  const [frozen, setFrozen] = useState<number | null>(null)
+  const layout = wall.layout ?? {
+    width: 1,
+    height: 1,
+    displays: [{ id: 0, x: 0, y: 0, width: 1, height: 1 }]
+  }
+  useEffect(() => {
+    setFrozen(wall.live ? null : livePositionMs())
+    document.documentElement.dataset['renderSuspended'] = wall.live ? '' : '1'
+    let cancelled = false,
+      frame = 0
+    void (async () => {
+      if (art) {
+        const image = new Image()
+        image.src = art.url
+        await image.decode().catch(() => {})
+      }
+      if (!cancelled)
+        frame = requestAnimationFrame(() => {
+          frame = requestAnimationFrame(() => {
+            if (!cancelled && wall.token) window.jap.wallpaperReady(wall.token)
+          })
+        })
+    })()
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(frame)
+    }
+  }, [wall.token, wall.live, art])
+  return (
+    <div data-wallpaper-fallback className="absolute inset-0 overflow-hidden bg-[#312b52]">
+      {layout.displays.map((display) => (
+        <section
+          key={display.id}
+          data-wallpaper-display={display.id}
+          className="absolute overflow-hidden"
+          style={{
+            left: `${(display.x / layout.width) * 100}%`,
+            top: `${(display.y / layout.height) * 100}%`,
+            width: `${(display.width / layout.width) * 100}%`,
+            height: `${(display.height / layout.height) * 100}%`
+          }}
+        >
+          <div
+            className="absolute -inset-6"
+            style={{
+              filter: frozen === null ? 'blur(0px) brightness(1)' : 'blur(18px) brightness(.75)',
+              transition: 'filter 850ms ease'
+            }}
+          >
+            <CoverBackdrop />
+            <Lyrics2D frozenTime={frozen} />
+          </div>
+          <ClockOverlay wallpaper />
+        </section>
       ))}
     </div>
   )

@@ -21,6 +21,7 @@
     "test:e2e:release": "node scripts/e2e-release.mjs",
     "test:e2e:smoke": "node scripts/e2e-smoke.mjs",
     "test:e2e:memory": "node scripts/e2e-memory.mjs",
+    "test:e2e:fallback": "node scripts/e2e-fallback.mjs",
     "preview": "node scripts/ensure-electron.mjs && electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test:e2e:audio": "node scripts/e2e-audio.mjs",

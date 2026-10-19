@@ -4,6 +4,7 @@ import electronPath from 'electron'
 import { resolve, join } from 'node:path'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { graphicsArgs } from './e2e-graphics.mjs'
 const cwd = resolve(fileURLToPath(import.meta.url), '../..')
 const packaged = process.argv.includes('--packaged')
 const folder =
@@ -29,13 +30,7 @@ if (!existsSync(executablePath)) throw new Error('Missing executable: ' + execut
 const app = await electron.launch({
   executablePath,
   cwd,
-  args: [
-    ...(packaged ? [] : ['.']),
-    '--no-sandbox',
-    ...(process.platform === 'darwin'
-      ? []
-      : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
-  ],
+  args: [...(packaged ? [] : ['.']), '--no-sandbox', ...graphicsArgs],
   env: { ...process.env, JAP_E2E: 'smoke' }
 })
 let page

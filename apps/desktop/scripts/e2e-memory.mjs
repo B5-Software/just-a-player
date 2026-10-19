@@ -5,6 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from '
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
+import { graphicsArgs } from './e2e-graphics.mjs'
 const cwd = resolve(fileURLToPath(import.meta.url), '../..')
 const profile = join(tmpdir(), 'jap-e2e-userdata'),
   media = join(tmpdir(), 'jap-memory-qa')
@@ -56,13 +57,7 @@ async function launch() {
   app = await electron.launch({
     executablePath: electronPath,
     cwd,
-    args: [
-      '.',
-      '--no-sandbox',
-      ...(process.platform === 'darwin'
-        ? []
-        : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
-    ],
+    args: ['.', '--no-sandbox', ...graphicsArgs],
     env: { ...process.env, JAP_E2E: 'memory' }
   })
   page = await app.firstWindow()

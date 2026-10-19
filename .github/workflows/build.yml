@@ -65,6 +65,12 @@ jobs:
       - name: Playlist restart test (Xvfb)
         if: runner.os == 'Linux'
         run: xvfb-run -a pnpm --filter desktop test:e2e:memory
+      - name: GPU failure isolation test
+        if: runner.os != 'Linux'
+        run: pnpm --filter desktop test:e2e:fallback
+      - name: GPU failure isolation test (Xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm --filter desktop test:e2e:fallback
       - name: Validate tag version
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash

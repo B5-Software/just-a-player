@@ -14,6 +14,7 @@ import { PanelHost } from './components/PanelHost'
 import { TopBar } from './components/TopBar'
 import { Onboarding } from './components/Onboarding'
 import { Visualizer } from './components/Visualizer'
+import { GraphicsBoundary, StageFallback } from './components/GraphicsBoundary'
 import { useUi } from './ui/store'
 import { useChromeVisible } from './ui/useChromeVisible'
 import { useViz } from './viz/store'
@@ -134,8 +135,10 @@ export function App(): React.JSX.Element {
       onDrop={(e) => void onDrop(e)}
     >
       <div data-player-stage className="absolute inset-0">
-        <Visualizer />
-        <LyricsLayer />
+        <GraphicsBoundary fallback={(retry) => <StageFallback retry={retry} />}>
+          <Visualizer />
+          <LyricsLayer />
+        </GraphicsBoundary>
       </div>
       {fullscreen && mode === 'normal' && <ClockOverlay />}
       {mode === 'mini' && <MiniPlayer />}

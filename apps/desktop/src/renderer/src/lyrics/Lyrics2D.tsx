@@ -10,6 +10,7 @@ import { useSettings } from '../settings/store'
 import { useUi } from '../ui/store'
 import { parseLRC, type LyricLine } from './parse'
 import { useLyrics } from './store'
+import { PREVIEW_LYRICS } from './preview'
 
 const LINE_HEIGHT = 58
 
@@ -25,7 +26,9 @@ export function Lyrics2D({
   const adjusting = useUi((s) => s.lyricsAdjusting)
   const durationMs = usePlayer((s) => s.track?.durationMs ?? null)
   const live = useLivePosition(durationMs)
-  const text = useLyrics((s) => s.text)
+  const sourceText = useLyrics((s) => s.text)
+  const preview = useUi((s) => s.lyricsPreview && s.onboardingOpen) && window.jap.surface === 'main'
+  const text = preview ? PREVIEW_LYRICS : sourceText
   const { primary } = useActiveAccents()
 
   const lines = useMemo<LyricLine[]>(() => (text ? parseLRC(text) : []), [text])
@@ -35,7 +38,7 @@ export function Lyrics2D({
     void ensureFont(fontId).catch(console.warn)
   }, [fontId])
 
-  const currentTimeSec = (frozenTime ?? live) / 1000
+  const currentTimeSec = (frozenTime ?? (preview ? 12000 : live)) / 1000
   const activeIndex = useMemo(() => {
     let idx = -1
     for (let i = 0; i < lines.length && lines[i]!.t <= currentTimeSec; i++) {

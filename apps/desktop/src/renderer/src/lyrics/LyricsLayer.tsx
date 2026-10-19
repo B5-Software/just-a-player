@@ -6,15 +6,11 @@ import { useUi } from '../ui/store'
 import { Lyrics2D } from './Lyrics2D'
 import { LyricsRenderer, type LyricsStyle } from './renderer'
 import { useLyrics } from './store'
+import { PREVIEW_LYRICS } from './preview'
 export let activeLyricsRenderer: LyricsRenderer | null = null
 
 /** 歌词叠在深色舞台上：当前行用强调色的亮色版本，其余行用浅色，保证可读。 */
 const INACTIVE_TEXT = '#d9deff'
-const PREVIEW_LYRICS = `[00:00.00]让音乐在这里流动
-[00:05.00]布置属于你的舞台
-[00:10.00]按住这行测试歌词拖动
-[00:15.00]松开鼠标即可放下
-[00:20.00]位置与旋转会自动保存`
 
 function Lyrics3D(): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
