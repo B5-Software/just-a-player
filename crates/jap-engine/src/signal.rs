@@ -155,7 +155,7 @@ pub fn build_with_controls(
         detail: if out.exclusive {
             format!("缓冲 {buffer_ms:.1} ms · 绕过系统混音器")
         } else {
-            format!("缓冲 {buffer_ms:.1} ms · 由 Windows 混音，可能重采样")
+            format!("缓冲 {buffer_ms:.1} ms · 由系统混音，可能重采样")
         },
         format: None,
         fidelity: if out.exclusive {

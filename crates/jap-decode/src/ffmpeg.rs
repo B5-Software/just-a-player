@@ -8,12 +8,14 @@ use std::{
 };
 
 fn command(program: &str) -> Command {
-    let mut c = Command::new(program);
+    let c = Command::new(program);
     #[cfg(windows)]
-    {
+    let c = {
         use std::os::windows::process::CommandExt;
+        let mut c = c;
         c.creation_flags(0x08000000);
-    }
+        c
+    };
     c
 }
 pub struct FfmpegSource {

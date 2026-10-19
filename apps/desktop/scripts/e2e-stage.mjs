@@ -57,21 +57,44 @@ try {
     const j = window.__jap
     j.usePlayer.getState().setOutput({ api: 'null', dsdMode: 'pcm' })
     j.useLyrics.setState({ text: null })
-    j.useSettings
-      .getState()
-      .update({
-        lyricsMode: '3d',
-        lyricsVisible: true,
-        lyricsPosition: 'right',
-        lyricsOffset: { x: 0, y: -30, z: 0 },
-        lyricsPose: 'none',
-        renderFps: 30,
-        autoBackdrop: false
-      })
+    j.useSettings.getState().update({
+      lyricsMode: '3d',
+      lyricsVisible: true,
+      lyricsPosition: 'right',
+      lyricsOffset: { x: 0, y: -30, z: 0 },
+      lyricsPose: 'none',
+      renderFps: 30,
+      autoBackdrop: false
+    })
     j.useViz.getState().setAuto(false)
     j.useViz.getState().setScene('orb')
     j.useUi.getState().setOnboardingOpen(true)
   })
+  await page.waitForFunction(() => window.__japLyrics?.ready && window.__japLyrics.lines[2]?.o)
+  const firstStep = await page.evaluate(() => ({
+    lyrics: window.__jap.useSettings.getState().lyricsOffset,
+    viz: window.__jap.useViz.getState().offset,
+    preview: window.__japLyrics.preview,
+    adjusting: window.__jap.useUi.getState().lyricsAdjusting
+  }))
+  assert(
+    firstStep.preview && !firstStep.adjusting,
+    'Step one needs visible, stationary test lyrics'
+  )
+  await page.mouse.move(320, 420)
+  await page.mouse.down()
+  await page.mouse.move(400, 450, { steps: 5 })
+  await page.mouse.up()
+  const movedStep = await page.evaluate(() => ({
+    lyrics: window.__jap.useSettings.getState().lyricsOffset,
+    viz: window.__jap.useViz.getState().offset
+  }))
+  assert(Math.abs(movedStep.viz.x - firstStep.viz.x) > 30, 'Step one visualization did not move')
+  assert(
+    JSON.stringify(movedStep.lyrics) === JSON.stringify(firstStep.lyrics),
+    'Step one moved lyrics'
+  )
+  checks.firstStepVisibleLyrics = { firstStep, movedStep }
   await page.getByRole('button', { name: '下一步', exact: true }).click()
   await page.waitForFunction(() => window.__japLyrics?.ready && window.__japLyrics.lines[2]?.o)
   await page.waitForTimeout(1100)
@@ -291,18 +314,16 @@ try {
     () => document.querySelectorAll('[data-wallpaper-display]').length === 3
   )
   await wall.waitForTimeout(1000)
-  checks.mirrorRegions = await wall
-    .locator('[data-wallpaper-display]')
-    .evaluateAll((els) =>
-      els.map((el) => ({
-        id: el.dataset.wallpaperDisplay,
-        width: el.clientWidth,
-        height: el.clientHeight,
-        filled: [...el.querySelectorAll('canvas')].some(
-          (c) => c.width > 300 && getComputedStyle(c).visibility === 'visible'
-        )
-      }))
-    )
+  checks.mirrorRegions = await wall.locator('[data-wallpaper-display]').evaluateAll((els) =>
+    els.map((el) => ({
+      id: el.dataset.wallpaperDisplay,
+      width: el.clientWidth,
+      height: el.clientHeight,
+      filled: [...el.querySelectorAll('canvas')].some(
+        (c) => c.width > 300 && getComputedStyle(c).visibility === 'visible'
+      )
+    }))
+  )
   assert(
     checks.mirrorRegions.every((d) => d.filled && d.width > 0 && d.height > 0),
     'Empty multi-display output'

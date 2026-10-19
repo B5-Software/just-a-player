@@ -5,7 +5,7 @@ use crate::capture::CaptureBackend;
 use crate::error::OutputError;
 use crate::error::Result;
 
-/// Windows 的 WASAPI / ASIO 后端；`Null` 按实时节奏消费、不出声。
+/// Platform-native audio outputs; `Null` consumes at real-time pace without sound.
 pub struct SystemBackend;
 
 impl OutputBackend for SystemBackend {

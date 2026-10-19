@@ -10,9 +10,9 @@ All bundled text fonts are distributed under SIL Open Font License 1.1:
 Noto Sans SC, Noto Serif SC, Noto Sans Mono, LXGW WenKai, ZCOOL KuaiLe,
 Ma Shan Zheng, Long Cang, Zhi Mang Xing, Liu Jian Mao Cao, ZCOOL XiaoWei and
 ZCOOL QingKe HuangYou. Complete individual notices are in
-`apps/desktop/src/renderer/src/fonts/licenses/`. Professional 2D instruments use
+`apps/desktop/src/renderer/public/licenses/fonts/`. Professional 2D instruments use
 Noto Sans SC and Noto Sans Mono; no proprietary font assets are embedded.
-The same eleven notices are copied into the built application's `fonts/licenses/`.
+The same eleven notices are copied into the built application's `licenses/fonts/`.
 Imported user fonts stay in the local user-data directory and are not bundled.
 Fontkit (MIT) reads imported font metadata and collections; its font extraction
 does not subset or replace glyphs. Fontkit declares MIT in its npm metadata and
