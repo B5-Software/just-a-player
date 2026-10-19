@@ -2,7 +2,7 @@
 import { _electron as electron } from 'playwright-core'
 import electronPath from 'electron'
 import { resolve, join } from 'node:path'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 const cwd = resolve(fileURLToPath(import.meta.url), '../..')
 const packaged = process.argv.includes('--packaged')
@@ -32,15 +32,25 @@ const app = await electron.launch({
   args: [
     ...(packaged ? [] : ['.']),
     '--no-sandbox',
-    '--use-angle=swiftshader',
-    '--enable-unsafe-swiftshader'
+    ...(process.platform === 'darwin'
+      ? []
+      : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
   ],
   env: { ...process.env, JAP_E2E: 'smoke' }
 })
+let page
+const errors = [],
+  logs = []
+app.process().stderr?.on('data', (data) => {
+  logs.push(String(data))
+  if (logs.length > 80) logs.shift()
+})
 try {
-  const page = await app.firstWindow(),
-    errors = []
+  page = await app.firstWindow()
   page.on('pageerror', (e) => errors.push(e.message))
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text())
+  })
   await page.waitForFunction(() => window.__jap?.usePlayer.getState().connected)
   const info = await page.evaluate(async () => {
     const j = window.__jap
@@ -61,6 +71,25 @@ try {
     throw new Error('First onboarding step must only drag visualization')
   if (errors.length) throw new Error(errors.join('\n'))
   console.log(JSON.stringify({ ok: true, architecture: process.arch, packaged, ...info }))
+} catch (error) {
+  const output = join(cwd, 'test-results')
+  mkdirSync(output, { recursive: true })
+  const state = await page
+    ?.evaluate(() => ({
+      url: location.href,
+      body: document.body.innerText.slice(0, 2500),
+      dataset: { ...document.documentElement.dataset },
+      ui: window.__jap?.useUi.getState(),
+      lyrics: window.__japLyrics
+        ? { preview: window.__japLyrics.preview, lines: window.__japLyrics.lines.length }
+        : null
+    }))
+    .catch(() => null)
+  const diagnostic = { error: String(error), errors, state, logs }
+  console.error(JSON.stringify(diagnostic, null, 2))
+  writeFileSync(join(output, 'smoke.json'), JSON.stringify(diagnostic, null, 2))
+  await page?.screenshot({ path: join(output, 'smoke.png') }).catch(() => {})
+  throw error
 } finally {
   await app.close()
 }

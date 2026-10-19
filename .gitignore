@@ -4,6 +4,7 @@ out
 dist
 release
 apps/desktop/build/notices/
+apps/desktop/test-results/
 # Local implementation journal; public documentation lives in README/docs.
 PLAN.md
 *.node

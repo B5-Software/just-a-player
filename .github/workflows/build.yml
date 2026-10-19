@@ -85,6 +85,13 @@ jobs:
         if: runner.os == 'Linux'
         run: xvfb-run -a pnpm --filter desktop test:e2e:smoke --packaged
       - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: diagnostics-${{ matrix.platform }}-${{ matrix.arch }}
+          if-no-files-found: ignore
+          path: apps/desktop/test-results/
+      - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: just-a-player-${{ matrix.platform }}-${{ matrix.arch }}
           if-no-files-found: error

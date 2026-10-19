@@ -77,7 +77,7 @@ FLAC、WAV、AIFF、ALAC、MP3、AAC、Ogg 等常见格式，另支持 APE、DTS
 
 **视频导出队列**使用独立后台渲染，支持同时排入多首任务，前台仍可听歌。可设置分辨率、帧率、画质、歌词与 3D 动效，片头片尾元数据渐入渐出，并支持自定义署名。音频提供 AAC、Opus、FLAC、PCM 及原始压缩音轨复制等选项，实际可用项取决于输出容器。
 
-HDR 默认关闭，支持的设备与图形路径可开启；提供 GPU 选择、帧率上限、渲染精度和后处理开关。设备灯光可通过本机 OpenRGB SDK 服务跟随播放器强调色。
+HDR 默认关闭，支持的设备与图形路径可开启；提供帧率上限、渲染精度、后处理开关，以及 Windows 手动 GPU 选择。设备灯光可通过本机 OpenRGB SDK 服务跟随播放器强调色。
 
 ## 下载与运行
 
@@ -87,7 +87,7 @@ HDR 默认关闭，支持的设备与图形路径可开启；提供 GPU 选择�
 | --- | --- |
 | Windows | `Just-A-Player-版本-win-x64.exe` / `win-arm64.exe` |
 | macOS | `Just-A-Player-版本-mac-x64.dmg` / `mac-arm64.dmg`，另有 ZIP |
-| Linux | `Just-A-Player-版本-linux-x64.AppImage` / `linux-arm64.AppImage`，另有 deb |
+| Linux | `Just-A-Player-版本-linux-x86_64.AppImage` / `linux-arm64.AppImage`；deb 分别为 `linux-amd64.deb` / `linux-arm64.deb` |
 
 发布页附有 `SHA256SUMS.txt`。社区构建暂未使用商业代码签名证书或 Apple 公证。桌面壁纸与 Windows 系统媒体集成为 Windows 功能；其他平台可使用全屏、小窗、媒体键和原生音频输出。
 

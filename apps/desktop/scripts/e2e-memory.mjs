@@ -56,7 +56,13 @@ async function launch() {
   app = await electron.launch({
     executablePath: electronPath,
     cwd,
-    args: ['.', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+    args: [
+      '.',
+      '--no-sandbox',
+      ...(process.platform === 'darwin'
+        ? []
+        : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
+    ],
     env: { ...process.env, JAP_E2E: 'memory' }
   })
   page = await app.firstWindow()
