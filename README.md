@@ -137,6 +137,8 @@ pnpm package
 
 CI 在 Windows、macOS、Linux 的 x64 与 ARM64 原生 runner 上编译 Rust、检查类型、执行测试、打包，并启动打包后的程序验证引擎与界面。推送 `v*` 标签后，全部平台成功才上传 Release。
 
+Intel macOS 的托管虚拟机无法初始化可用的图形设备时，CI 会明确记录并验证封面 / 2D 歌词回退，保留能力报告与截图；其他五项要求正常 3D 启动。Intel Mac 的实际 GPU 效果仍需实机验证。3D 视效需要可用的 WebGL 2 图形环境，图形不可用时播放器仍能播放和控制音频。
+
 ### 项目结构
 
 ```text

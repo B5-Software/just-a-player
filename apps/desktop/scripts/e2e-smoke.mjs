@@ -60,12 +60,45 @@ try {
   })
   if (info.version !== '0.1.0' || info.output !== 'null') throw new Error(JSON.stringify(info))
   await page.waitForFunction(
-    () => window.__japLyrics?.preview && window.__japLyrics.lines.length > 0
+    () =>
+      (window.__japLyrics?.preview && window.__japLyrics.lines.length > 0) ||
+      Boolean(document.querySelector('[data-graphics-fallback]'))
   )
+  const fallback = (await page.locator('[data-graphics-fallback]').count()) > 0
+  if (fallback) {
+    if (process.env.JAP_CI_ALLOW_GPU_FALLBACK !== '1')
+      throw new Error('Unexpected GPU fallback on a 3D-capable runner')
+    await page.locator('[data-player-dock]').waitFor()
+    await page.getByText('按住这行测试歌词拖动', { exact: true }).waitFor()
+  }
   if (await page.evaluate(() => window.__jap.useUi.getState().lyricsAdjusting))
     throw new Error('First onboarding step must only drag visualization')
-  if (errors.length) throw new Error(errors.join('\n'))
-  console.log(JSON.stringify({ ok: true, architecture: process.arch, packaged, ...info }))
+  const unexpected = fallback
+    ? errors.filter(
+        (error) =>
+          !error.includes('Error creating WebGL context') &&
+          !error.includes('A WebGL context could not be created')
+      )
+    : errors
+  if (unexpected.length) throw new Error(unexpected.join('\n'))
+  const capability = {
+    ok: true,
+    architecture: process.arch,
+    packaged,
+    ...info,
+    graphics: fallback ? '2d-fallback-no-gpu' : '3d'
+  }
+  const output = join(cwd, 'test-results')
+  mkdirSync(output, { recursive: true })
+  writeFileSync(
+    join(output, `capabilities-${packaged ? 'packaged' : 'source'}.json`),
+    JSON.stringify(capability, null, 2)
+  )
+  if (fallback)
+    await page.screenshot({
+      path: join(output, `intel-no-gpu-${packaged ? 'packaged' : 'source'}.png`)
+    })
+  console.log(JSON.stringify(capability))
 } catch (error) {
   const output = join(cwd, 'test-results')
   mkdirSync(output, { recursive: true })

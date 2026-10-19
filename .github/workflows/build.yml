@@ -28,6 +28,7 @@ jobs:
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       CARGO_BUILD_JOBS: '2'
+      JAP_CI_ALLOW_GPU_FALLBACK: ${{ matrix.platform == 'mac' && matrix.arch == 'x64' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -83,6 +84,12 @@ jobs:
       - name: Packaged application smoke test (Xvfb)
         if: runner.os == 'Linux'
         run: xvfb-run -a pnpm --filter desktop test:e2e:smoke --packaged
+      - uses: actions/upload-artifact@v4
+        if: success() && matrix.platform == 'mac' && matrix.arch == 'x64'
+        with:
+          name: qa-mac-x64
+          if-no-files-found: error
+          path: apps/desktop/test-results/
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
