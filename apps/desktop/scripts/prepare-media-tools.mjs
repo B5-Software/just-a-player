@@ -52,9 +52,9 @@ async function removeGenerated(path) {
   const within = relative(join(appDir, 'build'), resolve(path))
   if (!within || within.startsWith('..') || isAbsolute(within))
     throw new Error('Unsafe generated path')
-  await rm(path, { recursive: true, force: true })
+  await rm(path, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 })
 }
-async function validate(directory, asset) {
+async function validate(directory, asset, execute = true) {
   const identity = JSON.parse(await readFile(join(directory, 'bundle.json'), 'utf8'))
   if (identity.target !== target || identity.archiveSha256 !== asset.sha256)
     throw new Error('Stale bundle')
@@ -63,6 +63,7 @@ async function validate(directory, asset) {
     if (relative(directory, full).startsWith('..') || (await sha256(full)) !== hash)
       throw new Error(`Invalid bundled file: ${path}`)
   }
+  if (!execute) return
   for (const name of ['ffmpeg', 'ffprobe']) {
     const executable = join(directory, 'bin', name + (process.platform === 'win32' ? '.exe' : ''))
     const version = execFileSync(executable, ['-version'], { encoding: 'utf8', windowsHide: true })
@@ -159,9 +160,12 @@ async function prepare() {
           ? 'The player is native ARM64; these x64 helper processes use Windows 11 ARM x64 emulation.\n'
           : '')
     )
-    await validate(bundle, asset)
+    // Windows can keep emulated x64 DLLs mapped after the short version process
+    // exits. Never execute inside a directory that still needs to be renamed.
+    await validate(bundle, asset, false)
     await removeGenerated(destination)
     await rename(bundle, destination)
+    await validate(destination, asset)
     console.log(
       `Bundled FFmpeg/ffprobe ${mediaLock.version} for ${target} (${asset.binaryArch} helpers)`
     )
