@@ -1,0 +1,63 @@
+appId: B5Software.JustAPlayer
+productName: Just A Player
+copyright: Copyright © 2026 B5-Software
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+asar: true
+asarUnpack:
+  - '**/*.node'
+npmRebuild: false
+extraMetadata:
+  name: just-a-player
+  version: 0.1.0
+extraResources:
+  - from: build/notices
+    to: licenses
+publish:
+  provider: github
+  owner: B5-Software
+  repo: just-a-player
+win:
+  target: nsis
+  icon: build/icon.ico
+  artifactName: Just-A-Player-${version}-win-${arch}.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: Just A Player
+  license: ../../LICENSE
+mac:
+  target:
+    - dmg
+    - zip
+  icon: build/icon.icns
+  category: public.app-category.music
+  identity: '-'
+  hardenedRuntime: false
+  artifactName: Just-A-Player-${version}-mac-${arch}.${ext}
+  extendInfo:
+    NSHighResolutionCapable: true
+linux:
+  target:
+    - AppImage
+    - deb
+  executableName: just-a-player
+  category: AudioVideo
+  icon: build/icon.png
+  artifactName: Just-A-Player-${version}-linux-${arch}.${ext}
+  maintainer: B5-Software
+  synopsis: HiFi music meets immersive visualization
+  description: A HiFi music player with native audio outputs, immersive visualizations and 3D lyrics.
+deb:
+  depends:
+    - libasound2
+    - libgtk-3-0
+    - libnss3
+    - libxss1
+    - libxtst6
+    - libgbm1

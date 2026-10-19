@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - crates/jap-napi
+allowBuilds:
+  electron: true
+  electron-winstaller: false
+minimumReleaseAgeExclude:
+  - electron@44.9.0

@@ -1,0 +1,162 @@
+@import 'tailwindcss';
+html[data-surface='tray'], html[data-surface='tray'] body, html[data-surface='tray'] #root { background: transparent !important; }
+
+:root { --accent-focus: 79 55 214; }
+/* Explicit theme focus, including native form controls. Inset avoids clipping. */
+:is(button, input, select, textarea, a, [tabindex], [role='slider']):focus-visible {
+  outline: 3px solid rgb(var(--accent-focus)) !important;
+  outline-offset: -3px !important;
+}
+input[type='color']:focus-visible { opacity: 1; }
+input[type='range'] { accent-color: rgb(var(--accent)); }
+select option:checked { background: rgb(var(--accent-focus)); color: white; }
+::selection { background: rgb(var(--accent-focus) / 0.35); }
+
+/* Keep the stage and its renderer alive, but don't draw it behind the compact player. */
+html[data-window-mode='mini'] [data-player-stage] { visibility: hidden; pointer-events: none; }
+html[data-window-mode='mini'] [data-player-stage] * { visibility: hidden !important; }
+:is(button, input, select, output, span, p, h1, h2, svg) {
+  transition-property: color, background-color, border-color, box-shadow, text-shadow, fill, stroke;
+  transition-duration: 600ms;
+}
+
+/*
+ * 语义化设计令牌：组件只用 bg-surface / text-fg / text-accent-text 这类名字，
+ * 深浅色与强调色的差异全部收敛在下面的变量里。
+ * --fg / --accent* 是 "r g b" 三元组，方便叠加透明度。
+ */
+@theme inline {
+  --font-sans: 'Noto Sans SC', sans-serif;
+  --font-display: 'Noto Sans SC', sans-serif;
+  --font-mono: 'Noto Sans Mono', 'Noto Sans SC', monospace;
+
+  --color-surface: var(--surface);
+  --color-fg: rgb(var(--fg));
+  --color-fg-muted: rgb(var(--fg) / 0.64);
+  --color-fg-subtle: rgb(var(--fg) / 0.42);
+  --color-line: rgb(var(--fg) / 0.1);
+  --color-hover: rgb(var(--fg) / 0.07);
+  --color-accent: rgb(var(--accent));
+  --color-accent-2: rgb(var(--accent-2));
+  --color-accent-text: rgb(var(--accent-text));
+  --color-on-accent: rgb(var(--on-accent));
+
+  --color-fidelity-exact: rgb(var(--fidelity-exact));
+  --color-fidelity-transformed: rgb(var(--fidelity-transformed));
+  --color-fidelity-lossy: rgb(var(--fidelity-lossy));
+}
+
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+  --surface: #07070b;
+  --fg: 236 236 244;
+  --fidelity-exact: 61 220 151;
+  --fidelity-transformed: 245 185 66;
+  --fidelity-lossy: 255 107 129;
+
+  --glass-from: rgb(255 255 255 / 0.085);
+  --glass-to: rgb(255 255 255 / 0.03);
+  --glass-border: rgb(255 255 255 / 0.1);
+  --glass-top: rgb(255 255 255 / 0.14);
+  --glass-bottom: rgb(0 0 0 / 0.2);
+  --glass-shadow: rgb(0 0 0 / 0.65);
+
+  --glow-opacity: 0.55;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+  --surface: #f3f3f8;
+  --fg: 22 22 32;
+  --fidelity-exact: 16 150 98;
+  --fidelity-transformed: 190 120 10;
+  --fidelity-lossy: 214 48 80;
+
+  --glass-from: rgb(255 255 255 / 0.7);
+  --glass-to: rgb(255 255 255 / 0.38);
+  --glass-border: rgb(20 20 40 / 0.09);
+  --glass-top: rgb(255 255 255 / 0.95);
+  --glass-bottom: rgb(20 20 40 / 0.05);
+  --glass-shadow: rgb(40 40 80 / 0.22);
+
+  --glow-opacity: 0.38;
+}
+
+:root {
+  /* 强调色在首次绘制前由 theme/store 覆盖；这里是兜底 */
+  --accent: 132 118 255;
+  --accent-2: 90 170 255;
+  --accent-text: 170 160 255;
+  --on-accent: 255 255 255;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: rgb(var(--fg));
+  font-family: var(--font-sans);
+  font-feature-settings: 'tnum' 1;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* Keep glass effects bounded while WebGL is rendering behind the controls. */
+.glass {
+  background: linear-gradient(135deg, var(--glass-from), var(--glass-to));
+  backdrop-filter: blur(22px) saturate(145%);
+  -webkit-backdrop-filter: blur(22px) saturate(145%);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--glass-top),
+    inset 0 -1px 0 var(--glass-bottom),
+    0 18px 50px -18px var(--glass-shadow);
+}
+
+.panel-surface {
+  background: linear-gradient(135deg, rgb(22 25 38 / 0.96), rgb(14 17 27 / 0.94));
+}
+[data-theme='light'] .panel-surface {
+  background: linear-gradient(135deg, rgb(252 252 255 / 0.98), rgb(239 241 250 / 0.96));
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* 切换深浅色时整页交叉淡入 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--fg) / 0.14);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

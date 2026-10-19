@@ -1,0 +1,19 @@
+/target
+node_modules
+out
+dist
+release
+apps/desktop/build/notices/
+# Local implementation journal; public documentation lives in README/docs.
+PLAN.md
+*.node
+*.log
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.pnpm-store
+crates/jap-napi/index.js
+crates/jap-napi/index.d.ts
+crates/jap-napi/*.wasi*
+crates/jap-napi/.*.node.*

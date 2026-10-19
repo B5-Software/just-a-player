@@ -1,0 +1,67 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/jap-analysis",
+    "crates/jap-core",
+    "crates/jap-decode",
+    "crates/jap-output",
+    "crates/jap-engine",
+    "crates/jap-napi",
+    "crates/jap-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "GPL-3.0-or-later"
+authors = ["B5-Software"]
+repository = "https://github.com/B5-Software/just-a-player"
+publish = false
+
+[workspace.dependencies]
+jap-analysis = { path = "crates/jap-analysis" }
+jap-core = { path = "crates/jap-core" }
+jap-decode = { path = "crates/jap-decode" }
+jap-output = { path = "crates/jap-output" }
+jap-engine = { path = "crates/jap-engine" }
+
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+crossbeam-channel = "0.5"
+hound = "3.5"
+napi = { version = "3", default-features = false, features = ["napi9"] }
+napi-build = "2"
+napi-derive = "3"
+parking_lot = "0.12"
+rtrb = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11"
+symphonia = { version = "0.6.1", features = ["all"] }
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+ts-rs = "12"
+wasapi = "0.26"
+windows = "0.62.2"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+
+# 音频代码在 debug 下慢得离谱，依赖一律开满优化，自家 crate 轻度优化保留调试信息
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"

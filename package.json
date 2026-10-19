@@ -1,0 +1,26 @@
+{
+  "name": "just-a-player",
+  "version": "0.1.0",
+  "private": true,
+  "author": "B5-Software",
+  "license": "GPL-3.0-or-later",
+  "repository": { "type": "git", "url": "https://github.com/B5-Software/just-a-player.git" },
+  "description": "Just A Player - HiFi music player (Electron + Rust)",
+  "packageManager": "pnpm@12.8.1",
+  "scripts": {
+    "engine:build": "pnpm --filter @jap/engine build",
+    "engine:build:debug": "pnpm --filter @jap/engine build:debug",
+    "dev": "pnpm --filter desktop dev",
+    "build": "pnpm engine:build && pnpm --filter desktop build",
+    "typecheck": "pnpm --filter desktop typecheck",
+    "package": "pnpm build && pnpm --filter desktop package",
+    "test:rust": "cargo test --workspace",
+    "lint:rust": "cargo clippy --workspace --all-targets -- -D warnings",
+    "test:e2e:audio": "pnpm build && pnpm --filter desktop test:e2e:audio",
+    "test:e2e:features": "pnpm build && pnpm --filter desktop test:e2e:features",
+    "test:e2e:desktop": "pnpm build && pnpm --filter desktop test:e2e:desktop",
+    "test:e2e:polish": "pnpm build && pnpm --filter desktop test:e2e:polish",
+    "test:e2e:renderer": "pnpm build && pnpm --filter desktop test:e2e:renderer",
+    "test:e2e:stage": "pnpm build && pnpm --filter desktop test:e2e:stage"
+  }
+}

@@ -1,0 +1,31 @@
+[package]
+name = "jap-napi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+jap-analysis.workspace = true
+jap-core.workspace = true
+jap-engine.workspace = true
+jap-decode.workspace = true
+hound.workspace = true
+napi.workspace = true
+napi-derive.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = ["Foundation", "Media", "Storage_Streams", "Win32_Foundation", "Win32_System_WinRT", "Win32_Graphics_Dxgi"] }
+
+[build-dependencies]
+napi-build.workspace = true
+
+[lints]
+workspace = true
