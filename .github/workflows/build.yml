@@ -234,7 +234,9 @@ jobs:
         with:
           api-level: 35
           arch: x86_64
-          target: google_apis
+          # userdebug images force WebView debugging even for signed releases.
+          # Use the production-style user image and exercise real 16 KiB pages.
+          target: google_apis_playstore_ps16k
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |

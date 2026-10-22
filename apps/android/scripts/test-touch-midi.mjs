@@ -278,6 +278,10 @@ try {
   const anchor = await c.evaluate(
     `(()=>{const r=__japLyrics,box=r.canvas.getBoundingClientRect();r.scene.updateMatrixWorld(true);for(const line of [...r.lines].filter(l=>l.o?.grp.visible&&l.o.mat.opacity>.1).sort((a,b)=>b.o.mat.opacity-a.o.mat.opacity)){const points=[];line.o.grp.traverse(mesh=>{if(!mesh.isMesh)return;mesh.geometry.computeBoundingBox();const p=mesh.geometry.boundingBox.getCenter(mesh.position.clone());mesh.localToWorld(p);p.project(r.camera);const x=box.x+(p.x+1)*box.width/2,y=box.y+(1-p.y)*box.height/2;if(document.elementFromPoint(x,y)===r.canvas)points.push({x,y})});if(points.length)return points[Math.floor(points.length/2)]}throw Error('No unobscured preview glyph to drag')})()`
   )
+  report.lyricAnchor = anchor
+  await c.evaluate(
+    `(()=>{window.__lyricTouchQA=[];const r=__japLyrics;for(const type of ['pointerdown','pointermove','pointerup','pointercancel','gotpointercapture','lostpointercapture'])r.canvas.addEventListener(type,e=>{window.__lyricTouchQA.push({type,x:e.clientX,y:e.clientY,buttons:e.buttons,pointerType:e.pointerType,dragging:r.dragging,pointer:r.dragPointer});},{capture:true,passive:true})})()`
+  )
   const initialLyrics = await c.evaluate('__jap.useSettings.getState().lyricsOffset')
   await drag(anchor.x, anchor.y, -65, 20)
   // Old WebViews may acknowledge CDP input before delivering pointerup to JS.
@@ -391,6 +395,9 @@ try {
 } catch (error) {
   report.status = 'failed'
   report.error = String(error)
+  report.lyricInput = await c.evaluate(
+    '({events:window.__lyricTouchQA,viewport:[innerWidth,innerHeight,devicePixelRatio,visualViewport?.scale],dragging:window.__japLyrics?.dragging,interactive:window.__japLyrics?.interactive})'
+  ).catch(() => null)
   shot('failure')
   throw error
 } finally {

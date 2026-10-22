@@ -18,6 +18,11 @@ if (!fs.existsSync(apk)) {
 const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT,
   tools = path.join(sdk, 'build-tools/35.0.0'),
   windows = process.platform === 'win32'
+assert.equal(
+  adb('shell', 'getprop', 'ro.build.type'),
+  'user',
+  'Release debugger checks require a user image; userdebug/eng force WebView debugging. Use google_apis_playstore_ps16k.'
+)
 const java =
   windows && fs.existsSync('C:/Program Files/Java/jdk-21/bin/java.exe')
     ? 'C:/Program Files/Java/jdk-21/bin/java.exe'

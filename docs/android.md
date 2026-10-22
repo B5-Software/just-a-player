@@ -73,6 +73,11 @@ FFmpeg 与 x264 从固定源码和 SHA-256 构建；缓存位于 `apps/android/b
 pnpm android:test
 ```
 
+CI 使用 `google_apis_playstore_ps16k` 的量产 `user` 镜像，同时验证实际 16 KiB 页面与签名 Release 包。
+不要用 `google_apis` 的 `userdebug` / `eng` 镜像判断正式包是否关闭调试：
+[Chromium 124 的实现](https://github.com/chromium/chromium/blob/124.0.6367.219/android_webview/glue/java/src/com/android/webview/chromium/SharedStatics.java#L79-L85)
+在这些系统上强制启用 WebView 调试，并忽略应用关闭调试的调用。调试包的功能测试仍可在这类镜像运行。
+
 测试通过真实 WebView → Java → JNI → Rust → AAudio 路径播放 WAV 与 DSD，用 APK 内置 FFmpeg 播放 DTS，并通过原生 FLAC 解码器核对 24-bit / 768 kHz 文件跳转后的每一个样本；验证 DSP、分析、缓冲、横屏、自定义弹窗、后台渲染暂停和系统媒体控制。测试还在前台继续播放的同时，排入 AAC、Opus、FLAC、PCM 与原音轨复制五个 3D 视频任务，检查完成状态并通过应用自身的存储权限读取导出文件、验证容器文件头。报告、导出文件与截图保存在 `apps/android/test-results/`。CI 配置同样构建四种 ABI 后运行模拟器测试并上传 APK，其他三种 ABI 的构建通过不等于相应真机已验证。
 
 `node apps/android/scripts/test-layout.mjs` 仅在模拟器中切换 320 / 560 DPI，核对布局和实际绘制像素，并恢复原设置。
