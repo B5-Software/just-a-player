@@ -264,7 +264,7 @@ try {
     report.exports.push({ audio, id: item.id, target })
   }
   await wait(
-    `__jap.useVideoQueue.getState().jobs.length===5&&__jap.useVideoQueue.getState().jobs.every(i=>['done','failed','cancelled'].includes(i.state))`,
+    `(()=>{const jobs=__jap.useVideoQueue.getState().jobs;const failed=jobs.find(i=>i.state==='failed');if(failed)throw Error(JSON.stringify(failed));return jobs.length===5&&jobs.every(i=>['done','cancelled'].includes(i.state))})()`,
     'Five background export jobs finished',
     180000
   )
@@ -356,7 +356,9 @@ try {
   report.error = String(error)
   fs.writeFileSync(path.join(results, 'emulator.json'), JSON.stringify(report, null, 2))
   try {
-    fs.writeFileSync(path.join(results, 'emulator-failure-logcat.txt'), adb('logcat', '-d', '-t', '1000'))
+    fs.writeFileSync(path.join(results, 'emulator-failure-exit-info.txt'), adb('shell', 'dumpsys', 'activity', 'exit-info', app))
+    fs.writeFileSync(path.join(results, 'emulator-failure-logcat.txt'), adb('logcat', '-d'))
+    fs.writeFileSync(path.join(results, 'emulator-failure-crashes.txt'), adb('logcat', '-b', 'crash', '-d'))
     await shot('failure')
   } catch { /* Keep the original failure if the device disconnected. */ }
   throw error
