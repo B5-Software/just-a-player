@@ -1,3 +1,4 @@
+import { chooseColor } from '../ui/dialog-store'
 import type { ThemeMode } from '@shared/theme'
 import { motion } from 'motion/react'
 import { useEffect, useState } from 'react'
@@ -13,7 +14,7 @@ import { Segmented, type SegmentOption } from './Segmented'
 const MODE_OPTIONS: readonly SegmentOption<ThemeMode>[] = [
   { value: 'system', label: '跟随系统', icon: Monitor },
   { value: 'light', label: '浅色', icon: Sun },
-  { value: 'dark', label: '深色', icon: Moon }
+  { value: 'dark', label: '深色', icon: Moon },
 ]
 
 /** 外观：主题、强调色（可自动取封面色），以及封面模糊背景与亮度。 */
@@ -132,12 +133,15 @@ export function AppearancePanel(): React.JSX.Element {
               style={{ backgroundColor: accent }}
               title="自定义颜色"
             >
-              <input
-                type="color"
+              <button
+                type="button"
                 aria-label="自定义强调色"
-                value={accent}
-                onChange={(e) => setAccent(e.target.value)}
-                className="absolute inset-0 size-full cursor-pointer opacity-0"
+                onClick={() => {
+                  void chooseColor(accent).then((color) => {
+                    if (color) setAccent(color)
+                  })
+                }}
+                className="absolute inset-0 size-full cursor-pointer rounded-xl"
               />
             </label>
             <input

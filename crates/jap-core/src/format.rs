@@ -13,6 +13,7 @@ pub enum SampleFormat {
     I24Packed,
     I32,
     F32,
+    F64,
     Dop24,
     Dop32,
     DsdU8Lsb,
@@ -23,6 +24,7 @@ impl SampleFormat {
     pub const fn container_bytes(self) -> usize {
         match self {
             Self::I16 => 2,
+            Self::F64 => 8,
             Self::I24Packed | Self::Dop24 => 3,
             Self::I24In32 | Self::I32 | Self::F32 | Self::Dop32 => 4,
             Self::DsdU8Lsb | Self::DsdU8Msb => 1,
@@ -34,12 +36,13 @@ impl SampleFormat {
             Self::I16 => 16,
             Self::I24In32 | Self::I24Packed | Self::Dop24 | Self::Dop32 => 24,
             Self::I32 | Self::F32 => 32,
+            Self::F64 => 64,
             Self::DsdU8Lsb | Self::DsdU8Msb => 1,
         }
     }
 
     pub const fn is_float(self) -> bool {
-        matches!(self, Self::F32)
+        matches!(self, Self::F32 | Self::F64)
     }
 
     pub const fn is_dsd(self) -> bool {

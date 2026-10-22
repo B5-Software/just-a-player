@@ -48,6 +48,10 @@ pub enum Command {
     SetDsp {
         config: DspConfig,
     },
+    SetMidi {
+        soundfont: Option<String>,
+        sample_rate: u32,
+    },
     SetVolume {
         gain: f32,
     },
@@ -126,6 +130,17 @@ pub enum Query {
     ProbeTrack {
         path: String,
     },
+    /// Expand an optical image into independently seekable subsongs.
+    DiscTracks {
+        path: String,
+    },
+    EmbeddedLyrics {
+        path: String,
+    },
+    DeviceFormats {
+        api: crate::OutputApi,
+        device_id: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -139,5 +154,7 @@ pub enum QueryResponse {
     Devices { devices: Vec<DeviceInfo> },
     ExclusiveFormats { formats: Vec<StreamConfig> },
     Track { track: TrackInfo },
+    Tracks { tracks: Vec<TrackInfo> },
+    Lyrics { text: Option<String> },
     Error { message: String },
 }

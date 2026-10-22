@@ -181,7 +181,7 @@ impl HogGuard {
             && (physical.rate - config.sample_rate as f64).abs() < 0.5
             && physical.channels == config.channels as u32
             && physical.bits >= config.format.valid_bits()
-            && float == matches!(config.format, SampleFormat::F32)
+            && float == config.format.is_float()
     }
 }
 impl Drop for HogGuard {

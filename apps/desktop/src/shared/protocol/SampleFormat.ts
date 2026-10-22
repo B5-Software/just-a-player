@@ -3,4 +3,4 @@
 /**
  * 送往设备的采样排布。
  */
-export type SampleFormat = "i16" | "i24In32" | "i24Packed" | "i32" | "f32" | "dop24" | "dop32" | "dsdU8Lsb" | "dsdU8Msb";
+export type SampleFormat = "i16" | "i24In32" | "i24Packed" | "i32" | "f32" | "f64" | "dop24" | "dop32" | "dsdU8Lsb" | "dsdU8Msb";

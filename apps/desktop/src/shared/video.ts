@@ -1,5 +1,6 @@
 import type { AppSettings } from './settings'
 export interface VideoOptions {
+  renderPriority?: 'balanced' | 'fast'
   path: string
   width: number
   height: number
@@ -22,6 +23,7 @@ export interface VideoRequest {
   title: string
   settings: AppSettings
   visual: {
+    viewport?: { width: number; height: number }
     sceneId: string
     auto: boolean
     offset: { x: number; y: number; z: number }

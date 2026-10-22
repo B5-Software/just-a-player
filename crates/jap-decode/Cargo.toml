@@ -9,11 +9,14 @@ publish.workspace = true
 [dependencies]
 aes = "0.8"
 base64 = "0.22"
+encoding_rs = "0.8"
 jap-core.workspace = true
 symphonia.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 serde_json.workspace = true
+midly = { version = "0.5.3", default-features = false, features = ["std", "strict"] }
+oxisynth = { path = "../../vendor/oxisynth" }
 
 [dev-dependencies]
 hound.workspace = true

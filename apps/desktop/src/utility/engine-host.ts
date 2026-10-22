@@ -37,7 +37,7 @@ const REPLAYABLE: Event['type'][] = [
   'position',
   'dspChanged',
   'quality',
-  'volume'
+  'volume',
 ]
 
 function post(message: HostToRenderer): void {
@@ -71,17 +71,25 @@ function onPortMessage(message: RendererToHost, reply: Electron.MessagePortMain)
             OfflineRender: new (
               path: string,
               audioPath: string,
-              startMs: number
+              startMs: number,
+              soundfont?: string,
+              midiRate?: number
             ) => NonNullable<typeof offline>
           }
         ).OfflineRender
-        offline = new Renderer(message.path!, audioPath, message.startMs ?? 0)
+        offline = new Renderer(
+          message.path!,
+          audioPath,
+          message.startMs ?? 0,
+          message.soundfont,
+          message.midiRate
+        )
         post({ kind: 'offlineResult', id: message.id, audioPath })
       } else if (message.action === 'frame')
         post({
           kind: 'offlineResult',
           id: message.id,
-          frame: offline?.frameAt(message.timeMs ?? 0)
+          frame: offline?.frameAt(message.timeMs ?? 0),
         })
       else {
         offline?.close()

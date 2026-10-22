@@ -5,4 +5,4 @@ import type { OutputConfig } from "./OutputConfig";
 /**
  * UI -> 引擎，单向投递，不等待返回。
  */
-export type Command = { "type": "play", path: string, startMs?: number, } | { "type": "queueNext", path: string | null, } | { "type": "pause" } | { "type": "resume" } | { "type": "stop" } | { "type": "seek", positionMs: number, } | { "type": "setOutput", config: OutputConfig, } | { "type": "setDsp", config: DspConfig, } | { "type": "setVolume", gain: number, } | { "type": "resetBuffer" } | { "type": "analyzeQuality", path: string, };
+export type Command = { "type": "play", path: string, startMs?: number, } | { "type": "queueNext", path: string | null, } | { "type": "pause" } | { "type": "resume" } | { "type": "stop" } | { "type": "seek", positionMs: number, } | { "type": "setOutput", config: OutputConfig, } | { "type": "setDsp", config: DspConfig, } | { "type": "setMidi", soundfont: string | null, sampleRate: number, } | { "type": "setVolume", gain: number, } | { "type": "resetBuffer" } | { "type": "analyzeQuality", path: string, };

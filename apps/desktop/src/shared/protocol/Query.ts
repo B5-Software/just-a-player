@@ -4,4 +4,4 @@ import type { OutputApi } from "./OutputApi";
 /**
  * UI -> 引擎，同步查询。
  */
-export type Query = { "type": "listOutputDevices", api: OutputApi, } | { "type": "listDevices" } | { "type": "listAsioDevices" } | { "type": "probeExclusive", deviceId: string | null, } | { "type": "probeTrack", path: string, };
+export type Query = { "type": "listOutputDevices", api: OutputApi, } | { "type": "listDevices" } | { "type": "listAsioDevices" } | { "type": "probeExclusive", deviceId: string | null, } | { "type": "probeTrack", path: string, } | { "type": "discTracks", path: string, } | { "type": "embeddedLyrics", path: string, } | { "type": "deviceFormats", api: OutputApi, deviceId: string | null, };

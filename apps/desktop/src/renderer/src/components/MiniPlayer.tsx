@@ -47,8 +47,8 @@ export function MiniPlayer(): React.JSX.Element {
           <ArrowsOut size={16} />
         </button>
       </header>
-      <div className="relative flex min-h-0 flex-1 flex-col gap-2 px-4 pb-3">
-        <div className="drag-region flex min-w-0 items-center gap-3">
+      <div data-mini-content className="relative flex min-h-0 flex-1 flex-col gap-2 px-4 pb-3">
+        <div data-mini-meta className="drag-region flex min-w-0 items-center gap-3">
           <CoverArt size={52} />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-semibold">
@@ -62,7 +62,7 @@ export function MiniPlayer(): React.JSX.Element {
           </div>
         </div>
         <SeekBar compact />
-        <div className="flex items-center justify-between gap-2">
+        <div data-mini-controls className="flex items-center justify-between gap-2">
           <Transport compact />
           <VolumeControl compact />
         </div>

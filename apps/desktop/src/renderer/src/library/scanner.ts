@@ -16,7 +16,7 @@ export async function scanMusicFolders(): Promise<number> {
       target = library.createList('本地音乐')
       useLibrary.getState().setActive(previous)
     }
-    return await addAudioPaths(dirs, false, target)
+    return await addAudioPaths(dirs, false, target, true)
   } finally {
     scanning = false
   }

@@ -1,3 +1,4 @@
+import { surfacePixelRatio } from '../lib/pixel-ratio'
 import * as THREE from 'three'
 import { HdrPresenter } from './hdr'
 import { useCover } from '../cover/store'
@@ -6,9 +7,10 @@ import { activeAccents, useTheme } from '../theme/store'
 import { audio } from './audio'
 import { Palette } from './palette'
 import { PostStack } from './post'
-import { SCENES, type VizScene } from './scenes'
+import { SCENES, useSceneRegistry, type VizScene } from './scenes'
 import { useViz } from './store'
 import { useUi } from '../ui/store'
+import { usePlayer } from '../engine/store'
 
 /** 自动轮播的间隔（秒）。 */
 const AUTO_CYCLE_SECONDS = 42
@@ -105,9 +107,9 @@ export class VizHost {
       antialias: false,
       alpha: true,
       preserveDrawingBuffer: true,
-      powerPreference: 'high-performance'
+      powerPreference: 'high-performance',
     })
-    this.pixelRatio = window.devicePixelRatio * useSettings.getState().renderScale
+    this.pixelRatio = surfacePixelRatio() * useSettings.getState().renderScale
     this.renderer.setPixelRatio(this.pixelRatio)
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 1.05
@@ -158,6 +160,11 @@ export class VizHost {
     this.post = new PostStack(this.renderer, this.placeholder, this.placeholderCamera)
 
     this.setScene(useViz.getState().sceneId)
+    this.unsubscribe.push(
+      useSceneRegistry.subscribe(() => {
+        this.pendingId = useViz.getState().sceneId
+      })
+    )
     let lastId = useViz.getState().sceneId
     this.unsubscribe.push(
       useViz.subscribe((state) => {
@@ -177,6 +184,9 @@ export class VizHost {
     host.addEventListener('pointerdown', this.onStagePointerDown)
     window.addEventListener('pointermove', this.onStagePointerMove)
     window.addEventListener('pointerup', this.onStagePointerUp)
+    window.addEventListener('pointercancel', this.onStagePointerUp)
+    host.addEventListener('lostpointercapture', this.onStagePointerUp)
+    window.addEventListener('blur', this.cancelStageDrag)
     host.addEventListener('wheel', this.onStageWheel, { passive: true })
     host.addEventListener('dblclick', this.onStageDblClick)
 
@@ -193,6 +203,7 @@ export class VizHost {
   }
 
   private isDragging = false
+  private dragPointer: number | null = null
   private dragStart = { x: 0, y: 0 }
   private initialOffset = { x: 0, y: 0 }
   private curOffset = { x: -450, y: 0 }
@@ -278,7 +289,7 @@ export class VizHost {
   private resize(): void {
     const { clientWidth: w, clientHeight: h } = this.host
     this.resizePending = false
-    const pixelRatio = window.devicePixelRatio * useSettings.getState().renderScale
+    const pixelRatio = surfacePixelRatio() * useSettings.getState().renderScale
     if (
       w === 0 ||
       h === 0 ||
@@ -326,7 +337,15 @@ export class VizHost {
   }
 
   private readonly onStagePointerDown = (e: PointerEvent): void => {
-    if (useUi.getState().lyricsAdjusting) return
+    if (
+      useUi.getState().lyricsAdjusting ||
+      this.dragPointer !== null ||
+      e.button !== 0 ||
+      !e.isPrimary
+    )
+      return
+    e.preventDefault()
+    this.dragPointer = e.pointerId
     this.isDragging = true
     this.dragStart = { x: e.clientX, y: e.clientY }
     this.initialOffset = { ...useViz.getState().offset }
@@ -335,22 +354,32 @@ export class VizHost {
   }
 
   private readonly onStagePointerMove = (e: PointerEvent): void => {
-    if (!this.isDragging) return
+    if (!this.isDragging || e.pointerId !== this.dragPointer) return
+    if (e.pointerType !== 'touch' && !(e.buttons & 1)) {
+      this.cancelStageDrag()
+      return
+    }
     const dx = e.clientX - this.dragStart.x
     const dy = e.clientY - this.dragStart.y
+    if (Math.hypot(dx, dy) < 4) return
     useViz.getState().setOffset({
       x: Math.round(this.initialOffset.x + dx),
-      y: Math.round(this.initialOffset.y + dy)
+      y: Math.round(this.initialOffset.y + dy),
     })
   }
 
   private readonly onStagePointerUp = (e: PointerEvent): void => {
-    if (!this.isDragging) return
+    if (e.pointerId !== this.dragPointer) return
+    this.cancelStageDrag()
+  }
+  private readonly cancelStageDrag = (): void => {
+    const pointer = this.dragPointer
+    this.dragPointer = null
     this.isDragging = false
     this.host.style.cursor = ''
     try {
-      if (this.host.hasPointerCapture(e.pointerId)) {
-        this.host.releasePointerCapture(e.pointerId)
+      if (pointer !== null && this.host.hasPointerCapture(pointer)) {
+        this.host.releasePointerCapture(pointer)
       }
     } catch {}
   }
@@ -368,6 +397,7 @@ export class VizHost {
   private readonly frame = (now: number): void => {
     if (this.disposed) return
     this.raf = requestAnimationFrame(this.frame)
+    if (window.jap.surface === 'export') return
     if (this.exporting) return
     try {
       this.draw(now)
@@ -398,7 +428,6 @@ export class VizHost {
     this.lastDraw = now
     if (this.resizePending && !offline) this.resize()
     if (this.width === 0) return
-    this.hdr.configure(this.renderer, window.jap.surface === 'main', offline)
 
     const state = audio.step(now)
     const dt = state.dt
@@ -424,7 +453,17 @@ export class VizHost {
 
     // 指针缓动到目标位置：鼠标进出画布时镜头平滑过渡，不会瞬移
     this.pointer.lerp(this.pointerTarget, 1 - Math.exp(-dt * 4))
-    scene.update(state, this.palette, { pointer: this.pointer })
+    const player = usePlayer.getState()
+    const sourceTime = player.track
+      ? (player.position.ms +
+          (player.state === 'playing' ? Math.max(0, performance.now() - player.position.at) : 0)) /
+        1000
+      : state.time
+    scene.update(
+      scene.nativeShader && !offline ? { ...state, time: sourceTime } : state,
+      this.palette,
+      { pointer: this.pointer }
+    )
 
     // 自由移动与缩放相机视角（平滑平移）
     const { offset, zoom } = useViz.getState()
@@ -449,6 +488,21 @@ export class VizHost {
       camera.zoom = targetZoom
       camera.updateProjectionMatrix()
     }
+    scene.setView?.(offX / this.width, offY / this.height, targetZoom)
+    this.hdr.configure(
+      this.renderer,
+      window.jap.surface === 'main',
+      offline,
+      scene.nativeShader?.()
+    )
+    if (
+      !offline &&
+      this.hdr.presentNative(scene.nativeShader?.(), this.width, this.height, this.backdropCanvas)
+    ) {
+      this.lastRenderError = null
+      this.frameVersion++
+      return
+    }
 
     const k = 1 - Math.exp(-dt * 4)
     const bloom = this.post.bloom
@@ -456,13 +510,14 @@ export class VizHost {
     bloom.strength += (scene.bloom.strength - bloom.strength) * k
     bloom.radius += (scene.bloom.radius - bloom.radius) * k
     bloom.threshold += (scene.bloom.threshold - bloom.threshold) * k
+    bloom.enabled = !scene.clean && settings.renderEffects && bloom.strength > 0.002
 
     this.post.render(scene.scene, scene.camera, {
       time: state.time,
       beat: state.beat,
       fade: this.fade,
       dt,
-      clean: scene.instrument || !settings.renderEffects
+      clean: scene.clean || scene.instrument || !settings.renderEffects,
     })
     this.hasFrame = true
     this.renderer.domElement.style.visibility = 'visible'
@@ -518,6 +573,9 @@ export class VizHost {
     this.host.removeEventListener('pointerdown', this.onStagePointerDown)
     window.removeEventListener('pointermove', this.onStagePointerMove)
     window.removeEventListener('pointerup', this.onStagePointerUp)
+    window.removeEventListener('pointercancel', this.onStagePointerUp)
+    this.host.removeEventListener('lostpointercapture', this.onStagePointerUp)
+    window.removeEventListener('blur', this.cancelStageDrag)
     this.host.removeEventListener('wheel', this.onStageWheel)
     this.host.removeEventListener('dblclick', this.onStageDblClick)
     this.resizeObserver.disconnect()

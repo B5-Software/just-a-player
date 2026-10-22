@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import type { AudioState } from '../audio'
 import type { Palette } from '../palette'
+import type { NativeShaderFrame } from '../native-hdr'
 
 export interface FrameInput {
   /** 指针在画布内的归一化位置，-1..1。 */
@@ -8,6 +9,9 @@ export interface FrameInput {
 }
 
 export interface VizScene {
+  readonly clean?: boolean
+  nativeShader?: () => NativeShaderFrame
+  setView?(x: number, y: number, zoom: number): void
   readonly instrument?: boolean
   readonly scene: THREE.Scene
   readonly camera: THREE.PerspectiveCamera | THREE.OrthographicCamera
@@ -107,11 +111,7 @@ export function glowTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(canvas)
 }
 
-export function colorRamp(
-  out: THREE.Color,
-  palette: Palette,
-  t: number
-): THREE.Color {
+export function colorRamp(out: THREE.Color, palette: Palette, t: number): THREE.Color {
   // 低 -> 主色，中 -> 邻近色，高 -> 对比色
   if (t < 0.5) return out.copy(palette.accent).lerp(palette.second, t * 2)
   return out.copy(palette.second).lerp(palette.third, (t - 0.5) * 2)

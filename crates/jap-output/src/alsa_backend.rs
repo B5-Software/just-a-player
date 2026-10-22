@@ -57,6 +57,7 @@ pub(crate) fn open(
             SampleFormat::I24Packed | SampleFormat::Dop24 => Format::s24_3(),
             SampleFormat::I24In32 | SampleFormat::I32 | SampleFormat::Dop32 => Format::s32(),
             SampleFormat::F32 => Format::float(),
+            SampleFormat::F64 => Format::float64(),
             _ => continue,
         };
         let pcm = match PCM::new(id.id(), Direction::Playback, true) {
@@ -156,7 +157,7 @@ pub(crate) fn open(
         buffer_frames: frames,
         exclusive: true,
         device_name: device.to_string(),
-        api_label: "ALSA hw · 原始格式独占（无软件重采样）".into(),
+        api_label: "ALSA hw · 硬件独占".into(),
         events: rx,
         handle: Box::new(Handle {
             stop,

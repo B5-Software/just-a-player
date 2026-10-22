@@ -79,6 +79,7 @@ pub(crate) fn probe_exclusive(id: Option<&str>) -> Result<Vec<StreamConfig>> {
             cpal::SampleFormat::I16 => SampleFormat::I16,
             cpal::SampleFormat::I32 => SampleFormat::I32,
             cpal::SampleFormat::F32 => SampleFormat::F32,
+            cpal::SampleFormat::F64 => SampleFormat::F64,
             _ => continue,
         };
         for rate in [
@@ -105,6 +106,7 @@ fn raw_format(format: SampleFormat) -> Option<cpal::SampleFormat> {
             Some(cpal::SampleFormat::I32)
         }
         SampleFormat::F32 => Some(cpal::SampleFormat::F32),
+        SampleFormat::F64 => Some(cpal::SampleFormat::F64),
         _ => None,
     }
 }
@@ -139,15 +141,12 @@ pub(crate) fn open(
     let mut candidates = request.candidates.clone();
     if !request.api.is_exclusive()
         && let Ok(default) = device.default_output_config()
-        && request.candidates.first().is_some_and(|candidate| {
-            candidate.channels == default.channels()
-                && candidate.sample_rate == default.sample_rate()
-        })
     {
         let format = match default.sample_format() {
             cpal::SampleFormat::I16 => Some(SampleFormat::I16),
             cpal::SampleFormat::I32 => Some(SampleFormat::I32),
             cpal::SampleFormat::F32 => Some(SampleFormat::F32),
+            cpal::SampleFormat::F64 => Some(SampleFormat::F64),
             _ => None,
         };
         if let Some(format) = format {

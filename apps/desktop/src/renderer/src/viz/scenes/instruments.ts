@@ -1,3 +1,4 @@
+import { surfacePixelRatio } from '../../lib/pixel-ratio'
 import * as THREE from 'three'
 import { type SceneDef, type VizScene } from './common'
 import type { AudioState } from '../audio'
@@ -10,7 +11,7 @@ const titles: Record<Mode, string> = {
   scope: '示波器',
   spectrum: '频谱分析仪',
   spectrogram: '时频谱',
-  vectorscope: '立体声相位仪'
+  vectorscope: '立体声相位仪',
 }
 /** Viewport-sized transparent instrumentation; fonts are bundled under the OFL. */
 class Instrument implements VizScene {
@@ -27,7 +28,7 @@ class Instrument implements VizScene {
       map: this.texture,
       transparent: true,
       toneMapped: false,
-      depthWrite: false
+      depthWrite: false,
     })
   )
   private readonly history = document.createElement('canvas')
@@ -56,7 +57,7 @@ class Instrument implements VizScene {
   resize(w: number, h: number): void {
     this.width = Math.max(1, w)
     this.height = Math.max(1, h)
-    this.dpr = window.devicePixelRatio * useSettings.getState().renderScale
+    this.dpr = surfacePixelRatio() * useSettings.getState().renderScale
     this.canvas.width = Math.round(this.width * this.dpr)
     this.canvas.height = Math.round(this.height * this.dpr)
     this.last = -1
@@ -110,7 +111,7 @@ class Instrument implements VizScene {
       x: margin,
       y: top,
       w: Math.max(20, w - margin * 2),
-      h: Math.max(30, h - top - bottom)
+      h: Math.max(30, h - top - bottom),
     }
     const fx = (hz: number): number => p.x + (Math.log(hz / 25) / Math.log(800)) * p.w
     c.shadowColor = accent
@@ -306,24 +307,24 @@ export const instrumentScenes: readonly SceneDef[] = [
     id: 'scope',
     name: '示波器',
     hint: '零交越触发 · 实时波形',
-    create: () => new Instrument('scope')
+    create: () => new Instrument('scope'),
   },
   {
     id: 'spectrum',
     name: '频谱分析仪',
     hint: '对数分频 · 峰值保持',
-    create: () => new Instrument('spectrum')
+    create: () => new Instrument('spectrum'),
   },
   {
     id: 'spectrogram',
     name: '时频谱',
     hint: '12 秒历史 · 能量热图',
-    create: () => new Instrument('spectrogram')
+    create: () => new Instrument('spectrogram'),
   },
   {
     id: 'vectorscope',
     name: '立体声相位仪',
     hint: 'M/S 分布 · 声道相关',
-    create: () => new Instrument('vectorscope')
-  }
+    create: () => new Instrument('vectorscope'),
+  },
 ]

@@ -1,3 +1,4 @@
+import { Range } from '../ui/Range'
 import { usePlayer } from '../engine/store'
 import { SpeakerHigh, ArrowCounterClockwise } from '../icons'
 
@@ -14,8 +15,7 @@ export function VolumeControl({ compact = false }: { compact?: boolean }): React
       >
         <SpeakerHigh size={18} weight={volume === 0 ? 'thin' : 'regular'} />
       </button>
-      <input
-        type="range"
+      <Range
         min={0}
         max={100}
         step={1}

@@ -7,6 +7,14 @@ export function ffmpegPath(): string {
 }
 /** Resolve outside asar, before either playback or offline utility process starts. */
 export function discoverAudioTools(): void {
+  process.env['JAP_SOUNDFONT_PATH'] = app.isPackaged
+    ? join(process.resourcesPath, 'soundfonts', 'MuseScore_General_HQ.sf2')
+    : join(app.getAppPath(), '../../assets/soundfonts/MuseScore_General_HQ.sf2')
+  if (process.env['JAP_BUNDLE_MIDI'] === '0')
+    process.env['JAP_SOUNDFONT_PATH'] = join(
+      app.getPath('userData'),
+      'soundfonts/no-bundled-soundfont.sf2'
+    )
   const bundled = app.isPackaged
     ? join(process.resourcesPath, 'media-tools', 'bin')
     : join(app.getAppPath(), 'build', 'media-tools', 'bin')
@@ -24,7 +32,7 @@ export function discoverAudioTools(): void {
   process.env.PATH = [
     bundled,
     ...(process.env.PATH ?? '').split(delimiter),
-    ...extras.filter(existsSync)
+    ...extras.filter(existsSync),
   ]
     .filter((p, i, a) => p && a.indexOf(p) === i)
     .join(delimiter)

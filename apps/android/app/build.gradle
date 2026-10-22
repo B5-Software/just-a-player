@@ -1,0 +1,55 @@
+plugins { id 'com.android.application' }
+def supportedAbis = System.getenv('JAP_ANDROID_TEST_ABI') ? [System.getenv('JAP_ANDROID_TEST_ABI')] : ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64']
+def bundledMidi = System.getenv('JAP_BUNDLE_MIDI') != '0'
+android {
+    namespace 'org.b5_software.justaplayer'
+    compileSdk 35
+    ndkVersion '26.1.10909125'
+    buildFeatures { buildConfig true }
+    defaultConfig {
+        buildConfigField 'boolean', 'BUNDLED_MIDI', bundledMidi.toString()
+        applicationId 'org.b5_software.justaplayer'
+        minSdk 28
+        targetSdk 35
+        versionCode 102
+        versionName '0.1.2'
+        ndk { abiFilters(*supportedAbis) }
+    }
+    signingConfigs {
+        production {
+            if (System.getenv('ANDROID_KEYSTORE_PATH')) {
+                storeFile file(System.getenv('ANDROID_KEYSTORE_PATH'))
+                storePassword System.getenv('ANDROID_STORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        debug { applicationIdSuffix '.debug' }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.findByName('production')
+        }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    packaging { jniLibs { useLegacyPackaging true } }
+    splits { abi { enable false } } // One universal APK containing all four supported NDK ABIs.
+}
+tasks.register('verifyNativeLibraries') {
+    doLast {
+        supportedAbis.each { abi ->
+            ['libjap_android.so', 'libffmpeg.so', 'libffprobe.so'].each { name ->
+                if (!file("src/main/jniLibs/$abi/$name").isFile()) throw new GradleException("Missing $abi/$name. Run pnpm build:native and pnpm build:codecs before packaging.")
+            }
+        }
+        if (!file('src/main/assets/web/index.html').isFile()) throw new GradleException('Run pnpm build:web before packaging.')
+        if (file('src/main/assets/soundfonts/MuseScore_General_HQ.sf2').isFile() != bundledMidi) throw new GradleException('MIDI bank does not match JAP_BUNDLE_MIDI. Run build:web first.')
+    }
+}
+tasks.named('preBuild') { dependsOn 'verifyNativeLibraries' }
+tasks.configureEach {
+    if (name == 'preReleaseBuild') doFirst {
+        if (!System.getenv('ANDROID_KEYSTORE_PATH')) throw new GradleException('Release requires a persistent signing key. Set ANDROID_KEYSTORE_PATH, ANDROID_STORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD.')
+    }
+}

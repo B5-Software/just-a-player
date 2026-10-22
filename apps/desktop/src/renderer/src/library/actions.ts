@@ -4,6 +4,7 @@ import { playItem } from './playback'
 import { refreshMissing } from './metadata'
 import { activeListOf, useLibrary } from './store'
 import { siblingKey, importRank } from './quality'
+import { expandDiscs, trackMeta } from './discs'
 
 /**
  * 把文件或文件夹加入当前列表（文件夹按设置递归展开）。
@@ -12,10 +13,15 @@ import { siblingKey, importRank } from './quality'
 export async function addAudioPaths(
   paths: string[],
   play?: boolean,
-  targetId?: string
+  targetId?: string,
+  background = false
 ): Promise<number> {
   const listId = targetId ?? activeListOf(useLibrary.getState()).id
-  const candidates = await window.jap.scanAudio(paths, useSettings.getState().recursiveScan)
+  const expanded = await expandDiscs(
+    await window.jap.scanAudio(paths, useSettings.getState().recursiveScan),
+    !background
+  )
+  const candidates = expanded.paths
   const groups = new Map<string, string[]>()
   for (const path of candidates) {
     const key = siblingKey(path)
@@ -29,8 +35,8 @@ export async function addAudioPaths(
     const siblings = [
       ...new Set([
         ...group,
-        ...current.items.filter((i) => siblingKey(i.path) === key).map((i) => i.path)
-      ])
+        ...current.items.filter((i) => siblingKey(i.path) === key).map((i) => i.path),
+      ]),
     ]
     if (siblings.length === 1) {
       audio.push(siblings[0]!)
@@ -50,6 +56,7 @@ export async function addAudioPaths(
   if (audio.length === 0) return 0
   const state = useLibrary.getState()
   const added = state.addPaths(listId, audio)
+  for (const track of expanded.tracks) useLibrary.getState().applyMeta(track.path, trackMeta(track))
   for (const [path, qualityRank] of ranks) useLibrary.getState().applyMeta(path, { qualityRank })
   void refreshMissing()
   const shouldPlay = play ?? usePlayer.getState().state !== 'playing'

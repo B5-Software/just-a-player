@@ -1,39 +1,78 @@
+export interface LyricWord {
+  t: number
+  end: number
+  text: string
+  from: number
+  to: number
+}
 export interface LyricLine {
-  /** 秒。 */
+  /** Seconds, after LRC offset. */
   t: number
   text: string
-  /** 同一时间戳的第二行（双语歌词的译文）。 */
   sub: string
+  words?: LyricWord[]
+  subWords?: LyricWord[]
 }
-
-/**
- * 解析 LRC：支持一行多个时间戳、`[offset:]`、增强型逐字标签（去掉只留文本）。
- * 同一时间戳出现两行时，第二行作为译文。
- */
+const TIME = /(?:\[(\d+):(\d+(?:\.\d+)?)\]|<(\d+):(\d+(?:\.\d+)?)>)/g
+const seconds = (tag: RegExpMatchArray): number => Number(tag[1] ?? tag[3])*60+Number(tag[2] ?? tag[4])
+/** Ordinary repeated leading stamps, enhanced LRC <stamps>, and LDDC [word] stamps. */
 export function parseLRC(src: string): LyricLine[] {
-  const raw: { t: number; text: string }[] = []
-  let offset = 0
-  for (const line of src.split(/\r?\n/)) {
-    const tags = [...line.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)]
-    if (tags.length === 0) {
-      const match = /^\s*\[offset:\s*([+-]?\d+)\]/i.exec(line)
-      if (match) offset = Number(match[1]) / 1000
-      continue
+  const offset = Number(/\[offset:\s*([+-]?\d+)\]/i.exec(src)?.[1] ?? 0)/1000
+  const raw: LyricLine[] = []
+  for (const source of src.replace(/^\uFEFF/,'').split(/\r?\n/)) {
+    const tags = [...source.matchAll(TIME)]
+    if (!tags.length) continue
+    let leading = 1
+    while (leading < tags.length && tags[leading]![0].startsWith('[') && !source.slice(tags[leading-1]!.index!+tags[leading-1]![0].length,tags[leading]!.index).trim()) leading++
+    const anchor = tags[leading-1]!
+    const inline = tags.slice(leading)
+    const timed = inline.length > 0 || tags.some(t=>t[0].startsWith('<'))
+    let text = '', words: LyricWord[] = []
+    if (timed) {
+      const stream = [anchor,...inline]
+      for (let i=0;i<stream.length;i++) {
+        const stamp=stream[i]!, next=stream[i+1]
+        const fragment = source.slice(stamp.index!+stamp[0].length,next?.index).replace(/\[(?:ar|ti|al|by|tool|offset):[^\]]*\]/gi,'')
+        if (!fragment) continue
+        const start = Math.max(0,seconds(stamp)-offset)
+        words.push({t:start,end:next?Math.max(start,seconds(next)-offset):NaN,text:fragment,from:text.length,to:text.length+fragment.length})
+        text += fragment
+      }
+    } else text=source.slice(anchor.index!+anchor[0].length).trim()
+    for (const tag of tags.slice(0,leading)) {
+      const t=Math.max(0,seconds(tag)-offset), delta=t-Math.max(0,seconds(anchor)-offset)
+      raw.push({t,text,sub:'',...(words.length?{words:words.map(w=>({...w,t:Math.max(0,w.t+delta),end:w.end+delta}))}:{})})
     }
-    const text = line.replace(/\[[^\]]*\]|<[^>]*>/g, '').trim()
-    for (const tag of tags) raw.push({ t: Number(tag[1]) * 60 + Number(tag[2]), text })
   }
-
-  raw.sort((a, b) => a.t - b.t)
-  const out: LyricLine[] = []
+  raw.sort((a,b)=>a.t-b.t)
+  const out:LyricLine[]=[]
   for (const item of raw) {
-    const t = Math.max(0, item.t - offset)
-    const last = out[out.length - 1]
-    if (last && Math.abs(last.t - t) < 0.005 && last.text && item.text && !last.sub) {
-      last.sub = item.text
-    } else {
-      out.push({ t, text: item.text, sub: '' })
-    }
+    const last=out.at(-1)
+    if (last && Math.abs(last.t-item.t)<.005) {
+      if (!last.text && item.text) Object.assign(last,item)
+      else if (last.text && item.text && last.text!==item.text && !last.sub) { last.sub=item.text; last.subWords=item.words }
+    } else out.push(item)
+  }
+  for (let i=0;i<out.length;i++) {
+    const line=out[i]!, next=out[i+1]?.t
+    for (const word of [...(line.words??[]),...(line.subWords??[])])
+      if (!Number.isFinite(word.end)) word.end=Math.max(word.t+.05,next??word.t+.5)
+  }
+  if (!out.length) {
+    const text=src.replace(/\[[a-z]+:[^\]]*\]/gi,'').trim()
+    if (text) out.push({t:0,text,sub:''})
   }
   return out
+}
+export const wordProgress = (word:LyricWord,time:number):number => Math.max(0,Math.min(1,(time-word.t)/Math.max(.001,word.end-word.t)))
+/** Fraction through the shaped line; caller supplies measured prefix widths. */
+export function sungWidth(words:LyricWord[]|undefined,time:number,measure:(text:string)=>number,text:string):number {
+  if (!words?.length) return measure(text)
+  let width=0
+  for (const word of words) {
+    const start=measure(text.slice(0,word.from)), end=measure(text.slice(0,word.to))
+    width=Math.max(width,start+(end-start)*wordProgress(word,time))
+    if (time<word.end) break
+  }
+  return width
 }

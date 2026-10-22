@@ -67,6 +67,16 @@ pub fn analyze(path: &str, cancel: &AtomicBool) -> Result<Option<QualityReport>,
         }
     }
     let mut report = stats.finish(path.to_owned());
+    if jap_decode::midi::is_midi(Path::new(path)) {
+        report
+            .findings
+            .retain(|f| !f.title.contains("升频") && !f.title.contains("位深"));
+        report.findings.push(QualityFinding {
+            title: "MIDI 合成音源".into(),
+            detail: "评分仅评价当前音色库合成波形的削波、动态等指标；MIDI 不含录音采样，不能据此判断原始位深、升频或 AI 来源。".into(),
+            severity: "info".into(), confidence: "high".into(),
+        });
+    }
     report.coverage = if offsets.len() > 1 {
         "抽样：开头、25%、50%、75% 位置各 8 秒".into()
     } else {

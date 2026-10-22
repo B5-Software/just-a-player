@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { showSaveDialog } from './dialogs'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { IPC } from '../shared/ipc'
@@ -11,6 +12,7 @@ let worker: BrowserWindow | null = null,
   current: VideoQueueItem | null = null,
   loaded = false
 let load: (win: BrowserWindow, surface: Surface) => void
+let lastProgress = 0
 export function queueTarget(sender: Electron.WebContents, id: unknown): string | null {
   return sender === worker?.webContents && typeof id === 'string' && current?.id === id
     ? current.target
@@ -22,7 +24,16 @@ function broadcast(): void {
 function next(): void {
   if (current) return
   const pending = items.find((j) => j.state === 'waiting')
-  if (!pending) return
+  if (!pending) {
+    setTimeout(() => {
+      if (!current && !items.some((i) => i.state === 'waiting')) {
+        worker?.destroy()
+        worker = null
+        loaded = false
+      }
+    }, 500)
+    return
+  }
   if (!worker || worker.isDestroyed()) {
     loaded = false
     worker = new BrowserWindow({
@@ -37,11 +48,14 @@ function next(): void {
         contextIsolation: true,
         nodeIntegration: false,
         backgroundThrottling: false,
-        offscreen: true,
-        additionalArguments: ['--jap-surface=export']
-      }
+        partition: 'jap-video-export',
+        offscreen: false,
+        additionalArguments: ['--jap-surface=export'],
+      },
     })
+    const own = worker
     worker.webContents.on('render-process-gone', () => {
+      if (worker !== own) return
       if (worker) void cancelVideoOwner(worker.webContents.id)
       if (current) {
         current.state = 'failed'
@@ -61,6 +75,7 @@ function next(): void {
   }
   if (!loaded) return
   current = pending
+  lastProgress = Date.now()
   current.state = 'rendering'
   current.status = '后台准备…'
   broadcast()
@@ -84,12 +99,12 @@ export function registerVideoQueue(
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return null
     const extension = !request.options.audio || request.options.audio === 'aac' ? 'mp4' : 'mkv'
-    const selected = await dialog.showSaveDialog(win, {
+    const selected = await showSaveDialog(win, {
       title: '加入视频导出队列',
       defaultPath: (request.title || '音乐视频').replace(/[<>:"/\\|?*]/g, '_') + '.' + extension,
       filters: [
-        { name: extension === 'mp4' ? 'MP4 视频' : 'Matroska 视频', extensions: [extension] }
-      ]
+        { name: extension === 'mp4' ? 'MP4 视频' : 'Matroska 视频', extensions: [extension] },
+      ],
     })
     if (selected.canceled || !selected.filePath) return null
     const item: VideoQueueItem = {
@@ -100,7 +115,7 @@ export function registerVideoQueue(
       state: 'waiting',
       progress: 0,
       status: '排队中',
-      error: null
+      error: null,
     }
     // Snapshot settings at enqueue time. Later changes to the live player don't
     // alter an existing export or make the background worker write preferences.
@@ -130,6 +145,8 @@ export function registerVideoQueue(
       }
     ) => {
       if (event.sender !== worker?.webContents || current?.id !== value.id) return
+      if (current.progress !== value.progress || current.status !== value.status)
+        lastProgress = Date.now()
       current.progress = Math.max(0, Math.min(1, value.progress))
       current.status = value.status
       current.error = value.error
@@ -152,12 +169,44 @@ export function registerVideoQueue(
       requests.delete(id)
       broadcast()
     } else if (item === current) {
-      worker?.webContents.send(IPC.videoQueueCancel)
-      if (worker) void cancelVideoOwner(worker.webContents.id)
+      item.state = 'cancelled'
+      item.status = '已取消'
+      requests.delete(id)
+      current = null
+      const previous = worker
+      worker = null
+      loaded = false
+      if (previous) {
+        void cancelVideoOwner(previous.webContents.id)
+        previous.destroy()
+      }
+      broadcast()
+      next()
     }
   })
   app.on('before-quit', () => {
     worker?.destroy()
     worker = null
   })
+  const watchdog = setInterval(() => {
+    if (
+      !current ||
+      Date.now() - lastProgress < (current.status.includes('合并音频') ? 650000 : 120000)
+    )
+      return
+    current.state = 'failed'
+    current.status = '后台生成超时，已释放导出资源'
+    current.error = current.status
+    requests.delete(current.id)
+    current = null
+    if (worker) {
+      void cancelVideoOwner(worker.webContents.id)
+      worker.destroy()
+      worker = null
+      loaded = false
+    }
+    broadcast()
+    next()
+  }, 10000)
+  watchdog.unref()
 }

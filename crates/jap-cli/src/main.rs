@@ -32,6 +32,10 @@ enum Cmd {
     Info {
         path: PathBuf,
     },
+    /// List each subsong of a SACD ISO or CD/CUE image without decoding audio.
+    Tracks {
+        path: PathBuf,
+    },
     /// 离线分析真实音频样本（最多 32 秒，多位置抽样）
     Analyze {
         path: PathBuf,
@@ -73,6 +77,13 @@ fn main() -> Result<()> {
         Cmd::Devices => devices(),
         Cmd::Probe { device } => probe(device),
         Cmd::Info { path } => info(&path),
+        Cmd::Tracks { path } => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&jap_decode::disc::tracks(&path)?)?
+            );
+            Ok(())
+        }
         Cmd::AsioDevices => {
             println!(
                 "{}",
@@ -154,7 +165,10 @@ fn devices() -> Result<()> {
             Ok(())
         }
         QueryResponse::Error { message } => bail!(message),
-        QueryResponse::ExclusiveFormats { .. } | QueryResponse::Track { .. } => unreachable!(),
+        QueryResponse::ExclusiveFormats { .. }
+        | QueryResponse::Track { .. }
+        | QueryResponse::Tracks { .. }
+        | QueryResponse::Lyrics { .. } => unreachable!(),
     }
 }
 
@@ -170,7 +184,10 @@ fn probe(device: Option<String>) -> Result<()> {
             Ok(())
         }
         QueryResponse::Error { message } => bail!(message),
-        QueryResponse::Devices { .. } | QueryResponse::Track { .. } => unreachable!(),
+        QueryResponse::Devices { .. }
+        | QueryResponse::Track { .. }
+        | QueryResponse::Tracks { .. }
+        | QueryResponse::Lyrics { .. } => unreachable!(),
     }
 }
 

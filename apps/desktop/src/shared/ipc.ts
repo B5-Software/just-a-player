@@ -12,6 +12,8 @@ export type RendererToHost =
       path?: string
       startMs?: number
       writeAudio?: boolean
+      soundfont?: string
+      midiRate?: number
       timeMs?: number
     }
   | { kind: 'command'; command: Command }
@@ -33,6 +35,12 @@ export type HostToRenderer =
 
 /** 主进程 IPC 通道名。 */
 export const IPC = {
+  soundfontImport: 'midi:import-soundfont',
+  openFiles: 'app:open-files',
+  takeOpenFiles: 'app:take-open-files',
+  dialogOpen: 'dialog:custom-open',
+  dialogBrowse: 'dialog:custom-browse',
+  dialogReply: 'dialog:custom-reply',
   gpuInfo: 'gpu:info',
   restart: 'app:restart',
   videoEnqueue: 'video:enqueue',
@@ -69,6 +77,7 @@ export const IPC = {
   openAudio: 'dialog:open-audio',
   openFolder: 'dialog:open-folder',
   openPlaylist: 'dialog:open-playlist',
+  openVisualPlugin: 'dialog:open-visual-plugin',
   openLyrics: 'dialog:open-lyrics',
   pickExportPath: 'dialog:pick-export-path',
   writeExport: 'fs:write-export',
@@ -82,5 +91,5 @@ export const IPC = {
   lyricsGet: 'lyrics:get',
   lyricsSet: 'lyrics:set',
   setFullscreen: 'window:set-fullscreen',
-  fullscreenChanged: 'window:fullscreen-changed'
+  fullscreenChanged: 'window:fullscreen-changed',
 } as const

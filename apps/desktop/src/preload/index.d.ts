@@ -4,6 +4,41 @@ import type { Surface, WallpaperState, SystemMediaState } from '../shared/deskto
 import type { VideoRequest, VideoQueueItem } from '../shared/video'
 
 export interface JapBridge {
+  bundledMidi: boolean
+  nativeHdr?: {
+    validate?(frame: {
+      fragment: string
+      uniforms: Record<string, number | number[]>
+    }): Promise<{ pixels: number[]; renderer: string }>
+    info: {
+      supported: boolean
+      types: number[]
+      maxLuminance: number
+      wideColor: boolean
+      webView: string
+    }
+    configure(enabled: boolean): Promise<boolean>
+    scene(frame: {
+      fragment?: string
+      uniforms: Record<string, number | number[]>
+      width: number
+      height: number
+      backdrop?: string | null
+      textures?: { name: string; width: number; height: number; data: string }[]
+    }): Promise<boolean>
+    onState(callback: (state: { active: boolean; reason: string }) => void): () => void
+  }
+  importSoundfont(): Promise<string | null>
+  takeOpenFiles(): Promise<string[]>
+  onOpenFiles(callback: () => void): () => void
+  requestMusicPermission?(): Promise<void>
+  connectUsb?(): Promise<string>
+  onUsbChange?(callback: (connected: boolean) => void): () => void
+  onDialogRequest(
+    callback: (request: import('../shared/dialogs').FileDialogRequest) => void
+  ): () => void
+  browseFiles(path?: string): Promise<import('../shared/dialogs').BrowserListing>
+  dialogReply(id: string, paths: string[]): Promise<boolean>
   gpuInfo(): Promise<import('../shared/gpu').GpuInfo | null>
   restart(): Promise<void>
   enqueueVideo(request: VideoRequest): Promise<VideoQueueItem | null>
@@ -40,6 +75,8 @@ export interface JapBridge {
   lightingStatus(): Promise<LightingStatus>
   onWallpaperPointer(callback: (point: { x: number; y: number }) => void): () => void
   videoStart(options: {
+    transport?: 'rgba' | 'h264'
+    midiSoundfont?: string | null
     originalSourcePath?: string
     audioBits?: number
     musicDuration?: number
@@ -64,10 +101,11 @@ export interface JapBridge {
   initialSettings: AppSettings
   /** 合并更新设置并持久化，返回更新后的完整设置。 */
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>
-  /** 弹出系统文件选择器，返回所选音频文件的绝对路径。 */
+  /** 在应用内选择音频文件。 */
   openAudioFiles(): Promise<string[]>
   openFolders(): Promise<string[]>
   openPlaylistFiles(): Promise<string[]>
+  openVisualPluginFiles(): Promise<string[]>
   openLyricsFiles(): Promise<string[]>
   /** 弹出保存对话框，返回用户选择的路径（取消为 null）。 */
   pickExportPath(suggestedName: string, json: boolean): Promise<string | null>

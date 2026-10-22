@@ -1,3 +1,4 @@
+import { Select } from '../ui/Select'
 import { useEffect, useState } from 'react'
 import type { GpuInfo } from '@shared/gpu'
 import { useSettings } from '../settings/store'
@@ -21,7 +22,7 @@ export function RenderSettings(): React.JSX.Element {
     <section className="flex flex-col gap-4">
       <SectionTitle>渲染设备与 HDR</SectionTitle>
       <SettingRow title="渲染 GPU" hint="主窗口、桌面壁纸和后台导出共用所选 GPU，重启后生效。">
-        <select
+        <Select
           aria-label="渲染 GPU"
           value={selected}
           onChange={(e) => useSettings.getState().update({ renderGpu: e.target.value })}
@@ -46,7 +47,7 @@ export function RenderSettings(): React.JSX.Element {
                 : ''}
             </option>
           ))}
-        </select>
+        </Select>
       </SettingRow>
       <p className="break-words text-[11px] leading-5 text-fg-muted">
         当前：{gpu?.current ?? '正在读取…'}

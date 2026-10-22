@@ -1,8 +1,11 @@
+import { Select } from '../ui/Select'
+import { confirmAction } from '../ui/dialog-store'
 import { useMemo, useRef, useState } from 'react'
 import { formatTime } from '../lib/format'
 import {
   Copy,
   DownloadSimple,
+  DotsSixVertical,
   FileAudio,
   FolderSimple,
   MagnifyingGlass,
@@ -14,7 +17,7 @@ import {
   SlidersHorizontal,
   Trash,
   UploadSimple,
-  X
+  X,
 } from '../icons'
 import { addAudioPaths } from '../library/actions'
 import { refreshMissing } from '../library/metadata'
@@ -25,7 +28,7 @@ import {
   displayTitle,
   useLibrary,
   type SortKey,
-  type TrackItem
+  type TrackItem,
 } from '../library/store'
 import { usePlayer } from '../engine/store'
 import { scanMusicFolders } from '../library/scanner'
@@ -38,13 +41,13 @@ const SORT_OPTIONS: readonly { value: string; label: string }[] = [
   { value: 'duration:asc', label: '时长 短→长' },
   { value: 'duration:desc', label: '时长 长→短' },
   { value: 'path:asc', label: '路径' },
-  { value: 'added:asc', label: '添加时间' }
+  { value: 'added:asc', label: '添加时间' },
 ]
 
 const EXPORT_OPTIONS: readonly { value: ExportFormat; label: string }[] = [
   { value: 'm3u', label: 'M3U8 · 绝对路径' },
   { value: 'm3u-relative', label: 'M3U8 · 相对路径' },
-  { value: 'json', label: 'JSON · 完整信息' }
+  { value: 'json', label: 'JSON · 完整信息' },
 ]
 
 const tool =
@@ -65,6 +68,14 @@ export function PlaylistPanel(): React.JSX.Element {
   const trackPlaying = usePlayer((s) => s.state === 'playing')
 
   const [dragId, setDragId] = useState<string | null>(null)
+  const touchOrder = useRef<{
+    pointer: number
+    from: string
+    to: string
+    x: number
+    y: number
+    moved: boolean
+  } | null>(null)
   const [anchor, setAnchor] = useState<string | null>(null)
   const [renaming, setRenaming] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
@@ -132,8 +143,16 @@ export function PlaylistPanel(): React.JSX.Element {
     flash(count ? `${count} 个文件已不存在` : '所有文件都在')
   }
 
-  const onClear = (): void => {
-    if (window.confirm(`清空「${active.name}」？`)) useLibrary.getState().clearList(active.id)
+  const onClear = async (): Promise<void> => {
+    if (
+      await confirmAction(
+        `清空「${active.name}」？`,
+        '仅清空当前列表中的条目，音乐文件仍会留在原来的位置。',
+        '清空列表',
+        true
+      )
+    )
+      useLibrary.getState().clearList(active.id)
   }
 
   const onRemoveSelected = (): void => useLibrary.getState().removeItems(active.id, selected)
@@ -266,8 +285,15 @@ export function PlaylistPanel(): React.JSX.Element {
           aria-label="删除列表"
           title="删除列表"
           disabled={lists.length <= 1}
-          onClick={() => {
-            if (window.confirm(`删除列表「${active.name}」？`))
+          onClick={async () => {
+            if (
+              await confirmAction(
+                `删除「${active.name}」？`,
+                '此列表的播放记忆和条目将被移除，音乐文件仍然保留。',
+                '删除列表',
+                true
+              )
+            )
               useLibrary.getState().deleteList(active.id)
           }}
           className="grid size-7 place-items-center rounded-lg text-fg-muted hover:bg-hover hover:text-fg disabled:opacity-30"
@@ -346,7 +372,7 @@ export function PlaylistPanel(): React.JSX.Element {
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           <label className={`${tool} cursor-pointer`}>
             <SlidersHorizontal size={13} />
-            <select
+            <Select
               aria-label="排序"
               value=""
               onChange={(e) => onSort(e.target.value)}
@@ -360,7 +386,7 @@ export function PlaylistPanel(): React.JSX.Element {
                   {o.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <button
             type="button"
@@ -421,6 +447,7 @@ export function PlaylistPanel(): React.JSX.Element {
           return (
             <li
               key={item.id}
+              data-track-id={item.id}
               draggable={canReorder}
               onDragStart={(e) => {
                 setDragId(item.id)
@@ -438,6 +465,80 @@ export function PlaylistPanel(): React.JSX.Element {
                 isSelected ? 'bg-accent/20 ring-1 ring-accent/40' : 'hover:bg-hover'
               } ${item.missing ? 'opacity-50' : ''} ${dragId === item.id ? 'opacity-40' : ''} ${canReorder ? 'cursor-grab' : ''}`}
             >
+              {canReorder && (
+                <button
+                  type="button"
+                  aria-label={`拖动排序 ${displayTitle(item)}`}
+                  style={{ touchAction: 'none' }}
+                  className="grid size-8 shrink-0 touch-none place-items-center rounded-lg text-fg-subtle hover:bg-hover"
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => {
+                    if (e.button !== 0 || !e.isPrimary) return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    touchOrder.current = {
+                      pointer: e.pointerId,
+                      from: item.id,
+                      to: item.id,
+                      x: e.clientX,
+                      y: e.clientY,
+                      moved: false,
+                    }
+                    e.currentTarget.setPointerCapture(e.pointerId)
+                  }}
+                  onPointerMove={(e) => {
+                    const d = touchOrder.current
+                    if (!d || d.pointer !== e.pointerId) return
+                    if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 8 && !d.moved) return
+                    d.moved = true
+                    setDragId(d.from)
+                    const row = document
+                      .elementsFromPoint(e.clientX, e.clientY)
+                      .map((n) => n.closest<HTMLElement>('[data-track-id]'))
+                      .find(Boolean)
+                    if (row?.dataset.trackId) d.to = row.dataset.trackId
+                    const list = e.currentTarget.closest('ul')
+                    if (list) {
+                      const r = list.getBoundingClientRect()
+                      if (e.clientY < r.top + 32) list.scrollTop -= 12
+                      else if (e.clientY > r.bottom - 32) list.scrollTop += 12
+                    }
+                  }}
+                  onPointerUp={(e) => {
+                    const d = touchOrder.current
+                    if (!d || d.pointer !== e.pointerId) return
+                    touchOrder.current = null
+                    setDragId(null)
+                    if (d.moved) {
+                      const items =
+                        useLibrary.getState().lists.find((l) => l.id === active.id)?.items ?? []
+                      const from = items.findIndex((i) => i.id === d.from),
+                        to = items.findIndex((i) => i.id === d.to)
+                      if (from >= 0 && to >= 0) useLibrary.getState().moveItem(active.id, from, to)
+                    }
+                    if (e.currentTarget.hasPointerCapture(e.pointerId))
+                      e.currentTarget.releasePointerCapture(e.pointerId)
+                  }}
+                  onPointerCancel={() => {
+                    touchOrder.current = null
+                    setDragId(null)
+                  }}
+                  onLostPointerCapture={() => {
+                    touchOrder.current = null
+                    setDragId(null)
+                  }}
+                  onKeyDown={(e) => {
+                    if (!['ArrowUp', 'ArrowDown'].includes(e.key)) return
+                    e.preventDefault()
+                    const from = active.items.findIndex((i) => i.id === item.id),
+                      to = from + (e.key === 'ArrowUp' ? -1 : 1)
+                    if (to >= 0 && to < active.items.length)
+                      useLibrary.getState().moveItem(active.id, from, to)
+                  }}
+                >
+                  <DotsSixVertical size={16} />
+                </button>
+              )}
               <button
                 type="button"
                 aria-label={`播放 ${displayTitle(item)}`}
@@ -503,7 +604,7 @@ export function PlaylistPanel(): React.JSX.Element {
           </button>
           {otherLists.length > 0 && (
             <>
-              <select
+              <Select
                 aria-label="复制到列表"
                 value=""
                 onChange={(e) => onTransfer(e.target.value, true)}
@@ -517,8 +618,8 @@ export function PlaylistPanel(): React.JSX.Element {
                     {l.name}
                   </option>
                 ))}
-              </select>
-              <select
+              </Select>
+              <Select
                 aria-label="移动到列表"
                 value=""
                 onChange={(e) => onTransfer(e.target.value, false)}
@@ -532,7 +633,7 @@ export function PlaylistPanel(): React.JSX.Element {
                     {l.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </>
           )}
           <button type="button" className={tool} onClick={onRemoveSelected}>

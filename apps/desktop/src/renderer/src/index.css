@@ -1,4 +1,73 @@
 @import 'tailwindcss';
+
+/* Native scrolling belongs to panels; stage/slider gestures keep their pointer. */
+html, body { overscroll-behavior: none; }
+html[data-native-hdr='1'], html[data-native-hdr='1'] body, html[data-native-hdr='1'] #root, html[data-native-hdr='1'] [data-player-app] { background: transparent !important; }
+html[data-native-hdr='1'] [data-viz-stage] { opacity: 0; }
+button, [role='button'], [role='combobox'] { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+input[type='range'], [data-viz-stage], [data-lyrics-canvas] { touch-action: none; }
+input[type='range'] { min-height: 32px; }
+.jap-range { position: relative; height: 32px; min-width: 24px; cursor: ew-resize; user-select: none; -webkit-user-select: none; outline: none; }
+.jap-range-track { position: absolute; height: 5px; left: 0; right: 0; top: calc(50% - 2.5px); border-radius: 999px; background: rgb(var(--fg) / .16); overflow: hidden; }
+.jap-range-fill { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, rgb(var(--accent)), rgb(var(--accent-2))); }
+.jap-range-thumb { position: absolute; width: 14px; height: 14px; border-radius: 50%; top: 50%; transform: translate(-50%, -50%); background: rgb(var(--accent)); box-shadow: 0 1px 5px #0004; }
+.jap-range:focus-visible { outline: 2px solid rgb(var(--accent-focus)); outline-offset: 4px; border-radius: 8px; }
+.jap-range.is-dragging .jap-range-thumb { box-shadow: 0 0 0 6px rgb(var(--accent) / .2); }
+.jap-range[data-range-vertical] { cursor: ns-resize; }
+.jap-range[data-range-vertical] .jap-range-track { width: 5px; height: auto; left: calc(50% - 2.5px); top: 0; bottom: 0; right: auto; }
+.jap-range[data-range-vertical] .jap-range-fill { position: absolute; bottom: 0; width: 100%; }
+.jap-range[data-range-vertical] .jap-range-thumb { left: 50%; top: auto; transform: translate(-50%, 50%); }
+[data-panel-root], .file-browser-body, [role='listbox'] { overscroll-behavior: contain; }
+@media (pointer: coarse) {
+  [data-panel-root] button, .app-dialog button, [data-toolbar] button { min-height: 40px; }
+  [data-panel-root] button[role='switch'], .app-dialog button[role='switch'] { min-height: 24px; }
+  button[role='switch']::before { content: ''; position: absolute; inset: -10px -2px; }
+  [data-panel-root] input[type='range'] { min-height: 40px; }
+  [data-panel-root] li > button { opacity: 1; }
+  [data-panel-root] li { touch-action: pan-y; }
+}
+
+/* The same glass stage and controls adapt to phones; no separate mobile player. */
+html[data-platform='android'] { -webkit-tap-highlight-color: transparent; }
+@media (max-width: 700px) {
+  html[data-platform='android'] [data-player-topbar] { padding: 12px; gap: 10px; flex-direction: column; }
+  html[data-platform='android'] [data-player-topbar] > :first-child { padding-right: 44px; width: 100%; }
+  html[data-platform='android'] [data-player-topbar] > :last-child { width: 100%; overflow-x: auto; justify-content: flex-start; scrollbar-width: none; }
+  html[data-platform='android'] [data-player-topbar] > :last-child > * { flex-shrink: 0; }
+  html[data-platform='android'] [data-mini-entry] { right: 12px; top: 16px; }
+  html[data-platform='android'] [data-player-dock] { left: 12px; right: 12px; bottom: 12px; }
+  html[data-platform='android'] [data-player-dock] > .glass { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 16px; border-radius: 28px; }
+  html[data-platform='android'] [data-player-dock] > .glass > :first-child { gap: 12px; }
+  html[data-platform='android'] [data-player-dock] > .glass > :first-child > :first-child { width: 60px !important; height: 60px !important; }
+  html[data-platform='android'] [data-player-dock] h1 { font-size: 17px; }
+  html[data-platform='android'] [data-player-dock] p { font-size: 11px; }
+  html[data-platform='android'] [data-player-dock] > .glass > :last-child { flex-direction: row; justify-content: space-between; align-items: center; }
+  html[data-platform='android'] [data-player-dock] [aria-label='播放'], html[data-platform='android'] [data-player-dock] [aria-label='暂停'] { width: 52px; height: 52px; }
+  html[data-platform='android'] [data-panel-root] { left: 12px !important; top: 126px !important; width: calc(100vw - 24px) !important; max-height: calc(100dvh - 148px) !important; padding: 18px; }
+  html[data-platform='android'] [data-onboarding] { top: 130px; left: 12px; right: 12px; width: auto; max-height: 32dvh; overflow-y: auto; }
+  html[data-platform='android'] .app-dialog-backdrop { padding: 12px; }
+  html[data-platform='android'] .app-dialog { max-height: calc(100dvh - 24px); overflow-y: auto; padding: 20px; }
+  html[data-platform='android'] .file-browser-body { height: 40dvh; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  html[data-platform='android'] .app-dialog { max-height: calc(100dvh - 20px); overflow-y: auto; padding: 18px 22px; }
+  html[data-platform='android'] .file-browser-body { height: 28dvh; }
+  html[data-platform='android'] [data-onboarding] { top: 88px; max-height: calc(100dvh - 220px); overflow-y: auto; }
+  html[data-platform='android'] [data-player-topbar] { padding-right: 42px; }
+  html[data-platform='android'] [data-player-dock] { bottom: 8px; left: 8px; right: 8px; }
+  html[data-platform='android'] [data-player-dock] > .glass { padding: 12px; gap: 12px; }
+  html[data-platform='android'] [data-player-dock] > .glass > :first-child > :first-child { width: 56px !important; height: 56px !important; }
+  html[data-platform='android'] [data-player-dock] h1 { font-size: 14px; }
+  html[data-platform='android'] [data-player-dock] p { font-size: 10px; }
+  html[data-platform='android'] [data-player-dock] span.rounded-full { display: none; }
+  html[data-platform='android'] [data-mini-entry] { right: 6px; }
+}
+.app-dialog-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); background: rgb(5 7 16 / 0.3); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.app-dialog { position: relative; isolation: isolate; width: min(440px, 100%); max-height: calc(100dvh - 32px); overflow: auto; border-radius: 30px; padding: 26px; box-shadow: inset 0 1px 0 rgb(255 255 255 / .16), 0 32px 120px -24px rgb(0 0 0 / .45); }
+.app-dialog-wide { width: min(780px, 100%); }
+.app-dialog-orbit { position: absolute; z-index: -1; pointer-events: none; width: 280px; height: 280px; top: -170px; left: -80px; border-radius: 50%; background: radial-gradient(circle, rgb(var(--accent) / .22), transparent 72%); }
+.file-browser-body { height: min(380px, 46dvh); }
+@media(max-width: 540px) { .app-dialog { border-radius: 24px; padding: 20px; } .file-browser-body { grid-template-columns: 1fr; height: min(440px, 54dvh); gap: 8px; } .file-browser-body nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; } .file-browser-body nav button { flex-shrink: 0; } }
 html[data-surface='tray'], html[data-surface='tray'] body, html[data-surface='tray'] #root { background: transparent !important; }
 
 :root { --accent-focus: 79 55 214; }
@@ -15,6 +84,23 @@ select option:checked { background: rgb(var(--accent-focus)); color: white; }
 /* Keep the stage and its renderer alive, but don't draw it behind the compact player. */
 html[data-window-mode='mini'] [data-player-stage] { visibility: hidden; pointer-events: none; }
 html[data-window-mode='mini'] [data-player-stage] * { visibility: hidden !important; }
+/* Android PiP can be as short as 90 CSS px; transport always has a fixed row. */
+html[data-platform='android'][data-window-mode='mini'] [data-mini-player] { padding: 4px 8px; overflow: hidden; }
+html[data-platform='android'][data-window-mode='mini'] [data-mini-player] header { height: 20px; padding: 0; justify-content: space-between; }
+html[data-platform='android'][data-window-mode='mini'] [data-mini-content] { padding: 0; gap: 2px; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+html[data-platform='android'][data-window-mode='mini'] [data-mini-meta] { gap: 6px; overflow: hidden; }
+html[data-platform='android'][data-window-mode='mini'] [data-mini-meta] > :first-child { width: 28px !important; height: 28px !important; flex-shrink: 0; }
+html[data-platform='android'][data-window-mode='mini'] [data-mini-meta] h1 { font-size: 11px; line-height: 14px; }
+html[data-platform='android'][data-window-mode='mini'] [data-mini-meta] p { font-size: 9px; line-height: 11px; margin-top: 0; }
+html[data-platform='android'][data-window-mode='mini'] [data-mini-content] > :nth-child(2) { display: none; }
+html[data-platform='android'][data-window-mode='mini'] [data-mini-controls] { height: 32px; justify-content: center; }
+html[data-platform='android'][data-window-mode='mini'] [data-mini-controls] > :last-child { display: none; }
+html[data-platform='android'][data-window-mode='mini'] [data-mini-controls] [aria-label='打开文件'] { display: none; }
+html[data-platform='android'][data-window-mode='mini'] [data-mini-controls] button { width: 30px; height: 30px; min-height: 0; }
+@media (max-height: 100px) {
+  html[data-platform='android'][data-window-mode='mini'] [data-mini-meta] { display: none; }
+  html[data-platform='android'][data-window-mode='mini'] [data-mini-content] { display: flex; justify-content: center; }
+}
 :is(button, input, select, output, span, p, h1, h2, svg) {
   transition-property: color, background-color, border-color, box-shadow, text-shadow, fill, stroke;
   transition-duration: 600ms;

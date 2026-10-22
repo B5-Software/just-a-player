@@ -1,3 +1,4 @@
+import { answerNextFileDialog } from './e2e-dialog-helper.mjs'
 // Exercise the shipped CLI + shared libraries without any system FFmpeg on PATH.
 import { _electron as electron } from 'playwright-core'
 import electronPath from 'electron'
@@ -36,7 +37,7 @@ const env = Object.fromEntries(
         'jap_ffmpeg_path',
         'jap_ffprobe_path',
         'ld_library_path',
-        'dyld_library_path'
+        'dyld_library_path',
       ].includes(name.toLowerCase())
   )
 )
@@ -46,7 +47,7 @@ const app = await electron.launch({
   executablePath: packaged ? join(cwd, 'release', folder, binary) : electronPath,
   cwd,
   args: [...(packaged ? [] : ['.']), '--no-sandbox', ...graphicsArgs],
-  env
+  env,
 })
 const report = { packaged, platform: process.platform, architecture: process.arch, exports: [] }
 let page
@@ -54,7 +55,7 @@ try {
   const paths = await app.evaluate(({ app }) => ({
     ffmpeg: process.env.JAP_FFMPEG_PATH,
     ffprobe: process.env.JAP_FFPROBE_PATH,
-    expected: app.isPackaged ? process.resourcesPath : app.getAppPath()
+    expected: app.isPackaged ? process.resourcesPath : app.getAppPath(),
   }))
   assert.ok(paths.ffmpeg?.startsWith(paths.expected))
   assert.ok(paths.ffprobe?.startsWith(paths.expected))
@@ -71,7 +72,7 @@ try {
       windowsHide: true,
       encoding: 'utf8',
       timeout: 60000,
-      maxBuffer: 8 * 1024 * 1024
+      maxBuffer: 8 * 1024 * 1024,
     })
   report.version = execute('ffmpeg', ['-version']).split('\n')[0]
   assert.ok(report.version.includes('9.0.2-tas'))
@@ -99,7 +100,7 @@ try {
     '2',
     '-c:a',
     'pcm_s24le',
-    wav
+    wav,
   ])
   execute('ffmpeg', ['-v', 'error', '-y', '-i', wav, '-c:a', 'dca', '-strict', '-2', dts])
   page = await app.firstWindow()
@@ -121,12 +122,35 @@ try {
   )
   await page.evaluate(() => window.__jap.usePlayer.getState().togglePause())
   report.nativeDtsPlayback = true
+  const highRate = resolve(cwd, '../../scripts/fixtures/pcm24-768.flac')
+  const flac = await page.evaluate(async (path) => {
+    const j = window.__jap,
+      info = await j.usePlayer.getState().probe(path)
+    const job = await j.engine.offline('open', { path, writeAudio: true, startMs: 5 })
+    await j.engine.offline('frame', { timeMs: 100 })
+    await j.engine.offline('close')
+    return { info, data: Array.from(await window.jap.readFile(job.audioPath)) }
+  }, highRate)
+  assert.equal(flac.info.format.sampleRate, 768000)
+  assert.equal(flac.info.format.bits, 24)
+  const decoded = Buffer.from(flac.data),
+    pcmAt = decoded.indexOf('data') + 8
+  assert.equal(decoded.length - pcmAt, (8192 - 3840) * 2 * 4)
+  for (let i = 3840; i < 8192; i++) {
+    assert.equal(
+      decoded.readInt32LE(pcmAt + (i - 3840) * 8),
+      (((i * 3511) % 14000001) - 7000000) * 256
+    )
+    assert.equal(
+      decoded.readInt32LE(pcmAt + (i - 3840) * 8 + 4),
+      (7000000 - ((i * 7193) % 14000001)) * 256
+    )
+  }
+  report.flac24bit768kHz = 'All samples after a 5 ms seek match the original 24-bit integers'
   // Real video IPC pipeline, independent of GPU availability (Intel VM has no GPU).
   for (const audio of ['aac', 'opus', 'flac', 'pcm', 'copy']) {
     const output = join(out, `export-${audio}.${audio === 'aac' ? 'mp4' : 'mkv'}`)
-    await app.evaluate(({ dialog }, path) => {
-      dialog.showSaveDialog = async () => ({ canceled: false, filePath: path })
-    }, output)
+    await answerNextFileDialog(page, output)
     await page.evaluate(
       async ({ audio, wav }) => {
         const job = await window.jap.videoStart({
@@ -142,7 +166,7 @@ try {
           musicDuration: 0.5,
           path: wav,
           audio,
-          audioBits: 24
+          audioBits: 24,
         })
         if (!job?.id) throw new Error('Video IPC did not start')
         const pixels = new Uint8Array(320 * 180 * 4)
@@ -168,7 +192,7 @@ try {
       opus: 'opus',
       flac: 'flac',
       pcm: 'pcm_s32le',
-      copy: 'pcm_s24le'
+      copy: 'pcm_s24le',
     }[audio]
     assert.ok(
       probe.streams.some((s) => s.codec_name === expected),

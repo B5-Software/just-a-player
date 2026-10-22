@@ -3,4 +3,4 @@ import type { DeviceInfo } from "./DeviceInfo";
 import type { StreamConfig } from "./StreamConfig";
 import type { TrackInfo } from "./TrackInfo";
 
-export type QueryResponse = { "type": "devices", devices: Array<DeviceInfo>, } | { "type": "exclusiveFormats", formats: Array<StreamConfig>, } | { "type": "track", track: TrackInfo, } | { "type": "error", message: string, };
+export type QueryResponse = { "type": "devices", devices: Array<DeviceInfo>, } | { "type": "exclusiveFormats", formats: Array<StreamConfig>, } | { "type": "track", track: TrackInfo, } | { "type": "tracks", tracks: Array<TrackInfo>, } | { "type": "lyrics", text: string | null, } | { "type": "error", message: string, };

@@ -1,20 +1,22 @@
+import { registerDialogs, showOpenDialog, showSaveDialog } from './dialogs'
 import { writeFileSync } from 'node:fs'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   app,
-  BrowserWindow,
   dialog,
+  BrowserWindow,
   ipcMain,
   MessageChannelMain,
   nativeTheme,
+  powerSaveBlocker,
   session,
   shell,
   utilityProcess,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
-  type UtilityProcess
+  type UtilityProcess,
 } from 'electron'
 import { AUDIO_EXTENSIONS } from '../shared/audio'
 import { IPC } from '../shared/ipc'
@@ -30,7 +32,7 @@ import {
   refreshDesktopSettings,
   acknowledgeWallpaper,
   syncVisual,
-  trayAction
+  trayAction,
 } from './desktop'
 import { registerVideoIpc } from './video'
 import { listFonts, fontData, importFonts } from './fonts'
@@ -41,11 +43,14 @@ import { registerVideoQueue } from './video-queue'
 import { selectGpu, registerGpu } from './gpu'
 import type { Surface } from '../shared/desktop'
 import { discoverAudioTools } from './tools'
+import { installFileOpening, attachFileOpening } from './file-opening'
+import { registerSoundfonts } from './soundfonts'
 
 const isDev = !app.isPackaged
 const isE2E = Boolean(process.env['JAP_E2E'])
 // 端到端测试用独立数据目录，不碰用户的设置，也不与正在运行的实例抢单例锁
-if (isE2E) app.setPath('userData', join(tmpdir(), 'jap-e2e-userdata'))
+if (isE2E)
+  app.setPath('userData', process.env['JAP_E2E_USERDATA'] || join(tmpdir(), 'jap-e2e-userdata'))
 
 let engine: UtilityProcess | null = null
 let exportEngine: UtilityProcess | null = null
@@ -54,13 +59,25 @@ app.setName('Just A Player')
 if (process.platform === 'win32') app.setAppUserModelId('B5Software.JustAPlayer')
 selectGpu()
 discoverAudioTools()
+installFileOpening()
 /** 保存对话框返回过、尚未写入的导出路径。 */
 const exportTargets = new Set<string>()
+let playingForAwake = false
+let displayBlocker: number | null = null
+function updateAwake(): void {
+  const hold = playingForAwake && getSettings().keepScreenAwake
+  if (hold && displayBlocker === null)
+    displayBlocker = powerSaveBlocker.start('prevent-display-sleep')
+  if (!hold && displayBlocker !== null) {
+    powerSaveBlocker.stop(displayBlocker)
+    displayBlocker = null
+  }
+}
 
 function startEngine(): UtilityProcess {
   const child = utilityProcess.fork(join(__dirname, 'engine-host.js'), [], {
     serviceName: 'Just A Player Engine',
-    stdio: 'pipe'
+    stdio: 'pipe',
   })
   child.stdout?.on('data', (chunk: Buffer) => process.stdout.write(chunk))
   child.stderr?.on('data', (chunk: Buffer) => process.stderr.write(chunk))
@@ -88,7 +105,7 @@ function installContentSecurityPolicy(): void {
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
-      responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [policy] }
+      responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [policy] },
     })
   })
 }
@@ -104,8 +121,13 @@ function isStringArray(value: unknown): value is string[] {
 }
 
 function registerIpc(): void {
+  registerSoundfonts(isTrustedSender)
   ipcMain.on('app:version', (event) => {
     event.returnValue = app.getVersion()
+  })
+  ipcMain.on('app:bundledMidi', (event) => {
+    event.returnValue =
+      existsSync(process.env['JAP_SOUNDFONT_PATH'] ?? '') && process.env['JAP_BUNDLE_MIDI'] !== '0'
   })
   ipcMain.on(IPC.librarySave, (event, json: unknown) => {
     if (isTrustedSender(event) && typeof json === 'string') saveLibrary(json)
@@ -121,7 +143,14 @@ function registerIpc(): void {
     if (isTrustedSender(event)) syncVisual(event.sender, value)
   })
   ipcMain.on(IPC.systemMedia, (event, value: unknown) => {
-    if (isTrustedSender(event) && surfaces.get(event.sender.id) === 'main') updateSystemMedia(value)
+    if (isTrustedSender(event) && surfaces.get(event.sender.id) === 'main') {
+      updateSystemMedia(value)
+      playingForAwake =
+        typeof value === 'object' &&
+        value !== null &&
+        (value as { state?: string }).state === 'playing'
+      updateAwake()
+    }
   })
   ipcMain.on(IPC.trayAction, (event, value: unknown) => {
     if (isTrustedSender(event) && typeof value === 'string') trayAction(value)
@@ -154,6 +183,7 @@ function registerIpc(): void {
       other.webContents.send(IPC.fontsList, listFonts())
     return result
   })
+  registerDialogs(isTrustedSender)
   registerVideoIpc(isTrustedSender)
   ipcMain.handle(IPC.musicFolders, (event) => {
     if (!isTrustedSender(event) || isE2E) return []
@@ -167,8 +197,8 @@ function registerIpc(): void {
         join(home, 'AppData', 'Local', 'CloudMusic', 'CloudMusic'),
         join(home, 'CloudMusic'),
         'C:\\CloudMusic',
-        'D:\\CloudMusic'
-      ])
+        'D:\\CloudMusic',
+      ]),
     ].filter((p) => existsSync(p))
   })
   ipcMain.handle(IPC.windowMode, (event, mode: unknown) => {
@@ -185,6 +215,7 @@ function registerIpc(): void {
     if (!isTrustedSender(event)) return getSettings()
     const previous = getSettings()
     const next = updateSettings(patch)
+    updateAwake()
     syncLighting()
     if (next.themeMode !== previous.themeMode) nativeTheme.themeSource = next.themeMode
     for (const other of BrowserWindow.getAllWindows())
@@ -201,13 +232,15 @@ function registerIpc(): void {
     if (!isTrustedSender(event)) return []
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return []
-    const result = await dialog.showOpenDialog(win, {
+    const result = await (getWindowMode() === 'mini'
+      ? dialog.showOpenDialog.bind(dialog)
+      : showOpenDialog)(win, {
       title: '选择音频文件',
       properties: ['openFile', 'multiSelections'],
       filters: [
         { name: '音频文件', extensions: [...AUDIO_EXTENSIONS] },
-        { name: '所有文件', extensions: ['*'] }
-      ]
+        { name: '所有文件', extensions: ['*'] },
+      ],
     })
     return result.canceled ? [] : result.filePaths
   })
@@ -216,21 +249,32 @@ function registerIpc(): void {
     if (!isTrustedSender(event)) return []
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return []
-    const result = await dialog.showOpenDialog(win, {
+    const result = await showOpenDialog(win, {
       title: '选择音乐文件夹',
-      properties: ['openDirectory', 'multiSelections']
+      properties: ['openDirectory', 'multiSelections'],
     })
     return result.canceled ? [] : result.filePaths
   })
 
+  ipcMain.handle(IPC.openVisualPlugin, async (event) => {
+    if (!isTrustedSender(event)) return []
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return []
+    const result = await showOpenDialog(win, {
+      title: '导入可视化插件',
+      properties: ['openFile'],
+      filters: [{ name: 'Just A Player 效果插件', extensions: ['json'] }],
+    })
+    return result.canceled ? [] : result.filePaths
+  })
   ipcMain.handle(IPC.openPlaylist, async (event) => {
     if (!isTrustedSender(event)) return []
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return []
-    const result = await dialog.showOpenDialog(win, {
+    const result = await showOpenDialog(win, {
       title: '导入播放列表',
       properties: ['openFile'],
-      filters: [{ name: '播放列表', extensions: ['m3u', 'm3u8', 'json'] }]
+      filters: [{ name: '播放列表', extensions: ['m3u', 'm3u8', 'json'] }],
     })
     return result.canceled ? [] : result.filePaths
   })
@@ -239,10 +283,10 @@ function registerIpc(): void {
     if (!isTrustedSender(event)) return []
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return []
-    const result = await dialog.showOpenDialog(win, {
+    const result = await showOpenDialog(win, {
       title: '导入歌词',
       properties: ['openFile'],
-      filters: [{ name: '歌词文件', extensions: ['lrc', 'txt'] }]
+      filters: [{ name: '歌词文件', extensions: ['lrc', 'txt'] }],
     })
     return result.canceled ? [] : result.filePaths
   })
@@ -251,13 +295,13 @@ function registerIpc(): void {
     if (!isTrustedSender(event) || typeof suggestedName !== 'string') return null
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return null
-    const result = await dialog.showSaveDialog(win, {
+    const result = await showSaveDialog(win, {
       title: '导出播放列表',
       defaultPath: suggestedName,
       filters:
         json === true
           ? [{ name: 'JSON 播放列表', extensions: ['json'] }]
-          : [{ name: 'M3U8 播放列表', extensions: ['m3u8'] }]
+          : [{ name: 'M3U8 播放列表', extensions: ['m3u8'] }],
     })
     if (result.canceled || !result.filePath) return null
     exportTargets.add(result.filePath)
@@ -344,7 +388,7 @@ function loadSurface(other: BrowserWindow, surface: Surface): void {
   if (isDev && devUrl) void other.loadURL(`${devUrl}?surface=${surface}${isE2E ? '&e2e=1' : ''}`)
   else
     void other.loadFile(join(__dirname, '../renderer/index.html'), {
-      query: { surface, ...(isE2E ? { e2e: '1' } : {}) }
+      query: { surface, ...(isE2E ? { e2e: '1' } : {}) },
     })
 }
 
@@ -366,12 +410,18 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       // 可视化与进度条不该因为窗口被遮挡而卡住
-      backgroundThrottling: false
-    }
+      backgroundThrottling: false,
+    },
   })
 
   win.once('ready-to-show', () => win.show())
   surfaces.set(win.webContents.id, 'main')
+  attachFileOpening(win, () => {
+    if (getWindowMode() !== 'normal') void setWindowMode(win, 'normal')
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+  })
   registerIdentity(win)
   const nativeMedia = initSystemMedia(win)
   installDesktop(
@@ -441,6 +491,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on('window-all-closed', () => app.quit())
   app.on('before-quit', () => {
+    if (displayBlocker !== null) powerSaveBlocker.stop(displayBlocker)
     closeLighting()
     engine?.kill()
     exportEngine?.kill()

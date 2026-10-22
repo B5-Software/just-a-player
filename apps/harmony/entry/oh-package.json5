@@ -1,0 +1,11 @@
+{
+  "name": "entry",
+  "version": "0.1.2",
+  "description": "HiFi playback and music visualization",
+  "main": "",
+  "author": "B5-Software",
+  "license": "GPL-3.0-or-later",
+  "dependencies": {
+    "libplayer.so": "file:./src/main/cpp/types/libplayer"
+  }
+}

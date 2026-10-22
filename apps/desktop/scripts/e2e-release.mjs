@@ -22,6 +22,10 @@ writeFileSync(
   JSON.stringify({
     ...JSON.parse(original),
     onboardingComplete: true,
+    disabledVisuals: [],
+    legacyVisuals: false,
+    visualPlugins: [],
+    autoHideControls: false,
     wallpaperEnabled: false,
     argbEnabled: false,
     autoScan: false,
@@ -39,7 +43,7 @@ writeFileSync(
     renderFps: 30,
     autoAccent: true,
     autoBackdrop: true,
-    backdropBrightness: 0.25
+    backdropBrightness: 0.25,
   })
 )
 const rate = 48000,
@@ -96,7 +100,7 @@ execFileSync(
     'artist=B5-Software',
     '-metadata',
     'album=Just A Player · 原创演示',
-    track
+    track,
   ],
   { windowsHide: true }
 )
@@ -111,7 +115,7 @@ async function launch() {
     executablePath: electronPath,
     cwd,
     args: ['.'],
-    env: { ...process.env, JAP_E2E: 'release' }
+    env: { ...process.env, JAP_E2E: 'release' },
   })
   page = await app.firstWindow()
   page.on('pageerror', (e) => errors.push(e.message))
@@ -173,7 +177,7 @@ try {
       id = l.createList('星际电台')
     const [item] = j.useLibrary.getState().addPaths(id, [path])
     j.useViz.getState().setAuto(false)
-    j.useViz.getState().setScene('orb')
+    j.useViz.getState().setScene('silk-studio')
     return { id, item }
   }, track)
   await page.waitForFunction(() => window.__jap.useCover.getState().art?.url)
@@ -225,7 +229,7 @@ try {
     j.useSettings.getState().update({ vizCustomOffset: true, vizOffset: { x: -320, y: 0, z: 0 } })
     j.useViz.setState({ offset: { x: -320, y: 0, z: 0 }, userCustomOffset: true, zoom: 1 })
     j.useLyrics.setState({
-      text: '[00:00.00]让声音长出形状\n[00:08.00]让旋律点亮星河\n[00:16.00]在音乐里 遇见另一片宇宙\n[00:24.00]把此刻交给耳朵与眼睛\n[00:32.00]Just A Player · B5-Software'
+      text: '[00:00.00]让声音长出形状\n[00:08.00]让旋律点亮星河\n[00:16.00]在音乐里 遇见另一片宇宙\n[00:24.00]把此刻交给耳朵与眼睛\n[00:32.00]Just A Player · B5-Software',
     })
     j.usePlayer.getState().seek(18000)
   })
@@ -233,9 +237,12 @@ try {
   await page.mouse.move(1200, 750)
   await page.screenshot({ path: join(shots, 'hero.png') })
   await page.evaluate(() => {
-    window.__jap.useSettings.getState().update({ lyricsVisible: false })
-    window.__jap.useViz.getState().setScene('spectrogram')
+    window.__jap.useSettings.getState().update({ lyricsVisible: false, legacyVisuals: true })
   })
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll('button')].some((b) => b.getAttribute('aria-label') === '时频谱')
+  )
+  await page.evaluate(() => window.__jap.useViz.getState().setScene('spectrogram'))
   await page.waitForTimeout(3200)
   await page.screenshot({ path: join(shots, 'instruments.png') })
   await page.evaluate(() => window.jap.setWindowMode('mini'))

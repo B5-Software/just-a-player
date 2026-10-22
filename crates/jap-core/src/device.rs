@@ -12,6 +12,12 @@ pub enum OutputApi {
     CoreAudioExclusive,
     AlsaShared,
     AlsaExclusive,
+    /// Android AAudio shared output.
+    AndroidShared,
+    /// HarmonyOS OHAudio; shared output never claims bit-perfect.
+    OhosShared,
+    /// Android USB Host, claimed directly through libusb (no AudioFlinger).
+    UsbExclusive,
     /// 丢弃音频的测试后端，用于 CI 与校验。
     Null,
 }
@@ -25,11 +31,16 @@ impl OutputApi {
                 | Self::Asio
                 | Self::CoreAudioExclusive
                 | Self::AlsaExclusive
+                | Self::UsbExclusive
                 | Self::Null
         )
     }
     pub const fn platform_default() -> Self {
-        if cfg!(target_os = "macos") {
+        if cfg!(target_env = "ohos") {
+            Self::OhosShared
+        } else if cfg!(target_os = "android") {
+            Self::AndroidShared
+        } else if cfg!(target_os = "macos") {
             Self::CoreAudio
         } else if cfg!(target_os = "linux") {
             Self::AlsaShared
@@ -38,7 +49,9 @@ impl OutputApi {
         }
     }
     pub const fn platform_exclusive() -> Self {
-        if cfg!(target_os = "macos") {
+        if cfg!(any(target_os = "android", target_env = "ohos")) {
+            Self::UsbExclusive
+        } else if cfg!(target_os = "macos") {
             Self::CoreAudioExclusive
         } else if cfg!(target_os = "linux") {
             Self::AlsaExclusive

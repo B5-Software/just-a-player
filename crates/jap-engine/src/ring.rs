@@ -9,6 +9,7 @@ use rtrb::{Consumer, Producer, RingBuffer};
 
 /// 暂停、恢复与跳转时使用的渐变时长。
 const RAMP_SECONDS: f64 = 0.010;
+const MAX_RING_BYTES: usize = 32 * 1024 * 1024;
 
 /// 两侧共享的计数器与控制标志。
 #[derive(Default)]
@@ -42,7 +43,9 @@ pub struct RingParts {
 
 pub fn new_ring(config: StreamConfig, ring_ms: u32) -> RingParts {
     let bpf = config.bytes_per_frame();
-    let capacity_frames = (u64::from(config.sample_rate) * u64::from(ring_ms) / 1000) as usize;
+    let capacity_frames = ((u64::from(config.sample_rate) * u64::from(ring_ms) / 1000) as usize)
+        .min(MAX_RING_BYTES / bpf)
+        .max(64);
     let (producer, consumer) = RingBuffer::new(capacity_frames * bpf);
     let shared = Arc::new(RingShared::default());
     shared.volume.store(1f32.to_bits(), Ordering::Relaxed);
@@ -209,6 +212,10 @@ fn scale_sample(bytes: &mut [u8], format: SampleFormat, gain: f64) {
             let v = f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
             bytes.copy_from_slice(&((f64::from(v) * gain) as f32).to_le_bytes());
         }
+        SampleFormat::F64 => {
+            let v = f64::from_le_bytes(bytes.try_into().unwrap());
+            bytes.copy_from_slice(&(v * gain).to_le_bytes());
+        }
         SampleFormat::Dop24
         | SampleFormat::Dop32
         | SampleFormat::DsdU8Lsb
@@ -295,6 +302,18 @@ impl RingRender {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn megahertz_multichannel_ring_has_a_fixed_memory_ceiling() {
+        let config = StreamConfig {
+            sample_rate: 12_288_000,
+            channels: 32,
+            format: SampleFormat::F64,
+        };
+        let parts = new_ring(config, 500);
+        assert!(parts.capacity_frames * config.bytes_per_frame() <= MAX_RING_BYTES);
+        assert_eq!(parts.render.config, config);
+    }
 
     #[test]
     fn initial_volume_attenuates_first_device_sample_and_mute_is_smooth() {

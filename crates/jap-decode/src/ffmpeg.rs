@@ -7,7 +7,7 @@ use std::{
     process::{Child, ChildStdout, Command, Stdio},
 };
 
-fn command(program: &str) -> Command {
+pub(crate) fn command(program: &str) -> Command {
     let variable = match program {
         "ffmpeg" => "JAP_FFMPEG_PATH",
         "ffprobe" => "JAP_FFPROBE_PATH",
@@ -128,16 +128,18 @@ impl FfmpegSource {
     fn restart(&mut self, ms: u64) -> Result<()> {
         self.stop();
         let mut c = command("ffmpeg");
+        c.args(["-v", "error", "-nostdin"]);
+        // Decode a short preroll, then trim at the exact output sample. Input
+        // seeking alone can return EOF for a short FLAC without a seek table.
+        let coarse = ms.saturating_sub(2000);
+        if coarse > 0 {
+            c.args(["-ss", &format!("{:.6}", coarse as f64 / 1000.)]);
+        }
+        c.arg("-i").arg(&self.info.path);
+        if ms > 0 {
+            c.args(["-ss", &format!("{:.6}", (ms - coarse) as f64 / 1000.)]);
+        }
         c.args([
-            "-v",
-            "error",
-            "-nostdin",
-            "-ss",
-            &format!("{:.6}", ms as f64 / 1000.),
-            "-i",
-        ])
-        .arg(&self.info.path)
-        .args([
             "-map",
             "0:a:0",
             "-vn",

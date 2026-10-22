@@ -12,11 +12,13 @@ import {
   Waveform,
   SlidersHorizontal,
   MagnifyingGlass,
-  DownloadSimple
+  DownloadSimple,
+  FilmStrip,
 } from '../icons'
-import { SCENES } from '../viz/scenes'
+import { useSceneRegistry } from '../viz/scenes'
 import { useViz } from '../viz/store'
 import { useUi, type PanelId } from '../ui/store'
+import { useVideoQueue } from '../video/export'
 
 const iconButton =
   'grid size-9 place-items-center rounded-full bg-black/30 text-white/85 ring-1 ring-white/12 backdrop-blur-md transition-colors hover:bg-black/45 hover:text-white'
@@ -42,6 +44,7 @@ function Logo(): React.JSX.Element {
 }
 
 function SceneSwitcher(): React.JSX.Element {
+  const SCENES = useSceneRegistry((s) => s.scenes)
   const sceneId = useViz((s) => s.sceneId)
   const auto = useViz((s) => s.auto)
   const { step, setScene, setAuto } = useViz.getState()
@@ -52,7 +55,7 @@ function SceneSwitcher(): React.JSX.Element {
       <button type="button" aria-label="上一个场景" className={iconButton} onClick={() => step(-1)}>
         <CaretLeft size={16} weight="bold" />
       </button>
-      <div className="min-w-0 w-20 xl:w-44">
+      <div data-scene-caption className="min-w-0 w-20 xl:w-44">
         <div key={scene.id}>
           <div className="truncate font-display text-base font-semibold text-white drop-shadow">
             {scene.name}
@@ -93,7 +96,7 @@ function SceneSwitcher(): React.JSX.Element {
 
 const TOOLS: { id: PanelId; label: string; icon: typeof Waveform }[] = [
   { id: 'video', label: '导出视频', icon: DownloadSimple },
-  { id: 'exports', label: '导出队列', icon: ListBullets },
+  { id: 'exports', label: '导出队列', icon: FilmStrip },
   { id: 'dsp', label: 'DSP / EQ', icon: SlidersHorizontal },
   { id: 'quality', label: '音源分析', icon: MagnifyingGlass },
   { id: 'signal', label: '信号链', icon: Waveform },
@@ -101,11 +104,14 @@ const TOOLS: { id: PanelId; label: string; icon: typeof Waveform }[] = [
   { id: 'playlist', label: '播放列表', icon: ListBullets },
   { id: 'lyrics', label: '歌词', icon: Quotes },
   { id: 'appearance', label: '外观', icon: Palette },
-  { id: 'settings', label: '设置', icon: Gear }
+  { id: 'settings', label: '设置', icon: Gear },
 ]
 
 /** 右上角的图标工具栏：默认只显示图标，点开才出现对应面板。 */
 function Toolbar(): React.JSX.Element {
+  const queued = useVideoQueue(
+    (s) => s.jobs.filter((j) => j.state === 'waiting' || j.state === 'rendering').length
+  )
   const panel = useUi((s) => s.panel)
   const togglePanel = useUi((s) => s.togglePanel)
   const fullscreen = useViz((s) => s.fullscreen)
@@ -125,11 +131,19 @@ function Toolbar(): React.JSX.Element {
             aria-pressed={active}
             title={tool.label}
             onClick={() => togglePanel(tool.id)}
-            className={`grid size-9 place-items-center rounded-xl transition-colors ${
+            className={`relative grid size-9 place-items-center rounded-xl transition-colors ${
               active ? 'bg-accent text-on-accent' : 'text-fg-muted hover:bg-hover hover:text-fg'
             }`}
           >
             <Icon size={18} weight={active ? 'fill' : 'regular'} />
+            {tool.id === 'exports' && queued > 0 && (
+              <span
+                className="absolute -right-1 -top-1 rounded-full bg-accent px-1 text-[9px] text-on-accent"
+                aria-label={`${queued} 个导出任务`}
+              >
+                {queued}
+              </span>
+            )}
           </button>
         )
       })}

@@ -11,9 +11,10 @@ import {
   pendingItem,
   playNeighbour,
   queueUpcoming,
-  syncPlayback
+  syncPlayback,
 } from './playback'
 import { refreshMissing, requestMetadata } from './metadata'
+import { expandDiscItems } from './discs'
 
 let saveTimer = 0
 
@@ -27,7 +28,7 @@ function serialize(): string {
     shuffle: state.shuffle,
     // 关闭“记住播放列表”时只落盘一个空列表，本次会话内的列表保留在内存里
     lists: remember ? state.lists : [makeList(DEFAULT_LIST_NAME)],
-    memories: remember ? state.memories : {}
+    memories: remember ? state.memories : {},
   }
   return JSON.stringify(data)
 }
@@ -56,6 +57,9 @@ async function loadSaved(): Promise<void> {
         saved = null
       }
     }
+  }
+  if (saved) {
+    for (const list of saved.lists) list.items = await expandDiscItems(list.items)
   }
   useLibrary.getState().hydrate(saved)
 }

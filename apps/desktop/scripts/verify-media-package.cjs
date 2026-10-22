@@ -13,6 +13,19 @@ module.exports = async (context) => {
         )
       : join(context.appOutDir, 'resources')
   const tools = join(resources, 'media-tools')
+  const { statSync } = require('node:fs')
+  const font = join(resources, 'soundfonts', 'MuseScore_General_HQ.sf2')
+  if (
+    process.env.JAP_BUNDLE_MIDI === '0'
+      ? existsSync(font)
+      : !existsSync(font) || statSync(font).size !== 489517354
+  )
+    throw new Error('Packaged MIDI bank does not match the requested variant')
+  if (
+    process.env.JAP_BUNDLE_MIDI !== '0' &&
+    !existsSync(join(resources, 'soundfonts/documentation/MuseScore_General_HQ_License.md'))
+  )
+    throw new Error('Missing packaged MIDI soundfont license')
   const identity = JSON.parse(readFileSync(join(tools, 'bundle.json'), 'utf8'))
   if (identity.target !== `${platform}-${arch}`)
     throw new Error(

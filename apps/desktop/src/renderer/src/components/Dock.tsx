@@ -35,7 +35,7 @@ function NowPlaying(): React.JSX.Element {
   const upcoming = useLibrary(pendingItem)
 
   return (
-    <div className="flex min-w-0 items-center gap-4">
+    <div data-now-playing className="flex min-w-0 items-center gap-4">
       <CoverArt size={104} />
       <div className="flex min-w-0 flex-col gap-1.5">
         {track ? (
@@ -46,7 +46,7 @@ function NowPlaying(): React.JSX.Element {
             <p className="truncate text-sm text-fg-muted">
               {[track.artist, track.album].filter(Boolean).join('  ·  ') || '未知艺术家'}
             </p>
-            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            <div data-track-tags className="flex flex-wrap items-center gap-1.5 pt-0.5">
               <Chip>{track.codec}</Chip>
               <Chip>{describeFormat(track.format)}</Chip>
               <Chip>{channelLabel(track.format.channels)}</Chip>
@@ -129,11 +129,11 @@ export function Dock({ visible }: { visible: boolean }): React.JSX.Element {
     >
       <div className="glass mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1fr)] items-center gap-6 rounded-[32px] p-5">
         <NowPlaying />
-        <div className="flex min-w-0 flex-col gap-3">
+        <div data-dock-transport className="flex min-w-0 flex-col gap-3">
           <SeekBar />
           <Transport />
         </div>
-        <div className="flex flex-col items-end gap-2">
+        <div data-dock-tools className="flex flex-col items-end gap-2">
           <PlayModes />
           <VolumeControl />
         </div>

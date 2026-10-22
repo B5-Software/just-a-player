@@ -4,6 +4,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
+import antialias from '../../public/shaders/antialias.glsl?raw'
 
 /** 色差 + 暗角 + 胶片颗粒；鼓点时色差瞬间拉开，切场景时整体淡出。 */
 const FinalShader = {
@@ -14,7 +15,7 @@ const FinalShader = {
     uBeat: { value: 0 },
     uFade: { value: 0 },
     uClean: { value: 0 },
-    uRes: { value: new THREE.Vector2(1, 1) }
+    uRes: { value: new THREE.Vector2(1, 1) },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -29,6 +30,8 @@ const FinalShader = {
     uniform float uClean;
     uniform vec2 uRes;
     varying vec2 vUv;
+    #define JA_TEXTURE texture2D
+    ${antialias}
     float hash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
     void main(){
       vec2 c = vUv - 0.5;
@@ -37,13 +40,14 @@ const FinalShader = {
       vec2 uv = vUv;
       float cinematic = 1.0 - uClean;
       vec2 off = c * (0.0012 + uBeat * 0.0065) * (1.0 + r2 * 3.0) * cinematic;
-      vec3 col = vec3(texture2D(tDiffuse, uv + off).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - off).b);
+      vec3 col = jaAntialias(tDiffuse, uv, uRes);
+      if(cinematic > .5) col = vec3(jaAntialias(tDiffuse,uv+off,uRes).r,col.g,jaAntialias(tDiffuse,uv-off,uRes).b);
       col *= 1.0 - smoothstep(0.32, 0.98, length(c) * 1.25) * 0.62 * cinematic;
       col += (hash(vUv * uRes + fract(uTime) * 91.7) - 0.5) * 0.022 * cinematic;
       col = mix(col, texture2D(tPrevious, vUv).rgb, uFade);
       gl_FragColor = vec4(col, 1.0);
     }
-  `
+  `,
 }
 
 /** 渲染 -> 泛光 -> 终处理 -> 色调映射/色彩空间输出。 */

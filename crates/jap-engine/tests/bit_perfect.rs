@@ -356,6 +356,50 @@ fn thirty_two_bit_is_bit_perfect() {
 }
 
 #[test]
+fn float64_keeps_every_mantissa_bit_into_a_float64_device() {
+    let h = harness("float64", vec![cfg(48000, 2, SampleFormat::F64)]);
+    let samples: Vec<f64> = (0..9600)
+        .map(|i| {
+            if i % 2 == 0 {
+                f64::from_bits(0x3fd0000000000001 + i as u64)
+            } else {
+                -0.12345678901234567
+            }
+        })
+        .collect();
+    let expected: Vec<u8> = samples.iter().flat_map(|v| v.to_le_bytes()).collect();
+    let mut file = Vec::new();
+    file.extend(b"RIFF");
+    file.extend((36u32 + expected.len() as u32).to_le_bytes());
+    file.extend(b"WAVEfmt ");
+    file.extend(16u32.to_le_bytes());
+    file.extend(3u16.to_le_bytes());
+    file.extend(2u16.to_le_bytes());
+    file.extend(48000u32.to_le_bytes());
+    file.extend((48000u32 * 16).to_le_bytes());
+    file.extend(16u16.to_le_bytes());
+    file.extend(64u16.to_le_bytes());
+    file.extend(b"data");
+    file.extend((expected.len() as u32).to_le_bytes());
+    file.extend(&expected);
+    let path = h.dir().join("64.wav");
+    std::fs::write(&path, file).unwrap();
+    h.engine.send(Command::Play {
+        path: path.display().to_string(),
+        start_ms: None,
+    });
+    let mut verdict = None;
+    h.wait_for(Duration::from_secs(10), |e| {
+        if let Event::SignalPath { path } = e {
+            verdict = Some(path.verdict);
+        }
+        matches!(e, Event::QueueEnded).then_some(())
+    });
+    assert_eq!(verdict, Some(Verdict::BitPerfect));
+    assert_eq!(h.captured_prefix(expected.len()), expected);
+}
+
+#[test]
 fn gapless_queue_has_no_samples_inserted_between_tracks() {
     let h = harness("gap", vec![cfg(44_100, 2, SampleFormat::I16)]);
     let a = gen_samples(44_100, 16, 11);

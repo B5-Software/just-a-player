@@ -257,6 +257,8 @@ export function LyricsPanel(): React.JSX.Element {
             ? '正在使用导入的歌词（优先于同名 .lrc）'
             : source === 'sidecar'
               ? '正在使用同名 .lrc 文件'
+              : source === 'embedded'
+                ? '正在使用音频元数据内嵌歌词'
               : path
                 ? '这首歌没有歌词'
                 : '开始播放后可以为这首歌导入歌词'}

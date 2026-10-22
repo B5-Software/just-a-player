@@ -19,5 +19,5 @@ export function Visualizer(): React.JSX.Element {
     }
   }, [])
 
-  return <div ref={ref} className="absolute inset-0" />
+  return <div ref={ref} data-viz-stage className="absolute inset-0 touch-none select-none" />
 }

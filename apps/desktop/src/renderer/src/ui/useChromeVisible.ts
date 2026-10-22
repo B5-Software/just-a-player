@@ -22,17 +22,48 @@ export function useChromeVisible(): boolean {
       return
     }
     let timer = 0
+    const pointers = new Set<number>()
     const wake = (): void => {
       setIdle(false)
       window.clearTimeout(timer)
-      timer = window.setTimeout(() => setIdle(true), IDLE_MS)
+      timer = window.setTimeout(() => {
+        if (
+          pointers.size ||
+          document.querySelector('[data-app-dialog]') ||
+          document.activeElement?.matches('textarea,input:not([type="range"]),:focus-visible')
+        )
+          wake()
+        else setIdle(true)
+      }, IDLE_MS)
+    }
+    const down = (event: PointerEvent): void => {
+      pointers.add(event.pointerId)
+      wake()
+    }
+    const up = (event: PointerEvent): void => {
+      pointers.delete(event.pointerId)
+      wake()
+    }
+    const blur = (): void => {
+      pointers.clear()
+      wake()
     }
     wake()
     window.addEventListener('pointermove', wake)
+    window.addEventListener('pointerdown', down, true)
+    window.addEventListener('pointerup', up, true)
+    window.addEventListener('pointercancel', up, true)
+    window.addEventListener('focusin', wake)
+    window.addEventListener('blur', blur)
     window.addEventListener('keydown', wake)
     return () => {
       window.clearTimeout(timer)
       window.removeEventListener('pointermove', wake)
+      window.removeEventListener('pointerdown', down, true)
+      window.removeEventListener('pointerup', up, true)
+      window.removeEventListener('pointercancel', up, true)
+      window.removeEventListener('focusin', wake)
+      window.removeEventListener('blur', blur)
       window.removeEventListener('keydown', wake)
     }
   }, [enabled, panel])

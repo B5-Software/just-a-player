@@ -1,5 +1,6 @@
 [workspace]
 resolver = "3"
+exclude = ["vendor/oxisynth", "vendor/symphonia-common", "vendor/symphonia-bundle-flac"]
 members = [
     "crates/jap-analysis",
     "crates/jap-core",
@@ -8,10 +9,12 @@ members = [
     "crates/jap-engine",
     "crates/jap-napi",
     "crates/jap-cli",
+    "crates/jap-android",
+    "crates/jap-harmony",
 ]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.88"
 license = "GPL-3.0-or-later"
@@ -65,3 +68,7 @@ opt-level = 3
 lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
+
+[patch.crates-io]
+symphonia-common = { path = "vendor/symphonia-common" }
+symphonia-bundle-flac = { path = "vendor/symphonia-bundle-flac" }

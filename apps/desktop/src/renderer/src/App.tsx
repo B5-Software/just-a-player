@@ -73,8 +73,13 @@ export function App(): React.JSX.Element {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      const target = e.target as HTMLElement
-      if (target.closest('input, select, textarea, button') || e.ctrlKey || e.metaKey || e.altKey)
+      const target = e.target
+      if (
+        (target instanceof Element && target.closest('input, select, textarea, button')) ||
+        e.ctrlKey ||
+        e.metaKey ||
+        e.altKey
+      )
         return
       if (mode !== 'normal') {
         if (e.key === 'Escape') void window.jap.setWindowMode('normal')
@@ -87,7 +92,8 @@ export function App(): React.JSX.Element {
       const viz = useViz.getState()
       const ui = useUi.getState()
       if (e.key === 'Escape') {
-        if (ui.panel) ui.closePanel()
+        if (ui.onboardingOpen) ui.setOnboardingOpen(false)
+        else if (ui.panel) ui.closePanel()
         else if (viz.fullscreen) viz.setFullscreen(false)
       } else if (e.key === 'f' || e.key === 'F') viz.setFullscreen(!viz.fullscreen)
       else if (e.key === 'n' || e.key === 'N') viz.step(1)
@@ -122,6 +128,7 @@ export function App(): React.JSX.Element {
 
   return (
     <div
+      data-player-app
       className={`relative h-full w-full overflow-hidden bg-[#07070b] ${fullscreen && !visible ? 'cursor-none' : ''}`}
       onDragOver={(e) => {
         // 只有外部文件拖入才显示提示；列表内部的拖拽排序不触发

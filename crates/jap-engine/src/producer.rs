@@ -190,7 +190,17 @@ impl Worker {
         true
     }
 
-    fn activate(&mut self, track: TrackHandoff) {
+    fn activate(&mut self, mut track: TrackHandoff) {
+        if !self.ctx.config.format.is_dsd() {
+            match crate::resample::adapt(track.source, self.ctx.config.sample_rate) {
+                Ok(source) => track.source = source,
+                Err(e) => {
+                    let _ = self.ctx.errors.send(e.to_string());
+                    self.on_track_end();
+                    return;
+                }
+            }
+        }
         let in_channels = track.info.format.channels as usize;
         let out_channels = self.ctx.config.channels as usize;
         let Some(map) = ChannelMap::new(in_channels, out_channels) else {

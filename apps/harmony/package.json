@@ -1,0 +1,18 @@
+{
+  "name": "harmony",
+  "version": "0.1.2",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "author": "B5-Software",
+  "scripts": {
+    "build:web": "node ../../scripts/prepare-native-notices.mjs apps/harmony/entry/src/main/resources/rawfile/licenses && vite build",
+    "build:native": "node scripts/build-native.mjs --arm64 && node scripts/build-native.mjs",
+    "build": "pnpm build:native && pnpm build:web && pnpm dlx @deveco/deveco-cli@1.3.7 build --build-mode release",
+    "test": "node scripts/test-emulator.mjs"
+  },
+  "devDependencies": {
+    "vite": "^8.3.4",
+    "@vitejs/plugin-react": "^6.0.0",
+    "@tailwindcss/vite": "^4.2.1"
+  }
+}

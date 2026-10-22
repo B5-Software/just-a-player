@@ -1,3 +1,4 @@
+import { answerNextFileDialog } from './e2e-dialog-helper.mjs'
 // Fonts, artwork, native SMTC, independent wallpaper and OpenRGB protocol regression.
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
@@ -15,7 +16,7 @@ const flac = join(album, 'first.flac'),
   second = join(album, 'second.flac')
 for (const [path, title] of [
   [flac, '星河 · 系统媒体回归'],
-  [second, '云间来信']
+  [second, '云间来信'],
 ])
   execFileSync(
     'ffmpeg',
@@ -37,7 +38,7 @@ for (const [path, title] of [
       'album=夜航 / A Little Light',
       '-c:a',
       'flac',
-      path
+      path,
     ],
     { windowsHide: true }
   )
@@ -64,7 +65,7 @@ const mode = (name, value) =>
     str(name),
     ...[value, 3, 0, 100, 0, 100, 1, 1, 50, 100, 0, 1].map(u32),
     u16(1),
-    Buffer.from([17, 34, 51, 0])
+    Buffer.from([17, 34, 51, 0]),
   ])
 const original = Buffer.from([17, 34, 51, 0, 17, 34, 51, 0, 17, 34, 51, 0, 17, 34, 51, 0])
 const block = Buffer.concat([
@@ -90,7 +91,7 @@ const block = Buffer.concat([
   u16(4),
   ...Array.from({ length: 4 }, (_, i) => Buffer.concat([str(`LED ${i}`), u32(i)])),
   u16(4),
-  original
+  original,
 ])
 block.writeUInt32LE(block.length)
 const packets = [],
@@ -123,7 +124,7 @@ const app = await electron.launch({
   executablePath: electronPath,
   args: ['.'],
   cwd: appDir,
-  env: { ...process.env, JAP_E2E: 'polish' }
+  env: { ...process.env, JAP_E2E: 'polish' },
 })
 const page = await app.firstWindow(),
   checks = {},
@@ -161,7 +162,7 @@ try {
       lyricsSize: 100,
       lyricsFont: 'ma-shan-zheng',
       fullscreenTime: true,
-      fullscreenDate: true
+      fullscreenDate: true,
     })
     j.usePlayer.getState().setOutput({ api: 'null', dsdMode: 'pcm' })
     j.useViz.getState().setAuto(false)
@@ -227,7 +228,7 @@ try {
     .locator('span')
     .evaluate((el) => ({
       whiteSpace: getComputedStyle(el).whiteSpace,
-      height: el.getBoundingClientRect().height
+      height: el.getBoundingClientRect().height,
     }))
   assert(checks.fontLabel.whiteSpace === 'nowrap', 'Font name can wrap')
   assert(
@@ -240,8 +241,8 @@ try {
     [ttf, 'https://raw.githubusercontent.com/google/fonts/main/ofl/longcang/LongCang-Regular.ttf'],
     [
       otf,
-      'https://raw.githubusercontent.com/adobe-fonts/source-code-pro/release/OTF/SourceCodePro-Regular.otf'
-    ]
+      'https://raw.githubusercontent.com/adobe-fonts/source-code-pro/release/OTF/SourceCodePro-Regular.otf',
+    ],
   ]) {
     if (existsSync(path)) continue
     const response = await fetch(url)
@@ -266,19 +267,14 @@ try {
       'node_modules/@fontsource/ma-shan-zheng/files/ma-shan-zheng-latin-400-normal.woff'
     ),
     woff2 = join(appDir, 'src/renderer/src/fonts/zcool-kuaile-chinese-simplified-400-normal.woff2')
-  await app.evaluate(
-    ({ dialog }, paths) => {
-      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: paths })
-    },
-    [ttf, otf, woff, woff2, collection]
-  )
+  await answerNextFileDialog(page, [ttf, otf, woff, woff2, collection])
   await page.getByRole('button', { name: '导入字体…', exact: true }).click()
   await page.waitForFunction(() => window.__jap.useFontCatalog.getState().imported.length >= 4)
   await page.waitForFunction(() => document.body.textContent.includes('已导入 5 款字体'))
   checks.importedFonts = await page.evaluate(() =>
     window.__jap.useFontCatalog.getState().imported.map((f) => ({
       label: f.label,
-      loaded: document.fonts.check(`400 24px "${f.family}"`)
+      loaded: document.fonts.check(`400 24px "${f.family}"`),
     }))
   )
   assert(
@@ -308,7 +304,8 @@ try {
   )
   const wall = await wallCreated
   await wall.waitForFunction(
-    () => window.__japViz?.frameVersion > 0 && document.documentElement.dataset.renderSuspended === '1'
+    () =>
+      window.__japViz?.frameVersion > 0 && document.documentElement.dataset.renderSuspended === '1'
   )
   const pausedAt = await wall.evaluate(() => window.__japViz.lastDraw)
   await page.waitForTimeout(300)
@@ -387,7 +384,7 @@ $props=Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.Glo
     JSON.parse(
       execFileSync('powershell.exe', ['-NoProfile', '-File', smtc, '-Action', action], {
         windowsHide: true,
-        encoding: 'utf8'
+        encoding: 'utf8',
       }).trim()
     )
   checks.smtc = system('read')
@@ -451,7 +448,7 @@ $props=Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.Glo
   for (const [w, h] of [
     [960, 540],
     [720, 720],
-    [540, 960]
+    [540, 960],
   ]) {
     const encoded = await page.evaluate(
       async ([w, h]) => {
@@ -491,7 +488,10 @@ $props=Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.Glo
   await page.getByRole('button', { name: '下一步', exact: true }).click()
   await page.waitForFunction(() => window.__jap.useUi.getState().lyricsAdjusting)
   await page.getByRole('button', { name: '下一步', exact: true }).click()
-  await page.getByLabel('指导旋转 X', { exact: true }).fill('18')
+  await page.getByRole('slider', { name: '指导旋转 X', exact: true }).focus()
+  await page.keyboard.press('Home')
+  for (let i = 0; i < 5; i++) await page.keyboard.press('PageUp')
+  for (let i = 0; i < 18; i++) await page.keyboard.press('ArrowRight')
   await page.getByRole('button', { name: '保存并开始听歌', exact: true }).click()
   await page.evaluate(() => {
     const v = window.__jap.useViz.getState()
@@ -522,7 +522,7 @@ $props=Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.Glo
       'aevalsrc=0.11*sin(2*PI*997*t)|0.11*sin(2*PI*1013*t):s=96000:d=1',
       '-c:a',
       'pcm_s32le',
-      wav32
+      wav32,
     ],
     { windowsHide: true }
   )
@@ -535,11 +535,9 @@ $props=Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.Glo
     ['copy', join(out, 'original.mkv')],
     ['opus', join(out, 'opus.mkv')],
     ['flac', join(out, '32bit-flac.mkv'), wav32],
-    ['aac', join(out, 'cancelled.mp4')]
+    ['aac', join(out, 'cancelled.mp4')],
   ]) {
-    await app.evaluate(({ dialog }, path) => {
-      dialog.showSaveDialog = async () => ({ canceled: false, filePath: path })
-    }, target)
+    await answerNextFileDialog(page, target)
     jobs.push(
       await page.evaluate(
         async ({ path, audio }) =>
@@ -558,7 +556,7 @@ $props=Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.Glo
             signature: 'B5 · 夜航',
             coverFont: 'noto-serif',
             audio,
-            audioBitrate: 320
+            audioBitrate: 320,
           }),
         { path: sourcePath ?? flac, audio }
       )
@@ -569,7 +567,7 @@ $props=Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.Glo
     position: window.__jap.usePlayer.getState().position.ms,
     state: window.__jap.usePlayer.getState().state,
     exportRunning: window.__jap.useVideoExport.getState().running,
-    draw: window.__japViz.lastDraw
+    draw: window.__japViz.lastDraw,
   }))
   assert(
     before.state === 'playing' && !before.exportRunning,
@@ -598,7 +596,7 @@ $props=Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.Glo
     position: window.__jap.usePlayer.getState().position.ms,
     state: window.__jap.usePlayer.getState().state,
     lyricsSize: window.__jap.useSettings.getState().lyricsSize,
-    draw: window.__japViz.lastDraw
+    draw: window.__japViz.lastDraw,
   }))
   checks.foreground = { before, after }
   assert(
@@ -642,7 +640,7 @@ $props=Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.Glo
         'hash',
         '-hash',
         'sha256',
-        '-'
+        '-',
       ],
       { windowsHide: true, encoding: 'utf8' }
     ).trim()
@@ -669,7 +667,7 @@ $props=Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.Glo
         'hash',
         '-hash',
         'sha256',
-        '-'
+        '-',
       ],
       { windowsHide: true, encoding: 'utf8' }
     ).trim()

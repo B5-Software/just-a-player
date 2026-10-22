@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 
 use symphonia::core::formats::probe::Hint;
@@ -15,11 +16,30 @@ pub struct Cover {
 
 /// 读取内嵌的封面；没有封面或文件无法解析时返回 `None`。
 pub fn read_cover(path: &Path) -> Option<Cover> {
+    let source = crate::disc::source_path(path).ok()?;
+    let path = source.as_path();
+    // These have dedicated readers, not Symphonia containers. Probing an ISO
+    // reads a megabyte and logs an error for every subsong/cover refresh.
+    if path.extension().is_some_and(|ext| {
+        [
+            "iso", "cue", "bin", "img", "dsf", "dff", "dts", "dtshd", "mid", "midi", "rmi", "kar",
+        ]
+        .iter()
+        .any(|v| ext.eq_ignore_ascii_case(v))
+    }) {
+        return None;
+    }
     if path
         .extension()
         .is_some_and(|v| v.eq_ignore_ascii_case("ncm"))
     {
         return crate::ncm::NcmReader::open(path).ok()?.cover;
+    }
+    let mut signature = [0; 4];
+    if File::open(path).ok()?.read_exact(&mut signature).is_ok()
+        && matches!(&signature, b"RF64" | b"BW64")
+    {
+        return ffmpeg_cover(path);
     }
     let file = File::open(path).ok()?;
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
@@ -36,6 +56,46 @@ pub fn read_cover(path: &Path) -> Option<Cover> {
         )
         .ok()?;
     pick_cover(format.as_mut())
+}
+fn ffmpeg_cover(path: &Path) -> Option<Cover> {
+    use std::process::Stdio;
+    let mut child = crate::ffmpeg::command("ffmpeg")
+        .args(["-v", "error", "-nostdin", "-i"])
+        .arg(path)
+        .args([
+            "-map",
+            "0:v:0",
+            "-frames:v",
+            "1",
+            "-c:v",
+            "copy",
+            "-f",
+            "image2pipe",
+            "pipe:1",
+        ])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .stdout(Stdio::piped())
+        .spawn()
+        .ok()?;
+    let mut data = Vec::new();
+    let read = child
+        .stdout
+        .take()?
+        .take(16 * 1024 * 1024 + 1)
+        .read_to_end(&mut data);
+    if data.len() > 16 * 1024 * 1024 || read.is_err() {
+        let _ = child.kill();
+        let _ = child.wait();
+        return None;
+    }
+    if !child.wait().ok()?.success() {
+        return None;
+    }
+    Some(Cover {
+        mime: sniff_mime(&data)?.into(),
+        data,
+    })
 }
 
 /// 正面封面优先；同类之间后出现的版本覆盖先出现的版本。

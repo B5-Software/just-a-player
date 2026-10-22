@@ -3,6 +3,7 @@
 mod convert;
 mod engine;
 mod producer;
+mod resample;
 mod ring;
 mod session;
 mod signal;
@@ -11,5 +12,7 @@ mod viz;
 
 pub use engine::{Engine, EventSink};
 pub use jap_decode::{Cover, read_cover};
+mod offline;
+pub use offline::OfflineRender;
 mod dsp;
 mod quality;

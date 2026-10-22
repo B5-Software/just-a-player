@@ -1,3 +1,4 @@
+import { Select } from '../ui/Select'
 import { useState } from 'react'
 import { usePlayer } from '../engine/store'
 import { useLibrary, displayTitle } from '../library/store'
@@ -17,6 +18,7 @@ export function VideoPanel(): React.JSX.Element {
     [fps, setFps] = useState(30),
     [quality, setQuality] = useState(18),
     [encoder, setEncoder] = useState('auto')
+  const [renderPriority, setRenderPriority] = useState<'balanced' | 'fast'>('balanced')
   const [intro, setIntro] = useState(true),
     [outro, setOutro] = useState(true),
     [lyrics, setLyrics] = useState<VideoOptions['lyrics']>('3d')
@@ -40,7 +42,7 @@ export function VideoPanel(): React.JSX.Element {
       <fieldset className="space-y-4">
         <SectionTitle>歌曲与画面</SectionTitle>
         <SettingRow title="音源">
-          <select
+          <Select
             aria-label="导出音源"
             value={source}
             onChange={(e) => setSource(e.target.value as 'current' | 'selected')}
@@ -50,7 +52,7 @@ export function VideoPanel(): React.JSX.Element {
             <option value="selected" disabled={!selectedTrack}>
               列表选中歌曲
             </option>
-          </select>
+          </Select>
         </SettingRow>
         <p className="truncate text-xs text-accent-text">
           {source === 'selected' && selectedTrack
@@ -58,7 +60,7 @@ export function VideoPanel(): React.JSX.Element {
             : (track?.title ?? track?.path ?? '请先选择歌曲')}
         </p>
         <SettingRow title="分辨率">
-          <select
+          <Select
             aria-label="视频分辨率"
             value={size}
             onChange={(e) => setSize(e.target.value)}
@@ -69,10 +71,10 @@ export function VideoPanel(): React.JSX.Element {
                 <option key={s}>{s}</option>
               )
             )}
-          </select>
+          </Select>
         </SettingRow>
         <SettingRow title="帧率">
-          <select
+          <Select
             aria-label="视频帧率"
             value={fps}
             onChange={(e) => setFps(Number(e.target.value))}
@@ -83,24 +85,45 @@ export function VideoPanel(): React.JSX.Element {
                 {n} FPS
               </option>
             ))}
-          </select>
+          </Select>
         </SettingRow>
         <SettingRow title="编码器">
-          <select
+          <Select
             aria-label="视频编码器"
             value={encoder}
             onChange={(e) => setEncoder(e.target.value)}
             className={selectClass}
           >
-            <option value="auto">自动 · 优先硬件加速</option>
+            <option value="auto">
+              {window.jap.platform === 'android'
+                ? '自动 · Android 后台编码'
+                : '自动 · 优先硬件加速'}
+            </option>
             <option value="cpu">CPU · H.264</option>
-            <option value="h264_nvenc">NVIDIA NVENC</option>
-            <option value="h264_qsv">Intel QSV</option>
-            <option value="h264_amf">AMD AMF</option>
-          </select>
+            <option value="h264_nvenc" disabled={window.jap.platform === 'android'}>
+              NVIDIA NVENC
+            </option>
+            <option value="h264_qsv" disabled={window.jap.platform === 'android'}>
+              Intel QSV
+            </option>
+            <option value="h264_amf" disabled={window.jap.platform === 'android'}>
+              AMD AMF
+            </option>
+          </Select>
+        </SettingRow>
+        <SettingRow title="后台资源" hint="低占用会在帧之间让出资源；两种模式的画面与音质相同。">
+          <Select
+            aria-label="导出资源策略"
+            value={renderPriority}
+            onChange={(e) => setRenderPriority(e.target.value as 'balanced' | 'fast')}
+            className={selectClass}
+          >
+            <option value="balanced">低占用 · 保持前台流畅</option>
+            <option value="fast">全速 · 优先完成导出</option>
+          </Select>
         </SettingRow>
         <SettingRow title="画质">
-          <select
+          <Select
             aria-label="视频画质"
             value={quality}
             onChange={(e) => setQuality(Number(e.target.value))}
@@ -109,10 +132,10 @@ export function VideoPanel(): React.JSX.Element {
             <option value={18}>高 · 18</option>
             <option value={23}>均衡 · 23</option>
             <option value={28}>小体积 · 28</option>
-          </select>
+          </Select>
         </SettingRow>
         <SettingRow title="音频质量">
-          <select
+          <Select
             aria-label="视频音频质量"
             value={audio}
             onChange={(e) => setAudio(e.target.value as typeof audio)}
@@ -123,11 +146,11 @@ export function VideoPanel(): React.JSX.Element {
             <option value="flac">FLAC 无损 · MKV</option>
             <option value="pcm">PCM 32 位 · MKV</option>
             <option value="copy">原音频直封 · MKV</option>
-          </select>
+          </Select>
         </SettingRow>
         {(audio === 'aac' || audio === 'opus') && (
           <SettingRow title="音频码率">
-            <select
+            <Select
               aria-label="视频音频码率"
               value={audioBitrate}
               onChange={(e) => setAudioBitrate(Number(e.target.value))}
@@ -140,7 +163,7 @@ export function VideoPanel(): React.JSX.Element {
                     {n} kbps
                   </option>
                 ))}
-            </select>
+            </Select>
           </SettingRow>
         )}
         <p className="text-[11px] leading-relaxed text-fg-muted">
@@ -150,7 +173,7 @@ export function VideoPanel(): React.JSX.Element {
           预览不等于原生 DSD 音轨。
         </p>
         <SettingRow title="歌词">
-          <select
+          <Select
             aria-label="视频歌词"
             value={lyrics}
             onChange={(e) => setLyrics(e.target.value as VideoOptions['lyrics'])}
@@ -159,7 +182,7 @@ export function VideoPanel(): React.JSX.Element {
             <option value="3d">当前字体与姿态 · 3D</option>
             <option value="2d">居中滚动 · 2D</option>
             <option value="none">关闭</option>
-          </select>
+          </Select>
         </SettingRow>
         <SettingRow title="片头显示元数据 · 2 秒">
           <Toggle label="片头元数据" checked={intro} onChange={setIntro} />
@@ -171,7 +194,7 @@ export function VideoPanel(): React.JSX.Element {
           title="片头片尾字体"
           hint="封面与元数据渐显渐隐，排版自动适配横屏、竖屏与方形。"
         >
-          <select
+          <Select
             aria-label="视频封面字体"
             value={coverFont}
             onChange={(e) => update({ videoCoverFont: e.target.value as typeof coverFont })}
@@ -182,7 +205,7 @@ export function VideoPanel(): React.JSX.Element {
                 {f.label}
               </option>
             ))}
-          </select>
+          </Select>
         </SettingRow>
         <label className="flex flex-col gap-2 text-xs text-fg-muted">
           自定义署名 · 留空不显示
@@ -198,7 +221,7 @@ export function VideoPanel(): React.JSX.Element {
           {(
             [
               ['开始秒数', start, setStart],
-              ['结束秒数 · 0 为曲终', end, setEnd]
+              ['结束秒数 · 0 为曲终', end, setEnd],
             ] as const
           ).map(([label, value, setter]) => (
             <label key={label} className="flex flex-col gap-2 text-xs text-fg-muted">
@@ -227,6 +250,7 @@ export function VideoPanel(): React.JSX.Element {
               width: width!,
               height: height!,
               fps,
+              renderPriority,
               quality,
               encoder,
               intro: intro ? 2 : 0,
@@ -237,7 +261,7 @@ export function VideoPanel(): React.JSX.Element {
               signature,
               coverFont,
               audio,
-              audioBitrate
+              audioBitrate,
             })
               .then((job) => setMessage(job ? '已加入后台导出队列' : ''))
               .catch((e) => setMessage(String(e)))
@@ -258,7 +282,9 @@ export function VideoPanel(): React.JSX.Element {
         个进行中
       </button>
       <p className="text-[11px] text-fg-muted">
-        支持 NCM、DSD 等解码来源；编码由 FFmpeg 完成，可自动选择可用的硬件视频编码器。
+        {window.jap.platform === 'android'
+          ? '支持 NCM、DSD 等解码来源；Android 使用内置 FFmpeg / x264 在后台编码，前台可继续听歌。'
+          : '支持 NCM、DSD 等解码来源；编码由 FFmpeg 完成，可自动选择可用的硬件视频编码器。'}
       </p>
     </div>
   )

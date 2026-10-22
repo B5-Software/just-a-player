@@ -22,7 +22,14 @@ class EngineClient {
   >()
   offline(
     action: 'open' | 'frame' | 'close' | 'original',
-    options: { path?: string; startMs?: number; timeMs?: number; writeAudio?: boolean } = {}
+    options: {
+      path?: string
+      startMs?: number
+      timeMs?: number
+      writeAudio?: boolean
+      soundfont?: string
+      midiRate?: number
+    } = {}
   ): Promise<Extract<HostToRenderer, { kind: 'offlineResult' }>> {
     const id = this.nextId++
     return new Promise((resolve, reject) => {

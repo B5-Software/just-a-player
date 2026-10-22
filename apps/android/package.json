@@ -1,0 +1,20 @@
+{
+  "name": "android",
+  "version": "0.1.2",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "build:web": "node ../../scripts/prepare-soundfonts.mjs --android && node ../../scripts/prepare-native-notices.mjs && vite build",
+    "build:native": "node scripts/build-native.mjs",
+    "build:codecs": "node scripts/prepare-codecs.mjs",
+    "build": "pnpm build:web && pnpm build:native && pnpm build:codecs && node scripts/gradle.mjs assembleRelease",
+    "build:debug": "pnpm build:web && pnpm build:native && pnpm build:codecs && node scripts/gradle.mjs assembleDebug",
+    "package": "pnpm build:web && pnpm build:native && pnpm build:codecs && node scripts/gradle.mjs assembleRelease",
+    "test": "node scripts/test-emulator.mjs"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.2",
+    "vite": "^8.3.4"
+  }
+}

@@ -48,6 +48,7 @@ fn wave_format(cfg: &StreamConfig) -> WaveFormat {
         SampleFormat::I24In32 | SampleFormat::Dop32 => (32, 24, SampleType::Int),
         SampleFormat::I32 => (32, 32, SampleType::Int),
         SampleFormat::F32 => (32, 32, SampleType::Float),
+        SampleFormat::F64 => (64, 64, SampleType::Float),
         SampleFormat::DsdU8Lsb | SampleFormat::DsdU8Msb => unreachable!("WASAPI 不接受原生 DSD"),
     };
     WaveFormat::new(
@@ -72,6 +73,7 @@ fn sample_format_of(wave: &WaveFormat) -> Option<SampleFormat> {
         (32, 24, SampleType::Int) => Some(SampleFormat::I24In32),
         (32, 32, SampleType::Int) => Some(SampleFormat::I32),
         (32, 32, SampleType::Float) => Some(SampleFormat::F32),
+        (64, 64, SampleType::Float) => Some(SampleFormat::F64),
         _ => None,
     }
 }
@@ -143,6 +145,23 @@ pub fn set_hardware_volume(device_id: Option<&str>, gain: f32) -> Result<bool> {
     })
 }
 
+pub fn probe_shared(device_id: Option<&str>) -> Result<Vec<StreamConfig>> {
+    let id = device_id.map(str::to_owned);
+    in_com_thread(move || {
+        let enumerator = DeviceEnumerator::new().map_err(map_err)?;
+        let device = find_device(&enumerator, id.as_deref())?;
+        let wave = device
+            .get_iaudioclient()
+            .map_err(map_err)?
+            .get_mixformat()
+            .map_err(map_err)?;
+        Ok(vec![StreamConfig {
+            sample_rate: wave.get_samplespersec(),
+            channels: wave.get_nchannels(),
+            format: sample_format_of(&wave).unwrap_or(SampleFormat::F32),
+        }])
+    })
+}
 pub fn probe_exclusive(device_id: Option<&str>) -> Result<Vec<StreamConfig>> {
     let device_id = device_id.map(str::to_owned);
     in_com_thread(move || {
@@ -376,6 +395,22 @@ fn open_client(
     req: &OpenRequest,
     exclusive: bool,
 ) -> Result<(AudioClient, StreamConfig)> {
+    if !exclusive {
+        let wave = device
+            .get_iaudioclient()
+            .map_err(map_err)?
+            .get_mixformat()
+            .map_err(map_err)?;
+        let config = StreamConfig {
+            sample_rate: wave.get_samplespersec(),
+            channels: wave.get_nchannels(),
+            format: sample_format_of(&wave).unwrap_or(SampleFormat::F32),
+        };
+        return Ok((
+            try_candidate(device, &config, req.buffer_ms, false)?,
+            config,
+        ));
+    }
     let mut last = OutputError::UnsupportedFormat("没有候选格式".into());
     for cand in &req.candidates {
         for attempt in 0..3 {

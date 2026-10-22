@@ -1,9 +1,12 @@
+import { Select } from '../ui/Select'
 import { useSettings } from '../settings/store'
 import { SectionTitle, SettingRow, Toggle } from '../ui/controls'
 import { scanMusicFolders } from '../library/scanner'
 import { LightingSettings } from './LightingSettings'
 import { useUi } from '../ui/store'
 import { RenderSettings } from './RenderSettings'
+import { MidiSettings } from './MidiSettings'
+import { VisualPluginSettings } from './VisualPluginSettings'
 
 /** 设置：控件自动隐藏，以及文件与播放列表相关的行为开关。 */
 export function SettingsPanel(): React.JSX.Element {
@@ -15,8 +18,10 @@ export function SettingsPanel(): React.JSX.Element {
   const update = useSettings((s) => s.update)
   const fps = useSettings((s) => s.renderFps)
   const scale = useSettings((s) => s.renderScale)
+  const uiScale = useSettings((s) => s.androidUiScale)
   const effects = useSettings((s) => s.renderEffects)
   const background = useSettings((s) => s.backgroundPlayback)
+  const awake = useSettings((s) => s.keepScreenAwake)
   const autoScan = useSettings((s) => s.autoScan)
   const folders = useSettings((s) => s.musicFolders)
   const wallpaper = useSettings((s) => s.wallpaperEnabled)
@@ -29,8 +34,43 @@ export function SettingsPanel(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-6">
+      {window.jap.platform === 'android' && (
+        <section className="flex flex-col gap-4">
+          <SectionTitle>界面与布局</SectionTitle>
+          <SettingRow
+            title="界面大小"
+            hint="按横屏空间适配，不跟随系统 DPI。只调整控件与卡片，不降低画面清晰度。"
+          >
+            <Select
+              aria-label="界面大小"
+              value={uiScale}
+              onChange={(e) => update({ androidUiScale: Number(e.target.value) })}
+              className="rounded-lg bg-hover p-2 text-xs"
+            >
+              <option value={0.75}>更紧凑 · 75%</option>
+              <option value={0.85}>紧凑 · 85%</option>
+              <option value={1}>自动适配</option>
+              <option value={1.15}>稍大 · 115%</option>
+              <option value={1.3}>大 · 130%</option>
+              <option value={1.5}>更大 · 150%</option>
+            </Select>
+          </SettingRow>
+        </section>
+      )}
       <LightingSettings />
       <RenderSettings />
+      <VisualPluginSettings />
+      <MidiSettings />
+      <SettingRow
+        title="播放时保持屏幕常亮"
+        hint="播放期间阻止屏幕自动熄灭；暂停、停止或退出应用后恢复系统休眠。Android 仅在播放器可见时生效。"
+      >
+        <Toggle
+          label="播放时保持屏幕常亮"
+          checked={awake}
+          onChange={(keepScreenAwake) => update({ keepScreenAwake })}
+        />
+      </SettingRow>
       <button
         type="button"
         className="rounded-xl bg-hover p-3 text-left text-xs text-accent-text"
@@ -44,7 +84,7 @@ export function SettingsPanel(): React.JSX.Element {
           title="帧率上限"
           hint="默认不限帧率；最小化或隐藏时自动暂停绘制，音频继续播放。"
         >
-          <select
+          <Select
             aria-label="帧率上限"
             value={fps}
             onChange={(e) => update({ renderFps: Number(e.target.value) })}
@@ -55,10 +95,10 @@ export function SettingsPanel(): React.JSX.Element {
                 {v ? `${v} FPS` : '不限制'}
               </option>
             ))}
-          </select>
+          </Select>
         </SettingRow>
         <SettingRow title="渲染精度" hint="相对于屏幕原生像素；降低精度可减少显存与 GPU 使用。">
-          <select
+          <Select
             aria-label="渲染精度"
             value={scale}
             onChange={(e) => update({ renderScale: Number(e.target.value) })}
@@ -69,7 +109,7 @@ export function SettingsPanel(): React.JSX.Element {
                 {v * 100}%
               </option>
             ))}
-          </select>
+          </Select>
         </SettingRow>
         <SettingRow title="后处理效果" hint="泛光、颗粒、色差；专业仪表始终保持清晰。">
           <Toggle
@@ -78,7 +118,14 @@ export function SettingsPanel(): React.JSX.Element {
             onChange={(renderEffects) => update({ renderEffects })}
           />
         </SettingRow>
-        <SettingRow title="后台播放" hint="关闭窗口后保留托盘与音频；托盘菜单可退出。">
+        <SettingRow
+          title="后台播放"
+          hint={
+            window.jap.platform === 'android'
+              ? '切到后台继续播放，通过系统媒体通知控制；关闭时切后台暂停。'
+              : '关闭窗口后保留托盘与音频；托盘菜单可退出。'
+          }
+        >
           <Toggle
             label="后台播放"
             checked={background}
@@ -127,7 +174,7 @@ export function SettingsPanel(): React.JSX.Element {
             ['全屏显示时间', fullscreenTime, 'fullscreenTime'],
             ['全屏显示日期', fullscreenDate, 'fullscreenDate'],
             ['壁纸显示时间', wallpaperTime, 'wallpaperTime'],
-            ['壁纸显示日期', wallpaperDate, 'wallpaperDate']
+            ['壁纸显示日期', wallpaperDate, 'wallpaperDate'],
           ] as const
         ).map(([label, checked, key]) => (
           <SettingRow key={key} title={label}>

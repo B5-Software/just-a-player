@@ -13,6 +13,7 @@ export {
   DotsSixVertical,
   EyeSlash,
   FileAudio,
+  FilmStrip,
   FolderOpen,
   FolderSimple,
   Gear,
@@ -40,5 +41,6 @@ export {
   UploadSimple,
   Waveform,
   Warning,
-  X
+  X,
 } from '@phosphor-icons/react'
+export { Folder, ArrowLeft } from '@phosphor-icons/react'

@@ -1,4 +1,6 @@
 import { isThemeMode, type ThemeMode } from './theme'
+import { parseVisualPlugin, type VisualPlugin } from './visual-plugin'
+import { LEGACY_VISUALS } from './visual-builtins'
 
 export const DEFAULT_ACCENT = '#8476ff'
 
@@ -25,7 +27,7 @@ export const LYRICS_FONTS = [
   { id: 'zhi-mang-xing', label: '志莽行书', family: 'Zhi Mang Xing', weight: 400 },
   { id: 'liu-jian-mao-cao', label: '刘建毛草', family: 'Liu Jian Mao Cao', weight: 400 },
   { id: 'zcool-xiaowei', label: '站酷小薇', family: 'ZCOOL XiaoWei', weight: 400 },
-  { id: 'zcool-qingke-huangyou', label: '站酷黄油', family: 'ZCOOL QingKe HuangYou', weight: 400 }
+  { id: 'zcool-qingke-huangyou', label: '站酷黄油', family: 'ZCOOL QingKe HuangYou', weight: 400 },
 ] as const
 export type LyricsFontId = (typeof LYRICS_FONTS)[number]['id'] | `user-${string}`
 export interface ImportedFont {
@@ -45,6 +47,14 @@ export interface LyricsRotation {
 }
 
 export interface AppSettings {
+  androidUiScale: number
+  legacyVisuals: boolean
+  enabledLegacyVisuals: string[]
+  disabledVisuals: string[]
+  visualPlugins: VisualPlugin[]
+  keepScreenAwake: boolean
+  midiSoundfont: string
+  midiSampleRate: number
   onboardingComplete: boolean
   vizOffset: { x: number; y: number; z: number }
   vizZoom: number
@@ -97,6 +107,14 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  androidUiScale: 1,
+  legacyVisuals: false,
+  enabledLegacyVisuals: [],
+  disabledVisuals: [],
+  visualPlugins: [],
+  keepScreenAwake: false,
+  midiSoundfont: '',
+  midiSampleRate: 96000,
   onboardingComplete: false,
   vizOffset: { x: -450, y: 0, z: 0 },
   vizZoom: 1,
@@ -141,7 +159,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lyricsPose: 'auto',
   lyricsRotation: { x: 0, y: 0, z: 0 },
   lyricsSpin: 0.5,
-  lyricsFont: 'noto-sans'
+  lyricsFont: 'noto-sans',
 }
 
 const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
@@ -197,7 +215,7 @@ export function applySettingsPatch(base: AppSettings, patch: unknown): AppSettin
     'fullscreenTime',
     'fullscreenDate',
     'wallpaperTime',
-    'wallpaperDate'
+    'wallpaperDate',
   ] as const)
     if (isBoolean(input[key])) next[key] = input[key]
   if (isBoolean(input['miniCoverBackdrop'])) next.miniCoverBackdrop = input['miniCoverBackdrop']
@@ -235,7 +253,44 @@ export function applySettingsPatch(base: AppSettings, patch: unknown): AppSettin
   )
     next.renderScale = input['renderScale']
   if (isBoolean(input['renderEffects'])) next.renderEffects = input['renderEffects']
+  // Keep the old aggregate flag readable for existing settings and exported jobs.
+  if (isBoolean(input['legacyVisuals'])) {
+    next.legacyVisuals = input['legacyVisuals']
+    if (!Array.isArray(input['enabledLegacyVisuals']))
+      next.enabledLegacyVisuals = input['legacyVisuals'] ? LEGACY_VISUALS.map((p) => p.id) : []
+  }
+  if (Array.isArray(input['enabledLegacyVisuals']))
+    next.enabledLegacyVisuals = LEGACY_VISUALS.filter((p) =>
+      (input['enabledLegacyVisuals'] as unknown[]).includes(p.id)
+    ).map((p) => p.id)
+  if (Array.isArray(input['disabledVisuals']))
+    next.disabledVisuals = [
+      ...new Set(
+        input['disabledVisuals'].filter((v): v is string => typeof v === 'string' && v.length < 80)
+      ),
+    ].slice(0, 128)
+  if (Array.isArray(input['visualPlugins'])) {
+    next.visualPlugins = []
+    for (const value of input['visualPlugins'].slice(0, 16)) {
+      try {
+        const plugin = parseVisualPlugin(value)
+        if (!next.visualPlugins.some((p) => p.id === plugin.id)) next.visualPlugins.push(plugin)
+      } catch {
+        /* Ignore damaged persisted plugin records. */
+      }
+    }
+  }
   if (isBoolean(input['backgroundPlayback'])) next.backgroundPlayback = input['backgroundPlayback']
+  if (isBoolean(input['keepScreenAwake'])) next.keepScreenAwake = input['keepScreenAwake']
+  if (typeof input['androidUiScale'] === 'number' && Number.isFinite(input['androidUiScale']))
+    next.androidUiScale = Math.max(0.75, Math.min(1.5, input['androidUiScale']))
+  if (typeof input['midiSoundfont'] === 'string' && input['midiSoundfont'].length < 8192)
+    next.midiSoundfont = input['midiSoundfont']
+  if (
+    typeof input['midiSampleRate'] === 'number' &&
+    [44100, 48000, 96000].includes(input['midiSampleRate'])
+  )
+    next.midiSampleRate = input['midiSampleRate']
   if (isBoolean(input['autoScan'])) next.autoScan = input['autoScan']
   if (
     Array.isArray(input['musicFolders']) &&

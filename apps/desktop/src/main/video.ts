@@ -1,15 +1,19 @@
-import { BrowserWindow, dialog, ipcMain, app } from 'electron'
+import { showSaveDialog } from './dialogs'
+import { BrowserWindow, ipcMain, app } from 'electron'
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { promisify } from 'node:util'
-import { copyFile, mkdtemp, rm, unlink, rmdir, rename } from 'node:fs/promises'
+import { copyFile, mkdtemp, rm, unlink, rmdir, rename, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve, dirname, basename } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { IPC } from '../shared/ipc'
 import { queueTarget } from './video-queue'
 import { ffmpegPath } from './tools'
+import { discTrack, isDiscImage } from '../shared/audio'
 const exec = promisify(execFile)
 interface Options {
+  transport?: 'rgba' | 'h264'
+  midiSoundfont?: string | null
   queueId?: string
   audio?: 'aac' | 'opus' | 'flac' | 'pcm' | 'copy'
   audioBitrate?: number
@@ -64,7 +68,7 @@ async function encoder(request: string): Promise<string> {
           name,
           '-f',
           'null',
-          '-'
+          '-',
         ],
         { windowsHide: true, timeout: 15000 }
       )
@@ -102,6 +106,7 @@ export function registerVideoIpc(trusted: (event: Electron.IpcMainInvokeEvent) =
     if (!trusted(event) || job) throw new Error('已有导出任务')
     if (
       !options ||
+      (options.transport !== undefined && !['rgba', 'h264'].includes(options.transport)) ||
       (options.audio !== undefined &&
         !['aac', 'opus', 'flac', 'pcm', 'copy'].includes(options.audio)) ||
       ![24, 30, 60].includes(options.fps) ||
@@ -125,14 +130,14 @@ export function registerVideoIpc(trusted: (event: Electron.IpcMainInvokeEvent) =
     const queued = queueTarget(event.sender, options.queueId)
     const selected = queued
       ? { canceled: false, filePath: queued }
-      : await dialog.showSaveDialog(win, {
+      : await showSaveDialog(win, {
           title: '导出音乐视频',
           defaultPath: (options.title || '音乐视频').replace(/[<>:"/\\|?*]/g, '_') + '.mp4',
-          filters: [{ name: 'MP4 视频', extensions: ['mp4'] }]
+          filters: [{ name: 'MP4 视频', extensions: ['mp4'] }],
         })
     if (selected.canceled || !selected.filePath) return null
     const dir = await mkdtemp(join(tmpdir(), 'jap-render-video-'))
-    const name = await encoder(options.encoder)
+    const name = options.transport === 'h264' ? 'webcodecs' : await encoder(options.encoder)
     const quality =
       name === 'libx264'
         ? ['-preset', 'veryfast', '-crf', String(options.quality)]
@@ -147,23 +152,24 @@ export function registerVideoIpc(trusted: (event: Electron.IpcMainInvokeEvent) =
         '-v',
         'error',
         '-y',
-        '-f',
-        'rawvideo',
-        '-pixel_format',
-        'rgba',
-        '-video_size',
-        `${options.width}x${options.height}`,
-        '-framerate',
-        String(options.fps),
+        ...(options.transport === 'h264'
+          ? ['-fflags', '+genpts', '-f', 'h264', '-r', String(options.fps)]
+          : [
+              '-f',
+              'rawvideo',
+              '-pixel_format',
+              'rgba',
+              '-video_size',
+              `${options.width}x${options.height}`,
+              '-framerate',
+              String(options.fps),
+            ]),
         '-i',
         'pipe:0',
         '-an',
         '-c:v',
-        name,
-        ...quality,
-        '-pix_fmt',
-        'yuv420p',
-        join(dir, 'video.mp4')
+        ...(options.transport === 'h264' ? ['copy'] : [name, ...quality, '-pix_fmt', 'yuv420p']),
+        join(dir, 'video.mp4'),
       ],
       { windowsHide: true, stdio: 'pipe' }
     )
@@ -174,9 +180,9 @@ export function registerVideoIpc(trusted: (event: Electron.IpcMainInvokeEvent) =
       target: selected.filePath,
       child,
       options,
-      encoder: name,
+      encoder: options.transport === 'h264' ? '系统视频编码 · GPU 帧直送' : name,
       error: '',
-      finished: Promise.resolve()
+      finished: Promise.resolve(),
     }
     child.stderr.on('data', (b: Buffer) => {
       j.error = (j.error + b.toString()).slice(-8192)
@@ -194,7 +200,7 @@ export function registerVideoIpc(trusted: (event: Electron.IpcMainInvokeEvent) =
       encoders.delete(options.encoder)
     })
     job = j
-    return { id: j.id, encoder: name, target: j.target }
+    return { id: j.id, encoder: j.encoder, target: j.target }
   })
   ipcMain.handle(IPC.videoFrame, async (event, id: string, data: Uint8Array) => {
     const j = job
@@ -204,7 +210,9 @@ export function registerVideoIpc(trusted: (event: Electron.IpcMainInvokeEvent) =
       j.owner !== event.sender.id ||
       j.id !== id ||
       !(data instanceof Uint8Array) ||
-      data.byteLength !== j.options.width * j.options.height * 4
+      (j.options.transport === 'h264'
+        ? !data.byteLength || data.byteLength > 16 * 1024 * 1024
+        : data.byteLength !== j.options.width * j.options.height * 4)
     )
       throw new Error('无效视频帧')
     await new Promise<void>((ok, fail) =>
@@ -231,7 +239,11 @@ export function registerVideoIpc(trusted: (event: Electron.IpcMainInvokeEvent) =
       const musicDuration =
         j.options.musicDuration ?? j.options.duration - j.options.intro - (j.options.outro ?? 0)
       const source = audio === 'copy' ? (j.options.originalSourcePath ?? j.options.path) : audioPath
-      if (!source || (audio === 'copy' && /\.(dsf|dff|iso|cue|bin)$/i.test(source)))
+      if (
+        !source ||
+        (audio === 'copy' &&
+          (discTrack(source) || isDiscImage(source) || /\.(dsf|dff)$/i.test(source)))
+      )
         throw new Error('当前音源无法直接封装为视频音轨，请选择 FLAC 无损或 PCM')
       j.muxAbort = new AbortController()
       if (audio === 'copy') {
@@ -253,7 +265,7 @@ export function registerVideoIpc(trusted: (event: Electron.IpcMainInvokeEvent) =
             '0:a:0',
             '-c:a',
             'copy',
-            join(j.dir, 'original.mka')
+            join(j.dir, 'original.mka'),
           ],
           { windowsHide: true, timeout: 600000, maxBuffer: 8192, signal: j.muxAbort.signal }
         )
@@ -284,13 +296,13 @@ export function registerVideoIpc(trusted: (event: Electron.IpcMainInvokeEvent) =
                       [16, 24, 32].includes(j.options.audioBits ?? 32)
                         ? (j.options.audioBits ?? 32)
                         : 32
-                    )
+                    ),
                   ]
                 : audio === 'pcm'
                   ? []
                   : ['-b:a', `${bitrate}k`]),
               '-af',
-              `atrim=duration=${musicDuration},asetpts=PTS-STARTPTS+${j.options.intro}/TB,apad`
+              `atrim=duration=${musicDuration},asetpts=PTS-STARTPTS+${j.options.intro}/TB,apad`,
             ]
       await exec(
         ffmpegPath(),
@@ -311,7 +323,7 @@ export function registerVideoIpc(trusted: (event: Electron.IpcMainInvokeEvent) =
           '-t',
           String(j.options.duration),
           ...(format === 'mp4' ? ['-movflags', '+faststart'] : []),
-          join(j.dir, `final.${format}`)
+          join(j.dir, `final.${format}`),
         ],
         { windowsHide: true, timeout: 600000, maxBuffer: 8192, signal: j.muxAbort.signal }
       )
@@ -319,6 +331,14 @@ export function registerVideoIpc(trusted: (event: Electron.IpcMainInvokeEvent) =
       try {
         await copyFile(join(j.dir, `final.${format}`), staged)
         j.muxAbort.signal.throwIfAborted()
+        if (/\.(mid|midi|kar|rmi)$/i.test(j.options.path ?? '') && !j.options.midiSoundfont) {
+          const license = join(
+            dirname(process.env['JAP_SOUNDFONT_PATH']!),
+            'documentation',
+            'MuseScore_General_HQ_License.md'
+          )
+          await writeFile(j.target + '.midi-license.txt', await readFile(license))
+        }
         await rename(staged, j.target)
       } finally {
         await unlink(staged).catch(() => {})

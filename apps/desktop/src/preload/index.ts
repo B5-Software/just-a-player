@@ -13,6 +13,21 @@ ipcRenderer.on(IPC.trayState, (_event, value: unknown) => {
   traySnapshot = { ...traySnapshot, ...(value as Record<string, unknown>) }
 })
 contextBridge.exposeInMainWorld('jap', {
+  bundledMidi: ipcRenderer.sendSync('app:bundledMidi') as boolean,
+  importSoundfont: () => ipcRenderer.invoke(IPC.soundfontImport),
+  takeOpenFiles: () => ipcRenderer.invoke(IPC.takeOpenFiles),
+  onOpenFiles: (callback: () => void) => {
+    const listener = (): void => callback()
+    ipcRenderer.on(IPC.openFiles, listener)
+    return () => ipcRenderer.off(IPC.openFiles, listener)
+  },
+  onDialogRequest: (callback: (request: unknown) => void) => {
+    const listener = (_event: unknown, request: unknown): void => callback(request)
+    ipcRenderer.on(IPC.dialogOpen, listener)
+    return () => ipcRenderer.off(IPC.dialogOpen, listener)
+  },
+  browseFiles: (path?: string) => ipcRenderer.invoke(IPC.dialogBrowse, path),
+  dialogReply: (id: string, paths: string[]) => ipcRenderer.invoke(IPC.dialogReply, id, paths),
   platform: process.platform,
   version: ipcRenderer.sendSync('app:version') as string,
   gpuInfo: () => ipcRenderer.invoke(IPC.gpuInfo),
@@ -116,6 +131,7 @@ contextBridge.exposeInMainWorld('jap', {
   openAudioFiles: (): Promise<string[]> => ipcRenderer.invoke(IPC.openAudio),
   openFolders: (): Promise<string[]> => ipcRenderer.invoke(IPC.openFolder),
   openPlaylistFiles: (): Promise<string[]> => ipcRenderer.invoke(IPC.openPlaylist),
+  openVisualPluginFiles: (): Promise<string[]> => ipcRenderer.invoke(IPC.openVisualPlugin),
   openLyricsFiles: (): Promise<string[]> => ipcRenderer.invoke(IPC.openLyrics),
   pickExportPath: (suggestedName: string, json: boolean): Promise<string | null> =>
     ipcRenderer.invoke(IPC.pickExportPath, suggestedName, json),
@@ -144,5 +160,5 @@ contextBridge.exposeInMainWorld('jap', {
     const listener = (_event: unknown, value: boolean): void => callback(value)
     ipcRenderer.on(IPC.fullscreenChanged, listener)
     return () => ipcRenderer.off(IPC.fullscreenChanged, listener)
-  }
+  },
 })

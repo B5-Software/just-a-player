@@ -1,3 +1,6 @@
+import './platform/android'
+import { DialogHost } from './components/DialogHost'
+import { useDialogs } from './ui/dialog-store'
 // 字体与主题模块必须最先导入：主题会在 React 渲染前给 <html> 设好深浅色与强调色
 import './fonts/fonts.css'
 import './theme/store'
@@ -5,6 +8,7 @@ import './engine/store'
 import './audio/dsp-store'
 import './audio/quality-store'
 import './index.css'
+import './platform/android-layout.css'
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -34,12 +38,18 @@ import { initSystemMediaSync } from './engine/system-media'
 import { useFontCatalog } from './fonts/catalog'
 import { metadataOpacity, createCoverCard } from './video/cover-card'
 import { useHdr } from './viz/hdr'
+import { initMidi } from './audio/midi'
+import { initFileOpening } from './library/file-opening'
+import { serializeNativeTextures } from './viz/native-hdr'
+import { prepareScenes } from './viz/scenes'
 
 const surface = window.jap.surface
 document.documentElement.dataset['surface'] = surface
 if (surface === 'main') {
+  initMidi()
   initScanner()
   initLibrary()
+  initFileOpening()
   initSystemMediaSync()
   const syncVisual = (): void => {
     const s = useViz.getState()
@@ -48,7 +58,7 @@ if (surface === 'main') {
       auto: s.auto,
       zoom: s.zoom,
       offset: s.offset,
-      lyricsText: useLyrics.getState().text
+      lyricsText: useLyrics.getState().text,
     })
   }
   useViz.subscribe(syncVisual)
@@ -97,7 +107,7 @@ if (surface === 'main' && !navigator.userAgent.includes('Windows') && 'mediaSess
       navigator.mediaSession.metadata = new MediaMetadata({
         title: state.track.title ?? state.track.path.split(/[\\/]/).pop(),
         artist: state.track.artist ?? '',
-        album: state.track.album ?? ''
+        album: state.track.album ?? '',
       })
     if (state.state !== prev.state)
       navigator.mediaSession.playbackState =
@@ -118,12 +128,17 @@ createRoot(document.getElementById('root')!).render(
     ) : (
       <App />
     )}
+    {surface === 'main' && <DialogHost />}
   </StrictMode>
 )
 
 // 端到端截图脚本通过 ?e2e=1 打开该钩子来驱动界面
 if (new URLSearchParams(location.search).has('e2e')) {
   ;(window as unknown as Record<string, unknown>)['__jap'] = {
+    engine,
+    serializeNativeTextures,
+    prepareScenes,
+    useDialogs,
     exportVideo,
     useVideoExport,
     useVideoQueue,
@@ -141,6 +156,6 @@ if (new URLSearchParams(location.search).has('e2e')) {
     playItem,
     useFontCatalog,
     metadataOpacity,
-    createCoverCard
+    createCoverCard,
   }
 }

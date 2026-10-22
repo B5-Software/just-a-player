@@ -47,59 +47,49 @@ impl Session {
         dsp: &Arc<Mutex<DspConfig>>,
         volume: f32,
     ) -> Result<Self, OutputError> {
-        let mut last = OutputError::UnsupportedFormat("没有候选格式".into());
-        for &cand in candidates {
-            let mut selected = cand;
-            // Shared backends can negotiate a native rate/format. Recreate the
-            // ring before starting, so its byte layout matches the actual stream.
-            for attempt in 0..2 {
-                let mut parts = new_ring(selected, RING_MS);
-                parts.render.initial_volume(volume);
-                let request = OpenRequest {
-                    api: output.api,
-                    device_id: output.device_id.clone(),
-                    buffer_ms: output.buffer_ms,
-                    candidates: vec![selected],
-                };
-                match backend.open(&request, Box::new(parts.render)) {
-                    Ok(opened) => {
-                        if opened.config.sample_rate != cand.sample_rate {
-                            last = OutputError::UnsupportedFormat(
-                                "设备改变了请求采样率；此路径没有应用内重采样器".into(),
-                            );
-                            break;
-                        }
-                        if opened.config != selected {
-                            selected = opened.config;
-                            drop(opened);
-                            last =
-                                OutputError::UnsupportedFormat("设备未保持已协商的输出格式".into());
-                            if attempt == 0 {
-                                continue;
-                            }
-                            break;
-                        }
-                        return Self::assemble(
-                            opened,
-                            parts.producer,
-                            parts.shared,
-                            parts.capacity_frames,
-                            tap,
-                            dsp,
-                        );
-                    }
-                    Err(e @ (OutputError::DeviceBusy | OutputError::DeviceNotFound)) => {
-                        return Err(e);
-                    }
-                    Err(e) => {
-                        tracing::debug!(?selected, "候选格式被拒绝: {e}");
-                        last = e;
-                        break;
-                    }
+        let mut selected = *candidates
+            .first()
+            .ok_or_else(|| OutputError::UnsupportedFormat("没有候选格式".into()))?;
+        for attempt in 0..2 {
+            // A backend negotiates once over the complete preference list. Opening
+            // an ASIO driver separately for every rejected format is disruptive.
+            let mut parts = new_ring(selected, RING_MS);
+            parts.render.initial_volume(volume);
+            let request = OpenRequest {
+                api: output.api,
+                device_id: output.device_id.clone(),
+                buffer_ms: output.buffer_ms,
+                candidates: if attempt == 0 {
+                    candidates.to_vec()
+                } else {
+                    vec![selected]
+                },
+            };
+            let opened = backend.open(&request, Box::new(parts.render))?;
+            if opened.config != selected {
+                if (selected.format.is_dsd() || opened.config.format.is_dsd())
+                    && !candidates.contains(&opened.config)
+                {
+                    return Err(OutputError::UnsupportedFormat(
+                        "驱动改变了 DSD 位流格式".into(),
+                    ));
                 }
+                selected = opened.config;
+                drop(opened);
+                continue;
             }
+            return Self::assemble(
+                opened,
+                parts.producer,
+                parts.shared,
+                parts.capacity_frames,
+                tap,
+                dsp,
+            );
         }
-        Err(last)
+        Err(OutputError::UnsupportedFormat(
+            "设备未保持已协商的输出格式".into(),
+        ))
     }
 
     fn assemble(
@@ -174,7 +164,12 @@ impl Session {
     }
 
     pub fn compatible(&self, candidates: &[StreamConfig], exclusive: bool) -> bool {
-        self.details.exclusive == exclusive && candidates.contains(&self.config)
+        self.details.exclusive == exclusive
+            && candidates.contains(&self.config)
+            && (!exclusive
+                || candidates
+                    .first()
+                    .is_some_and(|c| c.sample_rate == self.config.sample_rate))
     }
 
     pub fn started(&self) -> bool {

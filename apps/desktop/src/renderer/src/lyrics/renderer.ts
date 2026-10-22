@@ -1,3 +1,4 @@
+import { surfacePixelRatio } from '../lib/pixel-ratio'
 import * as THREE from 'three'
 import { HdrPresenter } from '../viz/hdr'
 import type { LyricsFontId, LyricsPose, LyricsPosition, LyricsRotation } from '@shared/settings'
@@ -6,7 +7,7 @@ import { ensureFont, fontOf } from '../fonts/catalog'
 import { livePositionMs } from '../engine/clock'
 import { useSettings } from '../settings/store'
 import { glyphShapes, type GlyphShapes } from './glyph'
-import { parseLRC, type LyricLine } from './parse'
+import { parseLRC, wordProgress, type LyricLine } from './parse'
 import { resolvePose, type PoseTarget } from './pose'
 
 export interface LyricsStyle {
@@ -27,7 +28,11 @@ interface Built {
   grp: THREE.Group
   mat: THREE.MeshStandardMaterial
   shadowMat: THREE.MeshBasicMaterial
+  subMat: THREE.MeshStandardMaterial
   w: number
+  cut: { value: number }
+  karaoke: { value: number }
+  words: { t: number; end: number; x0: number; x1: number }[]
 }
 
 interface Line extends LyricLine {
@@ -153,13 +158,13 @@ export class LyricsRenderer {
       canvas: this.canvas,
       antialias: true,
       alpha: true,
-      preserveDrawingBuffer: true
+      preserveDrawingBuffer: true,
     })
     host.appendChild(this.canvas)
     this.hdr = new HdrPresenter(host, true)
     this.canvas.addEventListener('webglcontextrestored', () => this.hdr.invalidate())
     this.renderer.setClearColor(0x000000, 0)
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    this.renderer.setPixelRatio(Math.min(surfacePixelRatio(), 2))
     this.root.rotation.order = 'ZXY'
     this.scene.add(this.root)
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.7))
@@ -178,6 +183,11 @@ export class LyricsRenderer {
     this.resizeObserver.observe(host)
     this.canvas.addEventListener('pointerdown', this.onDown)
     this.canvas.addEventListener('pointermove', this.onMove)
+    // Some Android WebViews start compositor scrolling over transparent WebGL
+    // layers despite touch-action. Block it only after a real lyric hit starts
+    // a drag; pointercancel/capture loss still release the gesture normally.
+    this.canvas.addEventListener('touchstart', this.onTouchDrag, { passive: false })
+    this.canvas.addEventListener('touchmove', this.onTouchDrag, { passive: false })
     window.addEventListener('pointerup', this.onUp)
     window.addEventListener('pointercancel', this.onUp)
     window.addEventListener('blur', this.endDrag)
@@ -185,6 +195,7 @@ export class LyricsRenderer {
     this.canvas.addEventListener('lostpointercapture', this.onUp)
     this.resize()
     this.raf = requestAnimationFrame(this.frame)
+    if (window.jap.surface === 'export') return
   }
 
   setInteractive(on: boolean): void {
@@ -227,6 +238,8 @@ export class LyricsRenderer {
     this.canvas.removeEventListener('lostpointercapture', this.onUp)
     this.canvas.removeEventListener('pointerdown', this.onDown)
     this.canvas.removeEventListener('pointermove', this.onMove)
+    this.canvas.removeEventListener('touchstart', this.onTouchDrag)
+    this.canvas.removeEventListener('touchmove', this.onTouchDrag)
     this.freeLines(this.lines)
     this.renderer.dispose()
     this.renderer.forceContextLoss()
@@ -235,7 +248,7 @@ export class LyricsRenderer {
 
   private readonly resize = (): void => {
     if (this.exporting) return
-    this.renderer.setPixelRatio(window.devicePixelRatio * useSettings.getState().renderScale)
+    this.renderer.setPixelRatio(surfacePixelRatio() * useSettings.getState().renderScale)
     this.width = Math.max(1, this.host.clientWidth)
     this.height = Math.max(1, this.host.clientHeight)
     this.renderer.setSize(this.width, this.height, false)
@@ -311,6 +324,10 @@ export class LyricsRenderer {
     this.canvas.style.cursor = 'grabbing'
   }
 
+  private readonly onTouchDrag = (e: TouchEvent): void => {
+    if (this.dragging && e.cancelable) e.preventDefault()
+  }
+
   private readonly onMove = (e: PointerEvent): void => {
     if (!this.dragging || e.pointerId !== this.dragPointer) return
     // A mouse release outside the window can arrive without pointerup (Alt-Tab,
@@ -346,7 +363,7 @@ export class LyricsRenderer {
     this.dragMoved = true
     this.dragNdc = {
       x: clamp(this.dragOrigin.x + (dx / this.width) * 2 * this.dragScale, -0.95, 0.95),
-      y: clamp(this.dragOrigin.y - (dy / this.height) * 2 * this.dragScale, -0.95, 0.95)
+      y: clamp(this.dragOrigin.y - (dy / this.height) * 2 * this.dragScale, -0.95, 0.95),
     }
   }
 
@@ -381,7 +398,7 @@ export class LyricsRenderer {
       bevelThickness: BEVEL,
       bevelSize: BEVEL * 0.8,
       bevelSegments: 3,
-      curveSegments: 2
+      curveSegments: 2,
     })
     g.translate(0, 0, -DEPTH / 2)
     return { g, w: glyph.w }
@@ -392,13 +409,52 @@ export class LyricsRenderer {
     const mat = new THREE.MeshStandardMaterial({
       transparent: true,
       metalness: METAL,
-      roughness: ROUGH
+      roughness: ROUGH,
     })
     const shadowMat = new THREE.MeshBasicMaterial({
       color: 0x000000,
       transparent: true,
-      opacity: 0.55
+      opacity: 0.55,
     })
+    const subMat = mat.clone()
+    const cut = { value: 0 },
+      karaoke = { value: 0 },
+      words: Built['words'] = []
+    if (l.words?.length) {
+      const { family, weight } = fontOf(this.style?.font ?? LYRICS_FONTS[0].id)
+      const c = document.createElement('canvas').getContext('2d')!
+      c.font = `${weight} 256px "${family}","Noto Sans SC",sans-serif`
+      const center = Math.ceil(c.measureText(l.text).width) / 512
+      for (const word of l.words)
+        words.push({
+          t: word.t,
+          end: word.end,
+          x0: c.measureText(l.text.slice(0, word.from)).width / 256 - center,
+          x1: c.measureText(l.text.slice(0, word.to)).width / 256 - center,
+        })
+      mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uLyricCut = cut
+        shader.uniforms.uLyricKaraoke = karaoke
+        shader.vertexShader =
+          'varying float vLyricX;\n' +
+          shader.vertexShader.replace(
+            '#include <begin_vertex>',
+            '#include <begin_vertex>\nvLyricX=position.x;'
+          )
+        shader.fragmentShader =
+          'varying float vLyricX;uniform float uLyricCut;uniform float uLyricKaraoke;\n' +
+          shader.fragmentShader
+            .replace(
+              '#include <color_fragment>',
+              '#include <color_fragment>\nfloat lyricFill=1.-smoothstep(uLyricCut-.006,uLyricCut+.006,vLyricX);diffuseColor.rgb=mix(diffuseColor.rgb,mix(vec3(.22),diffuseColor.rgb,lyricFill),uLyricKaraoke);'
+            )
+            .replace(
+              '#include <emissivemap_fragment>',
+              '#include <emissivemap_fragment>\ntotalEmissiveRadiance*=mix(1.,.15+.85*lyricFill,uLyricKaraoke);'
+            )
+      }
+      mat.customProgramCacheKey = () => 'lyrics-word-v1'
+    }
     let w = 0
     const add = (text: string, scale: number, y: number): void => {
       if (!text) return
@@ -410,7 +466,7 @@ export class LyricsRenderer {
       grp.add(shadowMesh)
 
       // 主体 3D 挤出网格
-      const mesh = new THREE.Mesh(g, mat)
+      const mesh = new THREE.Mesh(g, scale === 1 ? mat : subMat)
       mesh.position.y = y
       mesh.scale.setScalar(scale)
       grp.add(mesh)
@@ -419,7 +475,7 @@ export class LyricsRenderer {
     add(l.text, 1, l.sub ? 0.3 : 0)
     add(l.sub, SUB_SCALE, -0.55)
     this.root.add(grp)
-    l.o = { grp, mat, shadowMat, w: w || 1 }
+    l.o = { grp, mat, shadowMat, subMat, w: w || 1, cut, karaoke, words }
   }
 
   private free(l: Line): void {
@@ -429,6 +485,7 @@ export class LyricsRenderer {
     })
     l.o.mat.dispose()
     l.o.shadowMat.dispose()
+    l.o.subMat.dispose()
     this.root.remove(l.o.grp)
     l.o = null
   }
@@ -452,7 +509,7 @@ export class LyricsRenderer {
         return {
           x: pxToWorldX,
           y: -this.halfH * POSITION_OFFSET.bottom + pxToWorldY,
-          z: pxToWorldZ
+          z: pxToWorldZ,
         }
       case 'custom':
         return { x: s.offset.x * this.halfW, y: s.offset.y * this.halfH, z: pxToWorldZ }
@@ -525,12 +582,25 @@ export class LyricsRenderer {
       o.grp.rotation.x = -a
       o.grp.scale.setScalar(scale)
       const m = o.mat
+      o.karaoke.value = i === idx && o.words.length ? 1 : 0
+      if (o.karaoke.value) {
+        let x = o.words[0]!.x0
+        for (const word of o.words) {
+          const p = wordProgress({ ...word, text: '', from: 0, to: 0 }, timeSec)
+          x = word.x0 + (word.x1 - word.x0) * p
+          if (timeSec < word.end) break
+        }
+        o.cut.value = x
+      }
       m.color.lerpColors(this.cI, this.cA, act)
       // 基础自发光让远离中心的行也保持可读，不会在暗色舞台上糊成灰色
       m.emissive.lerpColors(this.cI, this.cA, act).multiplyScalar(EMISSIVE_BASE + GLOW * act)
       m.opacity = op
       m.metalness = METAL
       m.roughness = ROUGH
+      o.subMat.color.copy(m.color)
+      o.subMat.emissive.copy(m.emissive)
+      o.subMat.opacity = m.opacity
       o.shadowMat.opacity = s.shadow ? op * 0.55 : 0
     }
   }

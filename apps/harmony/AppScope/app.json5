@@ -1,0 +1,10 @@
+{
+  "app": {
+    "bundleName": "org.b5_software.justaplayer",
+    "vendor": "B5-Software",
+    "versionCode": 102,
+    "versionName": "0.1.2",
+    "icon": "$media:layered_image",
+    "label": "$string:app_name"
+  }
+}

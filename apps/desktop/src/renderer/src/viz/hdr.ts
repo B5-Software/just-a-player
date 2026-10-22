@@ -2,13 +2,14 @@
 import * as THREE from 'three'
 import { create } from 'zustand'
 import { useSettings } from '../settings/store'
+import { NativeHdrPresenter, type NativeShaderFrame } from './native-hdr'
 interface FloatGL extends WebGL2RenderingContext {
   drawingBufferStorage?: (format: number, width: number, height: number) => void
 }
 export const useHdr = create<{ supported: boolean; active: boolean; reason: string }>(() => ({
   supported: false,
   active: false,
-  reason: '正在检查显示器与渲染器…'
+  reason: '正在检查显示器与渲染器…',
 }))
 let devicePromise: Promise<GPUDevice> | null = null,
   failure = ''
@@ -43,6 +44,7 @@ function device(): Promise<GPUDevice> {
  * WebGPU canvas. No full-frame CPU readback or second scene renderer is used.
  */
 export class HdrPresenter {
+  private readonly native: NativeHdrPresenter | null
   readonly canvas = document.createElement('canvas')
   private gpu: GPUDevice | null = null
   private context: GPUCanvasContext | null = null
@@ -58,6 +60,7 @@ export class HdrPresenter {
     host: HTMLElement,
     private readonly transparent = false
   ) {
+    this.native = window.jap.nativeHdr && !transparent ? new NativeHdrPresenter() : null
     this.canvas.style.cssText =
       'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;visibility:hidden;z-index:1'
     this.canvas.setAttribute('aria-hidden', 'true')
@@ -86,7 +89,7 @@ export class HdrPresenter {
         format: 'rgba16float',
         colorSpace: 'srgb',
         toneMapping: { mode: 'extended' },
-        alphaMode: this.transparent ? 'premultiplied' : 'opaque'
+        alphaMode: this.transparent ? 'premultiplied' : 'opaque',
       })
       if (context.getConfiguration()?.toneMapping?.mode !== 'extended')
         throw new Error('运行时不支持扩展亮度输出')
@@ -94,7 +97,7 @@ export class HdrPresenter {
       const pipeline = await gpu.createRenderPipelineAsync({
         layout: 'auto',
         vertex: { module, entryPoint: 'vertex' },
-        fragment: { module, entryPoint: 'fragment', targets: [{ format: 'rgba16float' }] }
+        fragment: { module, entryPoint: 'fragment', targets: [{ format: 'rgba16float' }] },
       })
       if (this.disposed) {
         context.unconfigure()
@@ -110,7 +113,29 @@ export class HdrPresenter {
       this.pending = false
     }
   }
-  configure(renderer: THREE.WebGLRenderer, report = false, offline = false): boolean {
+  configure(
+    renderer: THREE.WebGLRenderer,
+    report = false,
+    offline = false,
+    shader?: NativeShaderFrame
+  ): boolean {
+    if (window.jap.nativeHdr) {
+      this.hide()
+      renderer.toneMapping = THREE.ACESFilmicToneMapping
+      if (this.native) {
+        const status = this.native.configure(offline, shader)
+        if (report) {
+          const old = useHdr.getState()
+          if (
+            old.supported !== status.supported ||
+            old.active !== status.active ||
+            old.reason !== status.reason
+          )
+            useHdr.setState(status)
+        }
+      }
+      return false
+    }
     const gl = renderer.getContext() as FloatGL
     const display = matchMedia('(dynamic-range: high)').matches
     const capable =
@@ -149,7 +174,7 @@ export class HdrPresenter {
       const reason = failure
         ? `HDR 不可用：${failure}`
         : !display
-          ? '当前屏幕未启用或不支持 HDR；请先在 Windows 显示设置中开启。'
+          ? '当前屏幕未启用或不支持 HDR；请检查系统显示设置。'
           : !capable
             ? '当前运行时或 GPU 不支持浮点 HDR 输出。'
             : this.active
@@ -183,11 +208,11 @@ export class HdrPresenter {
             GPUTextureUsage.COPY_DST |
             GPUTextureUsage.TEXTURE_BINDING |
             GPUTextureUsage.RENDER_ATTACHMENT |
-            GPUTextureUsage.COPY_SRC
+            GPUTextureUsage.COPY_SRC,
         })
         this.binding = gpu.createBindGroup({
           layout: this.pipeline.getBindGroupLayout(0),
-          entries: [{ binding: 0, resource: this.image.createView() }]
+          entries: [{ binding: 0, resource: this.image.createView() }],
         })
       }
       gpu.queue.copyExternalImageToTexture(
@@ -202,9 +227,9 @@ export class HdrPresenter {
               view: this.context.getCurrentTexture().createView(),
               clearValue: [0, 0, 0, this.transparent ? 0 : 1],
               loadOp: 'clear',
-              storeOp: 'store'
-            }
-          ]
+              storeOp: 'store',
+            },
+          ],
         })
       pass.setPipeline(this.pipeline)
       pass.setBindGroup(0, this.binding!)
@@ -219,6 +244,14 @@ export class HdrPresenter {
       return false
     }
   }
+  presentNative(
+    shader: NativeShaderFrame | undefined,
+    width: number,
+    height: number,
+    cover: HTMLCanvasElement | null
+  ): boolean {
+    return this.native?.present(shader, width, height, cover) ?? false
+  }
   /** Mirror the same completed HDR frame; never resize/re-render its GL source. */
   mirror(source: HdrPresenter, canvas: HTMLCanvasElement): boolean {
     if (!source.active) {
@@ -230,6 +263,7 @@ export class HdrPresenter {
     return this.present(canvas)
   }
   dispose(): void {
+    this.native?.dispose()
     this.disposed = true
     presenters.delete(this)
     this.image?.destroy()

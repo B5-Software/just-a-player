@@ -1,4 +1,5 @@
-import { app, dialog, type BrowserWindow } from 'electron'
+import { showOpenDialog } from './dialogs'
+import { app, type BrowserWindow } from 'electron'
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
@@ -58,7 +59,7 @@ function faces(data: Buffer): Buffer[] {
         tag: data.toString('ascii', row, row + 4),
         checksum: data.readUInt32BE(row + 4),
         start,
-        length
+        length,
       }
     }).filter((t) => t.tag !== 'DSIG')
     const size = 12 + tables.length * 16 + tables.reduce((sum, t) => sum + ((t.length + 3) & ~3), 0)
@@ -97,10 +98,10 @@ function faces(data: Buffer): Buffer[] {
 export async function importFonts(
   win: BrowserWindow
 ): Promise<{ fonts: ImportedFont[]; errors: string[] }> {
-  const picked = await dialog.showOpenDialog(win, {
+  const picked = await showOpenDialog(win, {
     title: '导入字体',
     properties: ['openFile', 'multiSelections'],
-    filters: [{ name: '字体', extensions: ['ttf', 'otf', 'woff', 'woff2', 'ttc', 'otc'] }]
+    filters: [{ name: '字体', extensions: ['ttf', 'otf', 'woff', 'woff2', 'ttc', 'otc'] }],
   })
   const added: ImportedFont[] = [],
     errors: string[] = []
@@ -118,7 +119,7 @@ export async function importFonts(
           id,
           label: (font.fullName || font.familyName || basename(path)).slice(0, 100),
           family: `JAP-${id}`,
-          weight: 400
+          weight: 400,
         }
         if (listFonts().length >= 256 && !listFonts().some((f) => f.id === id))
           throw new Error('最多保留 256 款导入字体')

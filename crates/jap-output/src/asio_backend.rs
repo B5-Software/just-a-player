@@ -379,14 +379,7 @@ pub fn open(req: &OpenRequest, source: Box<dyn RenderSource>) -> Result<OpenedSt
     })
 }
 
-type Prepared = (
-    Driver,
-    Box<CallbackState>,
-    StreamConfig,
-    u32,
-    Box<Callbacks>,
-);
-fn prepare(id: &str, req: &OpenRequest, source: Box<dyn RenderSource>) -> Result<Prepared> {
+fn load_driver(id: &str) -> Result<Driver> {
     let clsid = GUID::try_from(id.trim_matches(['{', '}']))
         .map_err(|e| OutputError::Backend(e.to_string()))?;
     let mut ptr = ptr::null_mut();
@@ -412,6 +405,100 @@ fn prepare(id: &str, req: &OpenRequest, source: Box<dyn RenderSource>) -> Result
             "ASIO 驱动初始化失败；请确认设备已连接".into(),
         ));
     }
+    Ok(driver)
+}
+static FORMAT_CACHE: std::sync::OnceLock<
+    Mutex<std::collections::HashMap<String, Vec<StreamConfig>>>,
+> = std::sync::OnceLock::new();
+fn format_cache() -> &'static Mutex<std::collections::HashMap<String, Vec<StreamConfig>>> {
+    FORMAT_CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+fn cache_pcm_formats(id: &str, driver: &Driver) {
+    if format_cache().lock().unwrap().contains_key(id) {
+        return;
+    }
+    let Some(format) = driver.channel(0).ok().and_then(|kind| match kind {
+        16 => Some(SampleFormat::I16),
+        17 => Some(SampleFormat::I24Packed),
+        18 => Some(SampleFormat::I32),
+        19 => Some(SampleFormat::F32),
+        20 => Some(SampleFormat::F64),
+        27 => Some(SampleFormat::I24In32),
+        _ => None,
+    }) else {
+        return;
+    };
+    let channels = if driver.channel(1).ok() == driver.channel(0).ok() {
+        2
+    } else {
+        1
+    };
+    let mut formats = Vec::new();
+    for rate in [
+        8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000, 88200, 96000, 176400, 192000,
+        352800, 384000, 705600, 768000, 1411200, 1536000, 2822400, 3072000, 5644800, 6144000,
+    ] {
+        let code = unsafe {
+            driver.method::<unsafe extern "system" fn(*mut c_void, f64) -> i32>(12)(
+                driver.ptr,
+                f64::from(rate),
+            )
+        };
+        if check(code, "查询 ASIO 采样率").is_ok() {
+            formats.push(StreamConfig {
+                sample_rate: rate,
+                channels,
+                format,
+            });
+        }
+    }
+    format_cache()
+        .lock()
+        .unwrap()
+        .insert(id.to_owned(), formats);
+}
+pub fn probe_formats(id: Option<&str>) -> Result<Vec<StreamConfig>> {
+    let selected = list_devices()?
+        .into_iter()
+        .find(|d| id.is_none_or(|id| d.id == id))
+        .ok_or(OutputError::DeviceNotFound)?;
+    if let Some(formats) = format_cache().lock().unwrap().get(&selected.id).cloned() {
+        return Ok(formats);
+    }
+    thread::spawn(move || {
+        let _guard = DRIVER_LOCK
+            .try_lock()
+            .map_err(|_| OutputError::Backend("ASIO 正在播放；停止播放后可检测此驱动".into()))?;
+        unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
+            .ok()
+            .map_err(|e| OutputError::Backend(e.to_string()))?;
+        let result = (|| {
+            let driver = load_driver(&selected.id)?;
+            cache_pcm_formats(&selected.id, &driver);
+            Ok(format_cache()
+                .lock()
+                .unwrap()
+                .get(&selected.id)
+                .cloned()
+                .unwrap_or_default())
+        })();
+        unsafe { CoUninitialize() };
+        result
+    })
+    .join()
+    .map_err(|_| OutputError::Backend("ASIO 格式查询线程退出".into()))?
+}
+type Prepared = (
+    Driver,
+    Box<CallbackState>,
+    StreamConfig,
+    u32,
+    Box<Callbacks>,
+);
+fn prepare(id: &str, req: &OpenRequest, source: Box<dyn RenderSource>) -> Result<Prepared> {
+    let driver = load_driver(id)?;
+    cache_pcm_formats(id, &driver);
+    let ptr = driver.ptr;
     let dsd = req
         .candidates
         .first()
@@ -430,6 +517,7 @@ fn prepare(id: &str, req: &OpenRequest, source: Box<dyn RenderSource>) -> Result
             SampleFormat::I24In32 | SampleFormat::Dop32 => matches!(kind, 18 | 27),
             SampleFormat::I32 => kind == 18,
             SampleFormat::F32 => kind == 19,
+            SampleFormat::F64 => kind == 20,
             SampleFormat::DsdU8Lsb => kind == 32,
             SampleFormat::DsdU8Msb => kind == 33,
         };
@@ -551,6 +639,7 @@ mod tests {
         assert_eq!(std::mem::size_of::<ChannelInfo>(), 52);
         assert_eq!(std::mem::size_of::<Callbacks>(), 32);
         for (format, right_aligned) in [
+            (SampleFormat::F64, false),
             (SampleFormat::DsdU8Msb, false),
             (SampleFormat::DsdU8Lsb, false),
             (SampleFormat::Dop24, false),

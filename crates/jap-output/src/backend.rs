@@ -57,6 +57,9 @@ pub trait OutputBackend: Send + Sync {
 
     /// 列出设备在独占模式下接受的格式。
     fn probe_exclusive(&self, device_id: Option<&str>) -> Result<Vec<StreamConfig>>;
+    fn probe_formats(&self, _api: OutputApi, device_id: Option<&str>) -> Result<Vec<StreamConfig>> {
+        self.probe_exclusive(device_id)
+    }
 
     fn open(&self, request: &OpenRequest, source: Box<dyn RenderSource>) -> Result<OpenedStream>;
 }

@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict'
+import { parseLRC,wordProgress } from '../src/renderer/src/lyrics/parse.ts'
+const l=parseLRC('[offset:-6]\n[00:00.000]伍[00:00.693]佰[00:01.387] [00:02.080]&[00:02.774] [00:03.467]C[00:04.161]h[00:04.854]i[00:05.548]n[00:06.241]a[00:06.935] [00:07.628]B[00:08.322]l[00:09.015]u[00:09.709]e[00:10.402] [00:11.096]-[00:11.789] [00:12.483]再[00:13.176]度[00:13.870]重[00:14.563]相[00:15.257]逢[00:15.950]\n[00:15.950]作[00:16.644]词[00:17.337]：[00:18.031]伍[00:18.724]佰[00:19.418]\n[00:19.418]作曲：伍佰')
+assert.equal(l.length,3)
+assert.equal(l[0].text,'伍佰 & China Blue - 再度重相逢')
+assert.equal(l[0].words.length,23)
+assert.equal(l[0].t,.006)
+assert.equal(l[0].words[0].end,.699)
+assert.equal(l[1].text,'作词：伍佰')
+assert.ok(Math.abs(wordProgress(l[0].words[0],.3525)-.5)<1e-12)
+const repeated=parseLRC('[00:01.00][00:21.50]副歌\n[00:03]下一行')
+assert.deepEqual(repeated.map(l=>[l.t,l.text]),[[1,'副歌'],[3,'下一行'],[21.5,'副歌']])
+const angle=parseLRC('[00:10]<00:10>你<00:11>好<00:12>\n[00:12]你好 world')
+assert.equal(angle[0].text,'你好');assert.equal(angle[0].words[1].end,12)
+assert.equal(parseLRC('[00:01]原文\n[00:01]translation')[0].sub,'translation')
+assert.equal(parseLRC('[00:01]\n[00:01]歌词')[0].text,'歌词')
+assert.equal(parseLRC('[ti:标题]\n纯文本歌词')[0].text,'纯文本歌词')
+console.log('LRC: LDDC square stamps, enhanced angle stamps, repeats, offsets, translation, plain text passed')

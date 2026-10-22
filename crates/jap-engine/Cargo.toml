@@ -16,9 +16,10 @@ parking_lot.workspace = true
 rtrb.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+hound.workspace = true
+rubato = "=0.16.2"
 
 [dev-dependencies]
-hound.workspace = true
 sha2.workspace = true
 
 [lints]

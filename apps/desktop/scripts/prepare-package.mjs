@@ -87,7 +87,7 @@ const metadata = JSON.parse(
   })
 )
 for (const crate of metadata.packages)
-  if (crate.source) {
+  if (crate.source || /[/\\]vendor[/\\]/.test(crate.manifest_path)) {
     licenseFiles(
       dirname(crate.manifest_path),
       join(notices, 'rust', crate.name + '-' + crate.version)

@@ -1,0 +1,11 @@
+{
+  "name": "MuseScore General HQ",
+  "version": "0.2.1",
+  "source": "https://deb.debian.org/debian/pool/main/m/musescore-general-soundfont/musescore-general-soundfont_0.2.1.orig.tar.xz",
+  "sourceSha256": "0e481d40ac7114d6aef5bdcf7d0246829b8f8873de02049896cd120d8490bcae",
+  "file": "MuseScore_General_HQ.sf2",
+  "sha256": "985680908c60c082919abdb27708b36726567ddc200b2bb55a62471c37e4fa07",
+  "bytes": 489517354,
+  "license": "MIT",
+  "author": "S. Christian Collins, Frank Wen, Michael Cowgill and contributors"
+}

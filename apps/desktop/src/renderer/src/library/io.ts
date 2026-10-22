@@ -1,12 +1,13 @@
-import { dirName, isAudioPath } from '@shared/audio'
+import { dirName, isAudioPath, discTrack } from '@shared/audio'
 import { decodeText } from '../lib/text'
+import { expandDiscItems } from './discs'
 import {
   useLibrary,
   displayTitle,
   makeItem,
   makeList,
   type Playlist,
-  type TrackItem
+  type TrackItem,
 } from './store'
 
 export type ExportFormat = 'm3u' | 'm3u-relative' | 'json'
@@ -22,6 +23,7 @@ function isAbsolute(path: string): boolean {
 
 /** Relative paths retain POSIX case and separators; Windows volumes remain case-insensitive. */
 export function relativePath(fromDir: string, target: string): string {
+  if (discTrack(target)) return target
   if (fromDir.startsWith('/') && target.startsWith('/')) {
     const from = fromDir.split('/').filter(Boolean)
     const to = target.split('/').filter(Boolean)
@@ -69,8 +71,8 @@ function buildJson(list: Playlist): string {
         title,
         artist,
         album,
-        durationMs
-      }))
+        durationMs,
+      })),
     },
     null,
     2
@@ -104,19 +106,23 @@ function parseM3U(text: string, baseDir: string, name: string): Playlist {
     if (line.startsWith('#')) continue
     const posix = baseDir.startsWith('/')
     const normalized = posix ? line.replace(/\\/g, '/') : line.replace(/\//g, '\\')
-    const path = isAbsolute(line) ? normalized : `${baseDir}${posix ? '/' : '\\'}${normalized}`
+    const path = discTrack(line)
+      ? line
+      : isAbsolute(line)
+        ? normalized
+        : `${baseDir}${posix ? '/' : '\\'}${normalized}`
     if (!isAudioPath(path)) continue
     const [artist, title] = pending?.label.includes(' - ')
       ? [
           pending.label.split(' - ')[0]!.trim(),
-          pending.label.split(' - ').slice(1).join(' - ').trim()
+          pending.label.split(' - ').slice(1).join(' - ').trim(),
         ]
       : [null, pending?.label || null]
     items.push(
       makeItem(path, {
         title,
         artist,
-        durationMs: pending && pending.seconds > 0 ? pending.seconds * 1000 : null
+        durationMs: pending && pending.seconds > 0 ? pending.seconds * 1000 : null,
       })
     )
     pending = null
@@ -144,7 +150,7 @@ function parseJson(text: string, fallbackName: string): Playlist | null {
           title: typeof i.title === 'string' ? i.title : null,
           artist: typeof i.artist === 'string' ? i.artist : null,
           album: typeof i.album === 'string' ? i.album : null,
-          durationMs: typeof i.durationMs === 'number' ? i.durationMs : null
+          durationMs: typeof i.durationMs === 'number' ? i.durationMs : null,
         })
       )
     return makeList(typeof data.name === 'string' ? data.name : fallbackName, items)
@@ -170,6 +176,7 @@ export async function importPlaylists(paths?: string[]): Promise<number> {
       ? parseJson(text, name)
       : parseM3U(text, dirName(file), name)
     if (!list) continue
+    list.items = await expandDiscItems(list.items)
     useLibrary.getState().importList(list)
     count++
   }

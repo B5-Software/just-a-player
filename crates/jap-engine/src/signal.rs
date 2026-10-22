@@ -71,9 +71,9 @@ pub fn build_with_controls(
                 "DSD → PCM · CIC4 + Blackman FIR 低通 / 64 倍抽取".into()
             }
         } else if track.lossless {
-            "Symphonia · 64 位浮点内部格式，整数源往返无损".into()
+            "64 位浮点内部格式，支持的整数源往返无损".into()
         } else {
-            "Symphonia · 有损解码".into()
+            "有损音频解码 · 64 位浮点内部格式".into()
         },
         format: None,
         fidelity: if src.is_dsd() && !config.format.is_dsd() {
@@ -85,6 +85,23 @@ pub fn build_with_controls(
         },
     });
 
+    let decoded_rate = if src.is_dsd() {
+        src.sample_rate / 64
+    } else {
+        src.sample_rate
+    };
+    if !config.format.is_dsd() && decoded_rate != config.sample_rate {
+        nodes.push(SignalNode {
+            kind: NodeKind::Resampler,
+            title: "自动采样率适配 · 非 bit-perfect".into(),
+            detail: format!(
+                "{} → {} Hz · 64 位 FFT 抗混叠滤波",
+                decoded_rate, config.sample_rate
+            ),
+            format: Some(config.audio_format()),
+            fidelity: Fidelity::Transformed,
+        });
+    }
     if dsp.enabled && !config.format.is_dsd() {
         nodes.push(SignalNode {
             kind: NodeKind::Dsp,
@@ -137,7 +154,12 @@ pub fn build_with_controls(
         title: if config.format.is_dsd() {
             "DSD 传输封装".into()
         } else {
-            "输出量化".into()
+            if exact {
+                "输出量化"
+            } else {
+                "输出位深适配 · 非 bit-perfect"
+            }
+            .into()
         },
         detail: describe_sample_format(config.format).into(),
         format: Some(config.audio_format()),
@@ -227,10 +249,11 @@ fn describe_sample_format(format: SampleFormat) -> &'static str {
         SampleFormat::I24In32 => "24-bit 整数（左对齐于 32 位容器）",
         SampleFormat::I32 => "32-bit 整数",
         SampleFormat::F32 => "32-bit 浮点",
+        SampleFormat::F64 => "64-bit 浮点",
         SampleFormat::Dop24 => "DoP 1.1 · 24-bit 载波 · 原始 DSD 不变",
         SampleFormat::Dop32 => "DoP 1.1 · 24-in-32 载波 · 原始 DSD 不变",
-        SampleFormat::DsdU8Lsb => "ASIO 原生 DSD · LSB-first",
-        SampleFormat::DsdU8Msb => "ASIO 原生 DSD · MSB-first",
+        SampleFormat::DsdU8Lsb => "原生 DSD · LSB-first",
+        SampleFormat::DsdU8Msb => "原生 DSD · MSB-first",
     }
 }
 

@@ -1,3 +1,5 @@
+import { Range } from '../ui/Range'
+import { Select } from '../ui/Select'
 import { useState } from 'react'
 import type { DspConfig } from '@shared/protocol/DspConfig'
 import { DEFAULT_DSP, DSP_PRESETS, EQ_HZ, useDsp } from '../audio/dsp-store'
@@ -11,7 +13,7 @@ function Slider({
   max,
   step = 0.1,
   unit = '',
-  onChange
+  onChange,
 }: {
   label: string
   value: number
@@ -30,9 +32,8 @@ function Slider({
           {unit}
         </output>
       </span>
-      <input
+      <Range
         aria-label={label}
-        type="range"
         min={min}
         max={max}
         step={step}
@@ -108,7 +109,7 @@ export function DspPanel(): React.JSX.Element {
       )}
       <label className="flex items-center justify-between gap-3 text-xs text-fg-muted">
         音效预置
-        <select
+        <Select
           aria-label="音效预置"
           defaultValue=""
           disabled={dsd}
@@ -125,7 +126,7 @@ export function DspPanel(): React.JSX.Element {
           {[...DSP_PRESETS, ...custom].map((p) => (
             <option key={p.name}>{p.name}</option>
           ))}
-        </select>
+        </Select>
       </label>
       <fieldset disabled={dsd} className="min-w-0 space-y-4 disabled:opacity-50">
         <legend className="text-xs font-medium text-fg-subtle">10 段均衡器 · ±12 dB</legend>
@@ -149,14 +150,14 @@ export function DspPanel(): React.JSX.Element {
           {EQ_HZ.map((hz, i) => (
             <label key={hz} className="flex flex-col items-center gap-2 text-[10px] text-fg-muted">
               <output className="font-mono text-fg">{config.eqDb[i]!.toFixed(1)}</output>
-              <input
+              <Range
                 aria-label={`EQ ${hz} Hz`}
-                type="range"
                 min={-12}
                 max={12}
                 step={0.5}
                 value={config.eqDb[i]}
-                style={{ writingMode: 'vertical-lr', direction: 'rtl', height: 112, width: 20 }}
+                vertical
+                style={{ height: 112, width: 32 }}
                 className="accent-[rgb(var(--accent))]"
                 onChange={(e) => {
                   const eqDb: DspConfig['eqDb'] = [...config.eqDb]
@@ -227,7 +228,7 @@ export function DspPanel(): React.JSX.Element {
           onClick={() => {
             const next = [
               ...custom.filter((p) => p.name !== name.trim()),
-              { name: name.trim(), patch: config }
+              { name: name.trim(), patch: config },
             ].slice(-20)
             setCustom(next)
             localStorage.setItem('jap.dsp.presets', JSON.stringify(next))

@@ -1,3 +1,4 @@
+import { surfacePixelRatio } from '../../lib/pixel-ratio'
 import * as THREE from 'three'
 import { GLSL_BANDS } from '../glsl'
 import { disposeScene, glowTexture, type SceneDef, type VizScene } from './common'
@@ -94,10 +95,10 @@ function create(): VizScene {
     uTreble: { value: 0 },
     uBeat: { value: 0 },
     uBeatR: { value: 2 },
-    uPx: { value: Math.min(window.devicePixelRatio, 2) },
+    uPx: { value: Math.min(surfacePixelRatio(), 2) },
     uAccent: { value: new THREE.Color() },
     uSecond: { value: new THREE.Color() },
-    uThird: { value: new THREE.Color() }
+    uThird: { value: new THREE.Color() },
   }
   const points = new THREE.Points(
     geometry,
@@ -107,7 +108,7 @@ function create(): VizScene {
       fragmentShader: galaxyFragment,
       transparent: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending
+      blending: THREE.AdditiveBlending,
     })
   )
   points.frustumCulled = false
@@ -117,7 +118,12 @@ function create(): VizScene {
 
   const glow = glowTexture()
   const core = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: glow, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
+    new THREE.SpriteMaterial({
+      map: glow,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
   )
   scene.add(core)
 
@@ -143,19 +149,28 @@ function create(): VizScene {
       core.scale.setScalar(1.8 + a.bass * 2 + a.beat * 1.5)
       core.material.opacity = 0.3 + a.beat * 0.4
 
-      camera.position.set(input.pointer.x * 3, 7.5 - input.pointer.y * 2 + Math.sin(a.time * 0.13) * 1.2, 13.5)
+      camera.position.set(
+        input.pointer.x * 3,
+        7.5 - input.pointer.y * 2 + Math.sin(a.time * 0.13) * 1.2,
+        13.5
+      )
       camera.lookAt(0, 0, 0)
     },
     resize(w, h) {
       camera.aspect = w / h
       camera.updateProjectionMatrix()
-      uniforms.uPx.value = Math.min(window.devicePixelRatio, 2)
+      uniforms.uPx.value = Math.min(surfacePixelRatio(), 2)
     },
     dispose() {
       glow.dispose()
       disposeScene(scene)
-    }
+    },
   }
 }
 
-export const galaxyScene: SceneDef = { id: 'galaxy', name: '星云漩涡', hint: '九万颗星尘随频谱呼吸的旋臂星系', create }
+export const galaxyScene: SceneDef = {
+  id: 'galaxy',
+  name: '星云漩涡',
+  hint: '九万颗星尘随频谱呼吸的旋臂星系',
+  create,
+}

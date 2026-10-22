@@ -1,6 +1,6 @@
 import { type LyricsPosition } from '@shared/settings'
 import { motion } from 'motion/react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { fontOf, ensureFont } from '../fonts/catalog'
 import { useLivePosition } from '../engine/clock'
 import { usePlayer } from '../engine/store'
@@ -8,14 +8,79 @@ import { deriveAccent, rgbToHex } from '../theme/color'
 import { useActiveAccents } from '../theme/store'
 import { useSettings } from '../settings/store'
 import { useUi } from '../ui/store'
-import { parseLRC, type LyricLine } from './parse'
+import { parseLRC, wordProgress, type LyricLine } from './parse'
 import { useLyrics } from './store'
 import { PREVIEW_LYRICS } from './preview'
 
 const LINE_HEIGHT = 58
 
+function WordLine({
+  line,
+  time,
+  active,
+  color,
+}: {
+  line: LyricLine
+  time: number
+  active: boolean
+  color: string
+}): React.JSX.Element {
+  const track = useRef<HTMLSpanElement>(null)
+  useLayoutEffect(() => {
+    const element = track.current
+    if (!element) return
+    const viewport = element.parentElement!
+    let current = 0
+    for (let i = 0; i < (line.words?.length ?? 0); i++) if (time >= line.words![i]!.t) current = i
+    const word = element.children[current] as HTMLElement | undefined
+    const center = word
+      ? word.offsetLeft + word.offsetWidth * wordProgress(line.words![current]!, time)
+      : 0
+    const offset = active
+      ? Math.max(
+          0,
+          Math.min(element.scrollWidth - viewport.clientWidth, center - viewport.clientWidth * 0.55)
+        )
+      : 0
+    element.style.transform = `translateX(${-offset}px)`
+  }, [line, time, active])
+  return (
+    <span
+      className="block max-w-full overflow-hidden"
+      style={{ filter: line.words?.length ? 'drop-shadow(0 2px 5px rgba(0,0,0,.65))' : undefined }}
+    >
+      <span
+        ref={track}
+        className="relative inline-block whitespace-pre"
+        style={{ willChange: active ? 'transform' : undefined }}
+      >
+        {line.words?.length
+          ? line.words.map((word, i) => {
+              const p = active ? wordProgress(word, time) : time >= word.end ? 1 : 0
+              return (
+                <span
+                  key={i}
+                  data-lyric-word
+                  style={{
+                    color: 'transparent',
+                    textShadow: 'none',
+                    backgroundClip: 'text',
+                    WebkitBackgroundClip: 'text',
+                    backgroundImage: `linear-gradient(90deg, ${color} ${p * 100}%, rgba(255,255,255,.55) ${p * 100}%)`,
+                  }}
+                >
+                  {word.text}
+                </span>
+              )
+            })
+          : line.text}
+      </span>
+    </span>
+  )
+}
+
 export function Lyrics2D({
-  frozenTime = null
+  frozenTime = null,
 }: { frozenTime?: number | null } = {}): React.JSX.Element | null {
   const visible = useSettings((s) => s.lyricsVisible)
   const position = useSettings((s) => s.lyricsPosition)
@@ -68,7 +133,7 @@ export function Lyrics2D({
     if (current.moved)
       useSettings.getState().update({
         lyricsPosition: 'custom',
-        lyricsOffset: { ...useSettings.getState().lyricsOffset, ...current.offset }
+        lyricsOffset: { ...useSettings.getState().lyricsOffset, ...current.offset },
       })
     setDragOffset(null)
   }, [])
@@ -101,7 +166,7 @@ export function Lyrics2D({
       const rect = e.currentTarget.getBoundingClientRect()
       const origin = {
         x: ((rect.left + rect.width / 2) / window.innerWidth) * 2 - 1,
-        y: 1 - ((rect.top + rect.height / 2) / window.innerHeight) * 2
+        y: 1 - ((rect.top + rect.height / 2) / window.innerHeight) * 2,
       }
       drag.current = {
         id: e.pointerId,
@@ -109,7 +174,7 @@ export function Lyrics2D({
         start: { x: e.clientX, y: e.clientY },
         origin,
         offset: origin,
-        moved: false
+        moved: false,
       }
       e.currentTarget.setPointerCapture(e.pointerId)
     },
@@ -130,7 +195,7 @@ export function Lyrics2D({
       current.moved = true
       current.offset = {
         x: Math.min(0.95, Math.max(-0.95, current.origin.x + (dx / window.innerWidth) * 2)),
-        y: Math.min(0.95, Math.max(-0.95, current.origin.y - (dy / window.innerHeight) * 2))
+        y: Math.min(0.95, Math.max(-0.95, current.origin.y - (dy / window.innerHeight) * 2)),
       }
       setDragOffset(current.offset)
     },
@@ -170,15 +235,15 @@ export function Lyrics2D({
       ? {
           left: `${(effectiveOffset.x * 0.5 + 0.5) * 100}%`,
           top: `${(-effectiveOffset.y * 0.5 + 0.5) * 100}%`,
-          transform: 'translate(-50%, -50%)'
+          transform: 'translate(-50%, -50%)',
         }
       : position === 'right' || position === 'left'
         ? {
-            transform: `translate(${effectiveOffset.x || 0}px, calc(-50% + ${effectiveOffset.y || 0}px))`
+            transform: `translate(${effectiveOffset.x || 0}px, calc(-50% + ${effectiveOffset.y || 0}px))`,
           }
         : position === 'center'
           ? {
-              transform: `translate(calc(-50% + ${effectiveOffset.x || 0}px), calc(-50% + ${effectiveOffset.y || 0}px))`
+              transform: `translate(calc(-50% + ${effectiveOffset.x || 0}px), calc(-50% + ${effectiveOffset.y || 0}px))`,
             }
           : {}
 
@@ -186,13 +251,13 @@ export function Lyrics2D({
   const textShadowStyle: React.CSSProperties = shadow
     ? {
         textShadow:
-          '0 2px 10px rgba(0,0,0,0.92), 0 0 20px rgba(0,0,0,0.85), 0 4px 24px rgba(0,0,0,0.7), 0 0 3px rgba(0,0,0,0.95)'
+          '0 2px 10px rgba(0,0,0,0.92), 0 0 20px rgba(0,0,0,0.85), 0 4px 24px rgba(0,0,0,0.7), 0 0 3px rgba(0,0,0,0.95)',
       }
     : {}
 
   const activeShadowStyle: React.CSSProperties = shadow
     ? {
-        textShadow: `0 2px 12px rgba(0,0,0,0.95), 0 0 24px ${activeColor}88, 0 0 4px rgba(0,0,0,0.9)`
+        textShadow: `0 2px 12px rgba(0,0,0,0.95), 0 0 24px ${activeColor}88, 0 0 4px rgba(0,0,0,0.9)`,
       }
     : {}
 
@@ -209,7 +274,7 @@ export function Lyrics2D({
         style={{
           fontFamily: `"${fontDef.family}", "Noto Sans SC", sans-serif`,
           touchAction: 'none',
-          ...(dragOffset ? customStyle : {})
+          ...(dragOffset ? customStyle : {}),
         }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -230,7 +295,7 @@ export function Lyrics2D({
                 className="text-2xl font-bold tracking-wide"
                 style={{ color: activeColor, fontSize: 24 * size, ...activeShadowStyle }}
               >
-                {cur.text}
+                <WordLine line={cur} time={currentTimeSec} active color={activeColor} />
               </span>
               {cur.sub && (
                 <span
@@ -266,7 +331,7 @@ export function Lyrics2D({
       style={{
         fontFamily: `"${fontDef.family}", "Noto Sans SC", sans-serif`,
         ...customStyle,
-        touchAction: 'none'
+        touchAction: 'none',
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -289,7 +354,7 @@ export function Lyrics2D({
           <div
             className="flex flex-col transition-transform duration-300 ease-out"
             style={{
-              transform: `translateY(${130 - (activeIndex >= 0 ? activeIndex : 0) * lineHeight}px)`
+              transform: `translateY(${130 - (activeIndex >= 0 ? activeIndex : 0) * lineHeight}px)`,
             }}
           >
             {lines.map((line, idx) => {
@@ -309,7 +374,7 @@ export function Lyrics2D({
                   }}
                 >
                   <span
-                    className={`line-clamp-1 transition-all ${
+                    className={`block overflow-hidden whitespace-nowrap transition-all ${
                       isActive
                         ? 'text-[26px] font-bold tracking-wide'
                         : 'text-[19px] font-semibold text-white/90'
@@ -318,10 +383,15 @@ export function Lyrics2D({
                       color: isActive ? activeColor : undefined,
                       opacity,
                       fontSize: (isActive ? 26 : 19) * size,
-                      ...(isActive ? activeShadowStyle : textShadowStyle)
+                      ...(isActive ? activeShadowStyle : textShadowStyle),
                     }}
                   >
-                    {line.text}
+                    <WordLine
+                      line={line}
+                      time={currentTimeSec}
+                      active={isActive}
+                      color={activeColor}
+                    />
                   </span>
                   {line.sub && (
                     <span

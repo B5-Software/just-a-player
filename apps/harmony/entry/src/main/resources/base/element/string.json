@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "HiFi · 音乐可视化"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "HiFi · 音乐可视化"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Just A Player"
+    }
+  ]
+}

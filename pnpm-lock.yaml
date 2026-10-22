@@ -166,6 +166,18 @@ importers:
 
   .: {}
 
+  apps/android:
+    devDependencies:
+      '@tailwindcss/vite':
+        specifier: ^4.3.3
+        version: 4.3.3(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0))
+      '@vitejs/plugin-react':
+        specifier: ^6.1.2
+        version: 6.1.2(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0))
+      vite:
+        specifier: ^8.3.4
+        version: 8.3.4(@types/node@24.19.2)(jiti@2.7.0)
+
   apps/desktop:
     dependencies:
       '@jap/engine':
@@ -271,6 +283,18 @@ importers:
       zustand:
         specifier: ^5.0.15
         version: 5.0.15(@types/react@19.3.0)(react@19.3.1)
+
+  apps/harmony:
+    devDependencies:
+      '@tailwindcss/vite':
+        specifier: ^4.2.1
+        version: 4.3.3(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0))
+      '@vitejs/plugin-react':
+        specifier: ^6.0.0
+        version: 6.1.2(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0))
+      vite:
+        specifier: ^8.3.4
+        version: 8.3.4(@types/node@24.19.2)(jiti@2.7.0)
 
   crates/jap-napi:
     devDependencies:

@@ -1,3 +1,4 @@
+import { Range } from './Range'
 import { motion } from 'motion/react'
 import type { ReactNode } from 'react'
 
@@ -5,7 +6,7 @@ export function Toggle({
   checked,
   onChange,
   label,
-  disabled = false
+  disabled = false,
 }: {
   checked: boolean
   onChange: (value: boolean) => void
@@ -42,7 +43,7 @@ export function Slider({
   step,
   onChange,
   format,
-  disabled = false
+  disabled = false,
 }: {
   label: string
   value: number
@@ -55,8 +56,7 @@ export function Slider({
 }): React.JSX.Element {
   return (
     <div className="flex items-center gap-3">
-      <input
-        type="range"
+      <Range
         aria-label={label}
         min={min}
         max={max}
@@ -77,7 +77,7 @@ export function Slider({
 export function SettingRow({
   title,
   hint,
-  children
+  children,
 }: {
   title: string
   hint?: string

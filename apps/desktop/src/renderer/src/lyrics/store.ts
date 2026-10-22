@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { decodeText } from '../lib/text'
 import { useSettings } from '../settings/store'
+import { engine } from '../engine/client'
 
-export type LyricsSource = 'imported' | 'sidecar'
+export type LyricsSource = 'imported' | 'sidecar' | 'embedded'
 
 interface LyricsState {
   path: string | null
@@ -14,7 +15,7 @@ export const useLyrics = create<LyricsState>(() => ({ path: null, text: null, so
 
 let token = 0
 
-/** 歌词来源优先级：用户导入（按曲目保存） > 同名 .lrc 侧车文件（可关闭）。 */
+/** 歌词来源优先级：用户导入 > 同名 .lrc 侧车文件 > 音频内嵌 LYRICS。 */
 export async function loadLyrics(path: string | null): Promise<void> {
   const id = ++token
   if (!path) {
@@ -29,7 +30,20 @@ export async function loadLyrics(path: string | null): Promise<void> {
     if (bytes) source = 'sidecar'
   }
   if (id !== token) return
-  useLyrics.setState({ path, text: bytes ? decodeText(bytes) : null, source })
+  let text = bytes ? decodeText(bytes) : null
+  if (!text) {
+    try {
+      const result = await engine.query({ type: 'embeddedLyrics', path })
+      if (result.type === 'lyrics' && result.text) {
+        text = result.text
+        source = 'embedded'
+      }
+    } catch {
+      /* Absent/invalid tags must not interrupt playback. */
+    }
+  }
+  if (id !== token) return
+  useLyrics.setState({ path, text, source })
 }
 
 /** 用户选择一个 LRC 文件，作为该曲目的歌词保存。 */

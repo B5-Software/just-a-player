@@ -1,3 +1,4 @@
+import { answerNextFileDialog } from './e2e-dialog-helper.mjs'
 // New-feature regression in real Electron; null audio output only.
 import { mkdirSync, writeFileSync, readFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -30,7 +31,7 @@ execFileSync(
     '2',
     '-c:a',
     'pcm_s24le',
-    wav
+    wav,
   ],
   { windowsHide: true }
 )
@@ -40,10 +41,10 @@ execFileSync(
   { windowsHide: true }
 )
 execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', wav, '-c:a', 'flac', flac], {
-  windowsHide: true
+  windowsHide: true,
 })
 execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', wav, '-c:a', 'dca', '-strict', '-2', dts], {
-  windowsHide: true
+  windowsHide: true,
 })
 writeFileSync(
   join(dir, '同名歌曲.lrc'),
@@ -77,7 +78,7 @@ const meta = Buffer.concat([
         'music:' + JSON.stringify({ musicName: 'NCM 流式测试', artist: [['B5', 1]], album: 'Rust' })
       )
     ).toString('base64')
-  )
+  ),
 ]).map((b) => b ^ 0x63)
 const size = (n) => {
   const b = Buffer.alloc(4)
@@ -93,14 +94,14 @@ writeFileSync(
     size(meta.length),
     meta,
     Buffer.alloc(13),
-    readFileSync(wav).map((b, i) => b ^ mask[i & 255])
+    readFileSync(wav).map((b, i) => b ^ mask[i & 255]),
   ])
 )
 const app = await electron.launch({
   executablePath: electronPath,
   args: ['.'],
   cwd: appDir,
-  env: { ...process.env, JAP_E2E: 'features' }
+  env: { ...process.env, JAP_E2E: 'features' },
 })
 const page = await app.firstWindow(),
   checks = {},
@@ -136,7 +137,7 @@ try {
       autoScan: false,
       lyricsVisible: true,
       lyricsFont: 'ma-shan-zheng',
-      renderFps: 0
+      renderFps: 0,
     })
     j.useViz.getState().setAuto(false)
   })
@@ -192,7 +193,7 @@ try {
   await page.keyboard.press('Tab')
   checks.focus = await page.evaluate(() => ({
     outline: getComputedStyle(document.activeElement).outlineColor,
-    accent: getComputedStyle(document.documentElement).getPropertyValue('--accent-focus').trim()
+    accent: getComputedStyle(document.documentElement).getPropertyValue('--accent-focus').trim(),
   }))
   assert(checks.focus.outline !== 'rgb(255, 255, 0)', 'System yellow focus remains')
   await page.screenshot({ path: join(out, 'accent-keyboard-focus.png') })
@@ -215,9 +216,7 @@ try {
   await page.evaluate(() => window.__jap.useViz.getState().setScene('orb'))
   await page.waitForTimeout(750)
   const video = join(out, 'render-test.mp4')
-  await app.evaluate(({ dialog }, path) => {
-    dialog.showSaveDialog = async () => ({ canceled: false, filePath: path })
-  }, video)
+  await answerNextFileDialog(page, video)
   const started = Date.now()
   await page.evaluate(async (path) => {
     await window.__jap.exportVideo({
@@ -231,7 +230,7 @@ try {
       outro: 0.5,
       start: 0,
       end: 2,
-      lyrics: '3d'
+      lyrics: '3d',
     })
   }, flac)
   await page.waitForFunction(
@@ -246,7 +245,7 @@ try {
   checks.renderMs = Date.now() - started
   for (const [key, name] of [
     ['__exportStage', 'stage-frame.png'],
-    ['__exportLyrics', 'lyrics-frame.png']
+    ['__exportLyrics', 'lyrics-frame.png'],
   ]) {
     const data = await worker.evaluate((key) => window[key], key)
     if (data) writeFileSync(join(out, name), Buffer.from(data.split(',')[1], 'base64'))
@@ -267,7 +266,7 @@ try {
     width: s.width,
     height: s.height,
     frames: s.nb_frames,
-    duration: s.duration
+    duration: s.duration,
   }))
   assert(
     probe.streams.some((s) => s.codec_name === 'h264' && s.width === 640 && s.height === 360),
@@ -294,11 +293,12 @@ try {
       video,
       '-frames:v',
       '1',
-      join(out, 'export-frame.png')
+      join(out, 'export-frame.png'),
     ],
     { windowsHide: true }
   )
   const completedSize = statSync(video).size
+  await answerNextFileDialog(page, video)
   const cancelJob = await page.evaluate(
     (path) =>
       window.__jap.exportVideo({
@@ -312,7 +312,7 @@ try {
         outro: 0,
         start: 0,
         end: 8,
-        lyrics: '3d'
+        lyrics: '3d',
       }),
     flac
   )
@@ -329,9 +329,7 @@ try {
   assert(statSync(video).size === completedSize, 'Cancellation damaged the completed video')
   checks.cancel = true
   const original = join(out, 'ncm-original.mkv')
-  await app.evaluate(({ dialog }, path) => {
-    dialog.showSaveDialog = async () => ({ canceled: false, filePath: path })
-  }, original)
+  await answerNextFileDialog(page, original)
   const ncmJob = await page.evaluate(
     (path) =>
       window.__jap.exportVideo({
@@ -346,7 +344,7 @@ try {
         start: 0,
         end: 1,
         lyrics: 'none',
-        audio: 'copy'
+        audio: 'copy',
       }),
     ncm
   )

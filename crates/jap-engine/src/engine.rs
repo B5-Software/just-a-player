@@ -65,6 +65,14 @@ impl Engine {
     }
 
     pub fn send(&self, command: Command) {
+        if let Command::SetMidi {
+            soundfont,
+            sample_rate,
+        } = command
+        {
+            jap_decode::midi::configure(soundfont, sample_rate);
+            return;
+        }
         let _ = self.tx.send(Msg::Command(command));
     }
 
@@ -96,6 +104,17 @@ impl Engine {
                     message: format!("{path}: {e}"),
                 },
             },
+            Query::DiscTracks { path } => jap_decode::disc::tracks(Path::new(&path))
+                .map_or_else(error_response, |tracks| QueryResponse::Tracks { tracks }),
+            Query::EmbeddedLyrics { path } => QueryResponse::Lyrics {
+                text: jap_decode::read_lyrics(Path::new(&path)),
+            },
+            Query::DeviceFormats { api, device_id } => self
+                .backend
+                .probe_formats(api, device_id.as_deref())
+                .map_or_else(error_response, |formats| QueryResponse::ExclusiveFormats {
+                    formats,
+                }),
         }
     }
 }
@@ -215,6 +234,12 @@ impl Core {
             Command::Seek { position_ms } => self.seek(position_ms),
             Command::SetOutput { config } => self.set_output(config),
             Command::SetDsp { config } => self.set_dsp(config),
+            Command::SetMidi {
+                soundfont,
+                sample_rate,
+            } => {
+                jap_decode::midi::configure(soundfont, sample_rate);
+            }
             Command::SetVolume { gain } => self.set_volume(gain),
             Command::ResetBuffer => self.reset_buffer(false),
             Command::AnalyzeQuality { path } => {
@@ -422,12 +447,17 @@ impl Core {
             DsdMode::Dop if self.output.api.is_exclusive() => {
                 vec![SampleFormat::Dop24, SampleFormat::Dop32]
             }
-            DsdMode::Native if matches!(self.output.api, OutputApi::Asio | OutputApi::Null) => {
+            DsdMode::Native
+                if matches!(
+                    self.output.api,
+                    OutputApi::Asio | OutputApi::UsbExclusive | OutputApi::Null
+                ) =>
+            {
                 vec![SampleFormat::DsdU8Msb, SampleFormat::DsdU8Lsb]
             }
             _ => {
                 return Err(
-                    "DoP 需要独占输出（WASAPI / ASIO / CoreAudio Hog / ALSA hw）；原生 DSD 需要支持 DSD 的 ASIO 驱动".into(),
+                    "DoP 需要独占输出；原生 DSD 需要支持 DSD 的 ASIO 驱动或 Android USB RAW_DATA 接口".into(),
                 );
             }
         };

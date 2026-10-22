@@ -17,11 +17,15 @@ wasapi.workspace = true
 windows = { workspace = true, features = ["Win32_Foundation", "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_System_Threading", "Win32_System_Com"] }
 winreg = "0.55"
 
-[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+[target.'cfg(any(target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))'.dependencies]
 cpal = "0.18.2"
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(all(target_os = "linux", not(target_env = "ohos")))'.dependencies]
 alsa = "0.11"
+
+[target.'cfg(any(target_os = "android", target_env = "ohos"))'.dependencies]
+libusb1-sys = { version = "0.7", features = ["vendored"] }
+libc = "0.2"
 
 [lints]
 workspace = true

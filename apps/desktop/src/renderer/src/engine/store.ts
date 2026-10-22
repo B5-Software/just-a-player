@@ -9,27 +9,37 @@ import { engine } from './client'
 const OUTPUT_KEY = 'jap.output'
 const DEFAULT_OUTPUT: OutputConfig = {
   api:
-    window.jap.platform === 'darwin'
-      ? 'coreAudio'
-      : window.jap.platform === 'linux'
-        ? 'alsaShared'
-        : 'wasapiShared',
+    window.jap.platform === 'ohos'
+      ? 'ohosShared'
+      : window.jap.platform === 'android'
+      ? 'androidShared'
+      : window.jap.platform === 'darwin'
+        ? 'coreAudio'
+        : window.jap.platform === 'linux'
+          ? 'alsaShared'
+          : 'wasapiShared',
   deviceId: null,
   bufferMs: 20,
-  dsdMode: 'pcm'
+  dsdMode: 'pcm',
 }
 
 function loadOutput(): OutputConfig {
+  if (window.jap.platform !== 'android' && new URLSearchParams(location.search).has('e2e'))
+    return { ...DEFAULT_OUTPUT, api: 'null' }
   try {
     const raw = localStorage.getItem(OUTPUT_KEY)
     if (raw) {
       const saved = JSON.parse(raw) as Partial<OutputConfig>
       const allowed =
-        window.jap.platform === 'darwin'
-          ? ['coreAudio', 'coreAudioExclusive', 'null']
-          : window.jap.platform === 'linux'
-            ? ['alsaShared', 'alsaExclusive', 'null']
-            : ['wasapiShared', 'wasapiExclusive', 'asio', 'null']
+        window.jap.platform === 'ohos'
+          ? ['ohosShared','usbExclusive','null']
+          : window.jap.platform === 'android'
+          ? ['androidShared', 'usbExclusive', 'null']
+          : window.jap.platform === 'darwin'
+            ? ['coreAudio', 'coreAudioExclusive', 'null']
+            : window.jap.platform === 'linux'
+              ? ['alsaShared', 'alsaExclusive', 'null']
+              : ['wasapiShared', 'wasapiExclusive', 'asio', 'null']
       return saved.api && allowed.includes(saved.api)
         ? { ...DEFAULT_OUTPUT, ...saved }
         : DEFAULT_OUTPUT
@@ -117,7 +127,7 @@ export const usePlayer = create<PlayerStore>((set, get) => ({
     const output = {
       ...previous,
       ...(patch.api && patch.api !== previous.api ? { deviceId: null } : {}),
-      ...patch
+      ...patch,
     }
     localStorage.setItem(OUTPUT_KEY, JSON.stringify(output))
     set({ output })
@@ -129,7 +139,7 @@ export const usePlayer = create<PlayerStore>((set, get) => ({
     const api = get().output.api
     const response = await engine.query({
       type: 'listOutputDevices',
-      api
+      api,
     })
     if (response.type === 'devices' && get().output.api === api) set({ devices: response.devices })
   },
@@ -139,7 +149,7 @@ export const usePlayer = create<PlayerStore>((set, get) => ({
     return response.type === 'track' ? response.track : null
   },
 
-  dismissError: () => set({ error: null })
+  dismissError: () => set({ error: null }),
 }))
 
 /** 把引擎事件灌进 store；模块加载时只注册一次。 */

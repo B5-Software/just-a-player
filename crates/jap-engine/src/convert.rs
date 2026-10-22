@@ -38,6 +38,11 @@ pub fn quantize_into(samples: &[f64], format: SampleFormat, out: &mut Vec<u8>) {
                 out.extend_from_slice(&(v as f32).to_le_bytes());
             }
         }
+        SampleFormat::F64 => {
+            for &v in samples {
+                out.extend_from_slice(&v.to_le_bytes());
+            }
+        }
         SampleFormat::Dop24
         | SampleFormat::Dop32
         | SampleFormat::DsdU8Lsb

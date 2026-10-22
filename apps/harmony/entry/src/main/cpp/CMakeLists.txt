@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.16)
+project(just_a_player)
+set(CMAKE_CXX_STANDARD 17)
+add_library(player SHARED bridge.cpp)
+add_library(jap_harmony STATIC IMPORTED)
+set_target_properties(jap_harmony PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/libs/${OHOS_ARCH}/libjap_harmony.a)
+target_link_libraries(player PUBLIC jap_harmony libace_napi.z.so libohaudio.so libhilog_ndk.z.so)

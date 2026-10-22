@@ -18,12 +18,9 @@ npmRebuild: false
 afterPack: scripts/verify-media-package.cjs
 extraMetadata:
   name: just-a-player
-  version: 0.1.1
-extraResources:
-  - from: build/notices
-    to: licenses
-  - from: build/media-tools
-    to: media-tools
+  version: 0.1.2
+# scripts/package.mjs supplies the resource list for each MIDI variant.
+# Keep it in one place: Electron Builder concatenates inherited resource arrays.
 publish:
   provider: github
   owner: B5-Software
@@ -33,12 +30,18 @@ win:
   icon: build/icon.ico
   artifactName: Just-A-Player-${version}-win-${arch}.${ext}
 nsis:
+  include: build/file-associations.nsh
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   shortcutName: Just A Player
   license: ../../LICENSE
 mac:
+  fileAssociations:
+    - ext: [flac, wav, aiff, aif, mp3, m4a, aac, ogg, oga, opus, mka, caf, alac, dsf, dff, ncm, ape, dts, dtshd, iso, cue, mid, midi, kar, rmi, m3u, m3u8]
+      name: Music
+      role: Viewer
+      rank: Alternate
   target:
     - dmg
     - zip
@@ -50,6 +53,14 @@ mac:
   extendInfo:
     NSHighResolutionCapable: true
 linux:
+  fileAssociations:
+    - ext: ncm
+      name: Netease Cloud Music
+      mimeType: application/x-ncm
+    - ext: [dsf, dff]
+      name: Direct Stream Digital
+      mimeType: audio/x-dsd
+  mimeTypes: [audio/mpeg, audio/flac, audio/x-flac, audio/wav, audio/x-wav, audio/x-aiff, audio/mp4, audio/aac, audio/ogg, application/ogg, audio/opus, audio/x-matroska, audio/x-ape, audio/x-dsf, audio/x-dff, audio/vnd.dts, audio/midi, audio/x-midi, audio/rmid, application/x-midi, audio/x-mpegurl, application/vnd.apple.mpegurl, application/x-ncm, application/x-cue, application/x-cd-image, application/x-iso9660-image]
   target:
     - AppImage
     - deb

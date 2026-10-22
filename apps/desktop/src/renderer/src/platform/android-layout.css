@@ -1,0 +1,42 @@
+/* Android uses a physical-pixel based viewport; these are landscape controls, not desktop DPI. */
+@media (orientation: landscape) {
+  html[data-platform='android'] [data-player-topbar] { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 2fr); align-items: center; padding: 12px 56px 8px 16px; gap: 12px; }
+  html[data-platform='android'] [data-player-topbar] > :first-child { width: auto; padding: 0; gap: 10px; }
+  html[data-platform='android'] [data-player-topbar] > :first-child > :last-child { min-width: 0; gap: 8px; }
+  html[data-platform='android'] [data-scene-caption] { width: auto; min-width: 0; flex: 1; max-width: 200px; }
+  html[data-platform='android'] [data-player-topbar] > :last-child { justify-self: end; width: max-content; max-width: 100%; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; padding: 5px; }
+  html[data-platform='android'] [data-player-topbar] > :last-child > * { flex-shrink: 0; }
+  html[data-platform='android'] [data-player-topbar] button { min-width: 36px; width: 36px; min-height: 36px; height: 36px; }
+  html[data-platform='android'] [data-mini-entry] { top: 18px; right: 12px; }
+  html[data-platform='android'] [data-player-dock] { bottom: 12px; left: 20px; right: 20px; }
+  html[data-platform='android'] [data-player-dock] > .glass { max-width: none; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(240px, 1.3fr) minmax(180px, .9fr); padding: 12px 16px; gap: 16px; border-radius: 24px; }
+  html[data-platform='android'] [data-now-playing] { gap: 12px; }
+  html[data-platform='android'] [data-now-playing] > :first-child { width: 64px !important; height: 64px !important; flex-shrink: 0; }
+  html[data-platform='android'] [data-now-playing] > :last-child { gap: 4px; }
+  html[data-platform='android'] [data-now-playing] h1 { font-size: 16px; }
+  html[data-platform='android'] [data-now-playing] p { font-size: 11px; }
+  html[data-platform='android'] [data-track-tags] { flex-wrap: nowrap; max-height: 20px; overflow: hidden; }
+  html[data-platform='android'] [data-track-tags] span.rounded-full { display: inline; white-space: nowrap; font-size: 9px; }
+  html[data-platform='android'] [data-dock-transport] { gap: 2px; }
+  html[data-platform='android'] [data-dock-transport] > :last-child { gap: 12px; }
+  html[data-platform='android'] [data-dock-transport] button { width: 38px; height: 38px; flex-shrink: 0; }
+  html[data-platform='android'] [data-dock-transport] [aria-label='播放'], html[data-platform='android'] [data-dock-transport] [aria-label='暂停'] { width: 50px; height: 50px; }
+  html[data-platform='android'] [data-dock-transport] > :last-child > span[aria-hidden] { display: none; }
+  html[data-platform='android'] [data-dock-tools] { flex-direction: column !important; gap: 0; align-items: flex-end !important; }
+  html[data-platform='android'] [data-dock-tools] button { width: 32px; height: 32px; }
+  html[data-platform='android'] [data-panel-root] { top: 76px !important; max-width: calc(100vw - 32px) !important; max-height: calc(100dvh - 94px) !important; padding: 20px; }
+  html[data-platform='android'] [data-onboarding] { top: 78px; width: 300px; max-height: calc(100dvh - 98px); overflow-y: auto; }
+  html[data-platform='android'] .app-dialog { max-height: calc(100dvh - 24px); padding: 20px; }
+  html[data-platform='android'] .file-browser-body { height: clamp(120px, calc(100dvh - 210px), 360px); }
+}
+@media (orientation: landscape) and (max-width: 1000px) {
+  html[data-platform='android'] [data-scene-caption] > div > :last-child { display: none; }
+  html[data-platform='android'] [data-player-dock] { left: 12px; right: 12px; bottom: 10px; }
+  html[data-platform='android'] [data-player-dock] > .glass { grid-template-columns: minmax(120px, 1fr) minmax(200px, 1.3fr) 160px; gap: 10px; padding: 10px 12px; }
+  html[data-platform='android'] [data-now-playing] > :first-child { width: 48px !important; height: 48px !important; }
+  html[data-platform='android'] [data-now-playing] h1 { font-size: 14px; }
+  html[data-platform='android'] [data-track-tags] { display: none; }
+  html[data-platform='android'] [data-dock-tools] { gap: 0; }
+  html[data-platform='android'] [data-dock-tools] > :last-child { gap: 4px; }
+  html[data-platform='android'] [data-dock-tools] [data-range] { width: 60px; }
+}

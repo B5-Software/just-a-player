@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync, type Dirent } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { dirName, isAudioPath } from '../shared/audio'
+import { dirName, isAudioPath, discSource, discTrack } from '../shared/audio'
 
 /** 读取文件时的上限，避免误选超大文件把渲染进程撑爆。 */
 const MAX_READ_BYTES = 16 * 1024 * 1024
@@ -11,7 +11,7 @@ const COVER_TYPES: Record<string, string> = {
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
   png: 'image/png',
-  webp: 'image/webp'
+  webp: 'image/webp',
 }
 
 function naturalCompare(a: Dirent, b: Dirent): number {
@@ -39,7 +39,7 @@ async function walk(dir: string, recursive: boolean, out: string[]): Promise<voi
 export async function scanAudio(paths: readonly string[], recursive: boolean): Promise<string[]> {
   const out: string[] = []
   for (const path of paths) {
-    const info = await stat(path).catch(() => null)
+    const info = await stat(discSource(path)).catch(() => null)
     if (info?.isDirectory()) await walk(path, recursive, out)
     else if (info?.isFile() && isAudioPath(path)) out.push(path)
   }
@@ -47,7 +47,7 @@ export async function scanAudio(paths: readonly string[], recursive: boolean): P
 }
 
 export function pathsExist(paths: readonly string[]): boolean[] {
-  return paths.map((path) => existsSync(path))
+  return paths.map((path) => existsSync(discSource(path)))
 }
 
 export function readBounded(path: string): Buffer | null {
@@ -73,6 +73,7 @@ function findSibling(dir: string, wanted: (name: string) => boolean): string | n
 }
 
 export function sidecarLyrics(trackPath: string): Buffer | null {
+  if (discTrack(trackPath)) return null
   const stem = trackPath
     .replace(/\.[^./\\]+$/, '')
     .split(/[\\/]/)
