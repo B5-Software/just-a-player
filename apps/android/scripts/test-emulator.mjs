@@ -88,6 +88,7 @@ async function wait(expression, label, timeout = 20000) {
   while (Date.now() < end) {
     if (await c.evaluate(expression)) {
       report.checks.push(label)
+      fs.writeFileSync(path.join(results, 'emulator-progress.json'), JSON.stringify(report, null, 2))
       return
     }
     await delay(200)
@@ -350,6 +351,15 @@ try {
   report.status = 'passed'
   fs.writeFileSync(path.join(results, 'emulator.json'), JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report, null, 2))
+} catch (error) {
+  report.status = 'failed'
+  report.error = String(error)
+  fs.writeFileSync(path.join(results, 'emulator.json'), JSON.stringify(report, null, 2))
+  try {
+    fs.writeFileSync(path.join(results, 'emulator-failure-logcat.txt'), adb('logcat', '-d', '-t', '1000'))
+    await shot('failure')
+  } catch { /* Keep the original failure if the device disconnected. */ }
+  throw error
 } finally {
   c.close()
 }

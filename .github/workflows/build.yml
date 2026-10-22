@@ -5,6 +5,11 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      android_only:
+        description: Run Android QA only; push and tag builds always cover every platform
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -12,6 +17,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
+    if: github.event_name != 'workflow_dispatch' || !inputs.android_only
     name: ${{ matrix.target.platform }} · ${{ matrix.target.arch }} · ${{ matrix.midi }}
     strategy:
       fail-fast: false

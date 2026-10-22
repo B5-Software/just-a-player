@@ -37,6 +37,14 @@ function removeForward(port) {
   if (!port) return
   try { adb('forward', '--remove', port) } catch { /* Emulator may already have exited. */ }
 }
+function diagnostics(name, detail) {
+  const directory = new URL('../test-results/', import.meta.url)
+  mkdirSync(directory, { recursive: true })
+  writeFileSync(new URL(name + '.json', directory), JSON.stringify(detail, null, 2))
+  try {
+    writeFileSync(new URL(name + '-logcat.txt', directory), adb('logcat', '-d', '-t', '1000'))
+  } catch { /* The emulator itself may already have exited. */ }
+}
 export async function connect(surface = 'main') {
   let ws, lastError, forwardedPort, lastTargets
   const deadline = Date.now() + 45000
@@ -108,6 +116,7 @@ export async function connect(surface = 'main') {
     throw Error('Player WebView target not found: ' + String(lastError ?? 'no target'))
   }
   let next = 1
+  let closing = false
   const pending = new Map()
   const errors = []
   ws.onmessage = (e) => {
@@ -121,11 +130,16 @@ export async function connect(surface = 'main') {
       }
     } else if (m.method === 'Runtime.exceptionThrown') errors.push(m.params.exceptionDetails)
   }
-  ws.onclose = () => {
+  ws.onclose = (event) => {
+    const message = `WebView debugger disconnected (${event.code}: ${event.reason})`
+    if (!closing) diagnostics('cdp-disconnected', {
+      node: process.version, surface, code: event.code, reason: event.reason,
+      pending: [...pending.values()].map(item => item.method), targets: lastTargets,
+    })
     removeForward(forwardedPort)
     for (const item of pending.values()) {
       clearTimeout(item.timer)
-      item.reject(Error('WebView debugger disconnected'))
+      item.reject(Error(message + ' during ' + item.method))
     }
     pending.clear()
   }
@@ -136,7 +150,7 @@ export async function connect(surface = 'main') {
         pending.delete(id)
         reject(Error(`WebView debugger timed out: ${method}`))
       }, 45000)
-      pending.set(id, { resolve, reject, timer })
+      pending.set(id, { resolve, reject, timer, method })
       ws.send(JSON.stringify({ id, method, params }))
     })
   await send('Runtime.enable')
@@ -154,7 +168,7 @@ export async function connect(surface = 'main') {
     evaluate,
     send,
     errors,
-    close: () => ws.close(),
+    close: () => { closing = true; ws.close() },
     async screenshot(path) {
       const { data } = await send('Page.captureScreenshot', {
         format: 'png',

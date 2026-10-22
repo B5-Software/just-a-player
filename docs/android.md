@@ -84,6 +84,8 @@ CI 使用 `google_apis_playstore_ps16k` 的量产 `user` 镜像，关闭模拟�
 
 `node apps/android/scripts/test-touch-midi.mjs` 在主测试后执行，补充冷 / 热启动的 MIDI content URI、实际触屏拖动、滑动条误触、3D 歌词、常亮标志、SDR 回退以及真实 PiP 视口布局检查。
 
+调试 Android CI 时可手动运行 `gh workflow run build.yml --ref main -f android_only=true`，只执行两个 APK 版本的完整验证，避免反复构建桌面矩阵。普通 push 和版本标签始终执行全部平台。
+
 ## 许可与源码
 
 应用为 GPL-3.0-or-later。FFmpeg 与 x264 使用 GPL-2.0-or-later 兼容组件，禁用 nonfree；完整固定源码、构建脚本与许可证随 CI 产物/源码仓库提供。普通安装不需要编译环境。libusb 使用 LGPL-2.1-or-later，NDK libc++ 使用 Apache-2.0 with LLVM exceptions；字体为 OFL 1.1。
