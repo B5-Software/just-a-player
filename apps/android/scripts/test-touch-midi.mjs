@@ -94,12 +94,10 @@ async function wait(expression, label, timeout = 30000) {
     `Timed out ${label || expression}: ${JSON.stringify(await c.evaluate('({state:__jap.usePlayer.getState().state,error:__jap.usePlayer.getState().error})'))}`
   )
 }
-let touchClock = 0
-const touch = (type, x, y, offset) => {
-  if (type === 'touchStart') touchClock = Date.now()
+const touch = (type, x, y) => {
   return c.send('Input.dispatchTouchEvent', {
     type,
-    timestamp: (offset === undefined ? Date.now() : touchClock + offset) / 1000,
+    // Let Chromium timestamp real input; host and emulator clocks can differ.
     touchPoints: ['touchEnd', 'touchCancel'].includes(type)
       ? []
       : [{ x, y, id: 1, radiusX: 4, radiusY: 4, force: 1 }],
@@ -113,7 +111,7 @@ const drag = async (x, y, dx, dy, hold = 0) => {
   await touch('touchStart', x, y)
   if (hold) await delay(hold)
   for (let n = 1; n <= 6; n++) {
-    await touch('touchMove', x + (dx * n) / 6, y + (dy * n) / 6, hold + n * 25)
+    await touch('touchMove', x + (dx * n) / 6, y + (dy * n) / 6)
     await delay(25)
   }
   await touch('touchEnd')

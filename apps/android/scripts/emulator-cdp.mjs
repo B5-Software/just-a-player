@@ -1,5 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import WebSocket from 'ws'
 const adbPath = join(
   process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT,
   'platform-tools',
@@ -36,7 +38,7 @@ function removeForward(port) {
   try { adb('forward', '--remove', port) } catch { /* Emulator may already have exited. */ }
 }
 export async function connect(surface = 'main') {
-  let ws, lastError, forwardedPort
+  let ws, lastError, forwardedPort, lastTargets
   const deadline = Date.now() + 45000
   while (!ws && Date.now() < deadline) {
     const sockets = adb('shell', 'cat', '/proc/net/unix')
@@ -55,8 +57,10 @@ export async function connect(surface = 'main') {
             signal: AbortSignal.timeout(3000),
           })
         ).json()
+        lastTargets = targets
         const target = targets.find(
           (t) =>
+            t.type === 'page' &&
             t.url.includes('appassets.androidplatform.net') &&
             t.url.includes('surface=export') === (surface === 'export')
         )
@@ -66,26 +70,43 @@ export async function connect(surface = 'main') {
         const url = new URL(target.webSocketDebuggerUrl)
         url.hostname = '127.0.0.1'
         url.port = number
-        candidate = new WebSocket(url)
+        candidate = new WebSocket(url, { handshakeTimeout: 3000, perMessageDeflate: false })
         await new Promise((resolve, reject) => {
           const timer = setTimeout(() => reject(Error('WebView handshake timed out')), 3000)
           candidate.onopen = () => { clearTimeout(timer); resolve() }
-          candidate.onerror = () => { clearTimeout(timer); reject(Error('WebView handshake failed')) }
+          candidate.onerror = (event) => { clearTimeout(timer); reject(event.error ?? Error(event.message || 'WebView handshake failed')) }
           candidate.onclose = () => { clearTimeout(timer); reject(Error('WebView target closed')) }
+          candidate.once('unexpected-response', (_request, response) => {
+            clearTimeout(timer)
+            response.resume()
+            reject(Error(`WebView upgrade HTTP ${response.statusCode} ${response.statusMessage}`))
+          })
         })
         ws = candidate
         forwardedPort = port
         break
       } catch (error) {
         lastError = error
-        candidate?.close()
+        candidate?.terminate()
         removeForward(port)
         // A renderer can exit between discovery and opening its debugger.
       }
     }
     if (!ws) await delay(250)
   }
-  if (!ws) throw Error('Player WebView target not found: ' + String(lastError ?? 'no target'))
+  if (!ws) {
+    const directory = new URL('../test-results/', import.meta.url)
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(new URL('cdp-discovery.json', directory), JSON.stringify({
+      node: process.version, surface, error: String(lastError ?? 'no target'), targets: lastTargets,
+    }, null, 2))
+    try {
+      writeFileSync(new URL('cdp-logcat.txt', directory), adb(
+        'logcat', '-d', '-t', '500', '-s', 'AndroidRuntime', 'chromium', 'cr_AwContents', 'WebViewFactory', 'ActivityManager'
+      ))
+    } catch { /* Preserve the discovery error even if the emulator exited. */ }
+    throw Error('Player WebView target not found: ' + String(lastError ?? 'no target'))
+  }
   let next = 1
   const pending = new Map()
   const errors = []
