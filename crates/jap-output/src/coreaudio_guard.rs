@@ -1,6 +1,6 @@
 //! RAII Hog ownership and physical format verification. Only our selected device is changed.
 use crate::{OutputError, Result};
-use jap_core::{SampleFormat, StreamConfig};
+use jap_core::StreamConfig;
 use std::{
     ffi::{CString, c_void},
     mem::size_of,
