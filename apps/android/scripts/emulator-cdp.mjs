@@ -31,30 +31,41 @@ export function adbInput(input, ...args) {
   if (r.status !== 0) throw Error(r.stderr?.toString() || r.error?.message || 'ADB fixture write failed')
 }
 export const delay = (ms) => new Promise((r) => setTimeout(r, ms))
+function removeForward(port) {
+  if (!port) return
+  try { adb('forward', '--remove', port) } catch { /* Emulator may already have exited. */ }
+}
 export async function connect(surface = 'main') {
-  let ws, lastError
+  let ws, lastError, forwardedPort
   const deadline = Date.now() + 45000
   while (!ws && Date.now() < deadline) {
     const sockets = adb('shell', 'cat', '/proc/net/unix')
     const matches = [...new Set(sockets.match(/@webview_devtools_remote_\d+/g) ?? [])]
     for (const entry of matches) {
-      let candidate
+      let candidate, port
       try {
-        adb('forward', 'tcp:9229', `localabstract:${entry.slice(1)}`)
+        // A fresh port also gives Node a fresh HTTP pool. Rebinding one port
+        // after force-stop can keep /json requests on the previous WebView's TCP connection.
+        const number = adb('forward', 'tcp:0', `localabstract:${entry.slice(1)}`)
+        if (!/^\d+$/.test(number)) throw Error('ADB did not allocate a debugger port')
+        port = `tcp:${number}`
         const targets = await (
-          await fetch('http://127.0.0.1:9229/json', { signal: AbortSignal.timeout(3000) })
+          await fetch(`http://127.0.0.1:${number}/json`, {
+            headers: { Connection: 'close' },
+            signal: AbortSignal.timeout(3000),
+          })
         ).json()
         const target = targets.find(
           (t) =>
             t.url.includes('appassets.androidplatform.net') &&
             t.url.includes('surface=export') === (surface === 'export')
         )
-        if (!target) continue
+        if (!target) { removeForward(port); continue }
         // WebView can advertise localhost or a device-side port. Use the exact
         // IPv4 endpoint we forwarded, including on Node/Linux IPv6 hosts.
         const url = new URL(target.webSocketDebuggerUrl)
         url.hostname = '127.0.0.1'
-        url.port = '9229'
+        url.port = number
         candidate = new WebSocket(url)
         await new Promise((resolve, reject) => {
           const timer = setTimeout(() => reject(Error('WebView handshake timed out')), 3000)
@@ -63,10 +74,12 @@ export async function connect(surface = 'main') {
           candidate.onclose = () => { clearTimeout(timer); reject(Error('WebView target closed')) }
         })
         ws = candidate
+        forwardedPort = port
         break
       } catch (error) {
         lastError = error
         candidate?.close()
+        removeForward(port)
         // A renderer can exit between discovery and opening its debugger.
       }
     }
@@ -88,6 +101,7 @@ export async function connect(surface = 'main') {
     } else if (m.method === 'Runtime.exceptionThrown') errors.push(m.params.exceptionDetails)
   }
   ws.onclose = () => {
+    removeForward(forwardedPort)
     for (const item of pending.values()) {
       clearTimeout(item.timer)
       item.reject(Error('WebView debugger disconnected'))
