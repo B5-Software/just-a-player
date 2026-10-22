@@ -32,35 +32,47 @@ export function adbInput(input, ...args) {
 }
 export const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 export async function connect(surface = 'main') {
-  let target
+  let ws, lastError
   const deadline = Date.now() + 45000
-  while (!target && Date.now() < deadline) {
+  while (!ws && Date.now() < deadline) {
     const sockets = adb('shell', 'cat', '/proc/net/unix')
     const matches = [...new Set(sockets.match(/@webview_devtools_remote_\d+/g) ?? [])]
     for (const entry of matches) {
+      let candidate
       try {
         adb('forward', 'tcp:9229', `localabstract:${entry.slice(1)}`)
         const targets = await (
           await fetch('http://127.0.0.1:9229/json', { signal: AbortSignal.timeout(3000) })
         ).json()
-        target = targets.find(
+        const target = targets.find(
           (t) =>
             t.url.includes('appassets.androidplatform.net') &&
             t.url.includes('surface=export') === (surface === 'export')
         )
-        if (target) break
-      } catch {
-        /* A previous renderer socket can disappear while the app starts. */
+        if (!target) continue
+        // WebView can advertise localhost or a device-side port. Use the exact
+        // IPv4 endpoint we forwarded, including on Node/Linux IPv6 hosts.
+        const url = new URL(target.webSocketDebuggerUrl)
+        url.hostname = '127.0.0.1'
+        url.port = '9229'
+        candidate = new WebSocket(url)
+        await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(Error('WebView handshake timed out')), 3000)
+          candidate.onopen = () => { clearTimeout(timer); resolve() }
+          candidate.onerror = () => { clearTimeout(timer); reject(Error('WebView handshake failed')) }
+          candidate.onclose = () => { clearTimeout(timer); reject(Error('WebView target closed')) }
+        })
+        ws = candidate
+        break
+      } catch (error) {
+        lastError = error
+        candidate?.close()
+        // A renderer can exit between discovery and opening its debugger.
       }
     }
-    if (!target) await delay(250)
+    if (!ws) await delay(250)
   }
-  if (!target) throw Error('Player WebView target not found')
-  const ws = new WebSocket(target.webSocketDebuggerUrl)
-  await new Promise((r, j) => {
-    ws.onopen = r
-    ws.onerror = j
-  })
+  if (!ws) throw Error('Player WebView target not found: ' + String(lastError ?? 'no target'))
   let next = 1
   const pending = new Map()
   const errors = []

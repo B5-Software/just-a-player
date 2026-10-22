@@ -191,7 +191,10 @@ jobs:
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/cache@v4
+        with:
+          cache-on-failure: true
+      - uses: actions/cache/restore@v4
+        id: codecs
         with:
           path: apps/android/build/codecs
           key: android-codecs-${{ runner.os }}-${{ hashFiles('apps/android/scripts/build-codecs.sh', 'apps/android/scripts/prepare-codecs.mjs') }}
@@ -216,6 +219,12 @@ jobs:
         run: node apps/android/scripts/build-native.mjs --clippy x86_64
       - name: Verify universal APK and 16 KiB ELF alignment
         run: node apps/android/scripts/verify-apk.mjs apps/android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Cache verified Android codecs before emulator QA
+        if: steps.codecs.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: apps/android/build/codecs
+          key: android-codecs-${{ runner.os }}-${{ hashFiles('apps/android/scripts/build-codecs.sh', 'apps/android/scripts/prepare-codecs.mjs') }}
       - name: Enable KVM for emulator tests
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

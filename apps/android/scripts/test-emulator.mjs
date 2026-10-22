@@ -73,12 +73,12 @@ if (process.argv.includes('--install'))
 adb('shell', 'am', 'force-stop', app)
 adb('logcat', '-c')
 adb('shell', 'am', 'start', '-n', `${app}/${activity}`, '--ez', 'e2e', 'true')
-await delay(2500)
-adb('shell', 'mkdir', '-p', deviceRoot)
+// The app creates this directory with its own UID. A fixed delay races the
+// first-start soundfont extraction; a shell-owned Music directory is unreadable.
+const c = await connect()
 for (const name of fs.readdirSync(fixtures))
   adb('push', path.join(fixtures, name), deviceRoot + '/' + name)
-const c = await connect(),
-  report = {
+const report = {
     package: app,
     abi: adb('shell', 'getprop', 'ro.product.cpu.abi'),
     checks: [],
