@@ -33,6 +33,7 @@
     "test:e2e:fallback": "node scripts/e2e-fallback.mjs",
     "preview": "node scripts/ensure-electron.mjs && node scripts/prepare-media-tools.mjs && electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "test:e2e:audio": "node scripts/e2e-audio.mjs",
     "test:e2e:features": "node scripts/e2e-features.mjs",
     "test:e2e:desktop": "node scripts/e2e-desktop.mjs",

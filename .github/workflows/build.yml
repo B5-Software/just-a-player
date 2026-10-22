@@ -196,7 +196,7 @@ jobs:
           path: apps/android/build/codecs
           key: android-codecs-${{ runner.os }}-${{ hashFiles('apps/android/scripts/build-codecs.sh', 'apps/android/scripts/prepare-codecs.mjs') }}
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
+      - run: pnpm --filter desktop typecheck:web
       - name: Prepare persistent release signing
         if: github.event_name != 'pull_request'
         env:
