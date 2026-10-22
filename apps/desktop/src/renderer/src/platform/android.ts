@@ -126,9 +126,12 @@ if (native) {
     const referenceHeight = Math.max(480, Math.min(900, viewport.height / 2))
     const pixelsPerUnit = (viewport.height / referenceHeight) * settings.androidUiScale
     const scale = pixelsPerUnit / viewport.density
+    const fixedScale = scale.toFixed(6)
     const content = mini
-      ? 'width=device-width, initial-scale=1.0'
-      : `width=${Math.round(viewport.width / pixelsPerUnit)}, initial-scale=${scale.toFixed(6)}`
+      ? 'width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no'
+      // WebView otherwise clamps small initial scales or retains a stale page
+      // scale after a DPI change. The app's own UI-size preference owns zoom.
+      : `width=${Math.round(viewport.width / pixelsPerUnit)}, initial-scale=${fixedScale}, minimum-scale=${fixedScale}, maximum-scale=${fixedScale}, user-scalable=no`
     if (meta.content !== content) meta.content = content
     document.documentElement.dataset.uiScale = String(settings.androidUiScale)
   }

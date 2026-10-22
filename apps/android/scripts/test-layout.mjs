@@ -20,7 +20,7 @@ async function connection() {
 async function measure() {
   await delay(1000)
   return c.evaluate(
-    `(()=>{const d=document.querySelector('[data-now-playing]').getBoundingClientRect(),canvas=__japViz.renderer.domElement;return {width:innerWidth,height:innerHeight,dockHeight:d.height,dockBottom:d.bottom,canvas:[canvas.width,canvas.height],viewport:JSON.parse(NativeAndroid.snapshot()).viewport}})()`
+    `(()=>{const d=document.querySelector('[data-now-playing]').getBoundingClientRect(),canvas=__japViz.renderer.domElement;return {width:innerWidth,height:innerHeight,dockHeight:d.height,dockBottom:d.bottom,canvas:[canvas.width,canvas.height],dpr:devicePixelRatio,pageScale:visualViewport?.scale,viewport:JSON.parse(NativeAndroid.snapshot()).viewport}})()`
   )
 }
 try {
