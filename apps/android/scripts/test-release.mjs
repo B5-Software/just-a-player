@@ -129,8 +129,17 @@ fs.writeFileSync(
 adb('shell', 'input', 'keyevent', 'KEYCODE_MEDIA_PAUSE')
 await media(2)
 checks.push('System pause works in the signed release')
-const pid = adb('shell', 'pidof', app).trim()
-assert.ok(!adb('shell', 'cat', '/proc/net/unix').includes('webview_devtools_remote_' + pid))
+const pids = adb('shell', 'pidof', app).split(/\s+/)
+assert.ok(pids.length > 0 && pids.every((pid) => /^\d+$/.test(pid)))
+const sockets = [
+  ...adb('shell', 'cat', '/proc/net/unix').matchAll(/@webview_devtools_remote_(\d+)(?=\s|$)/g),
+].map((match) => match[1])
+const exposed = sockets.filter((pid) => pids.includes(pid))
+fs.writeFileSync(
+  path.join(root, 'test-results/release-debugger.json'),
+  JSON.stringify({ pids, sockets, exposed }, null, 2)
+)
+assert.deepEqual(exposed, [], 'Signed release must not expose its own WebView debugger')
 checks.push('Release WebView debugging is disabled')
 fs.writeFileSync(
   path.join(root, 'test-results/release.json'),

@@ -413,7 +413,7 @@ public final class MainActivity extends Activity {
     s.setMediaPlaybackRequiresUserGesture(false);
     s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
     s.setSupportZoom(false);
-    if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true);
+    WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
     bridge = new AppBridge(this);
     web.addJavascriptInterface(bridge, "NativeAndroid");
     web.setWebViewClient(

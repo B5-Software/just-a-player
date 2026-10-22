@@ -127,7 +127,7 @@ public final class ExportRendererService extends Service {
     settings.setAllowContentAccess(false);
     settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
     settings.setMediaPlaybackRequiresUserGesture(false);
-    if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true);
+    WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
     web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, true);
     web.addJavascriptInterface(new Bridge(), "NativeAndroid");
     web.setWebChromeClient(

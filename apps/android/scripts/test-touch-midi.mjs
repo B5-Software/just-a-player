@@ -280,6 +280,13 @@ try {
   )
   const initialLyrics = await c.evaluate('__jap.useSettings.getState().lyricsOffset')
   await drag(anchor.x, anchor.y, -65, 20)
+  // Old WebViews may acknowledge CDP input before delivering pointerup to JS.
+  // Require the real release handler to commit, rather than assuming it ran synchronously.
+  await wait(
+    `JSON.stringify(__jap.useSettings.getState().lyricsOffset)!==${q(JSON.stringify(initialLyrics))}`,
+    null,
+    3000
+  )
   const lyrics = await c.evaluate('__jap.useSettings.getState().lyricsOffset')
   assert.notDeepEqual(lyrics, initialLyrics)
   assert.ok(Math.abs(lyrics.x-initialLyrics.x)>.06, 'Lyric drag must survive the scroll threshold for its full distance')
