@@ -236,6 +236,8 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Release build daemon memory before emulator QA
+        run: node apps/android/scripts/gradle.mjs --stop
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -244,8 +246,10 @@ jobs:
           # Use the production-style user image and exercise real 16 KiB pages.
           target: google_apis_playstore_ps16k
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -feature -Vulkan -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -memory 4096 -gpu swiftshader_indirect -feature -Vulkan -noaudio -no-boot-anim -camera-back none
           script: |
+            adb -s emulator-5554 shell getconf PAGESIZE
+            adb -s emulator-5554 shell cat /proc/meminfo
             adb -s emulator-5554 shell svc wifi disable
             adb -s emulator-5554 shell svc data disable
             node apps/android/scripts/test-emulator.mjs --install
