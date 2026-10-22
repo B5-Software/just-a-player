@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { adb, adbBytes, connect, delay } from './emulator-cdp.mjs'
+import { adb, connect, delay } from './emulator-cdp.mjs'
 assert.equal(adb('shell', 'getprop', 'ro.kernel.qemu'), '1', 'DPI changes are emulator-only')
 const original = adb('shell', 'wm', 'density'),
   override = original.match(/Override density:\s*(\d+)/)?.[1]
@@ -20,7 +20,7 @@ async function connection() {
 async function measure() {
   await delay(1000)
   return c.evaluate(
-    `(()=>{const d=document.querySelector('[data-now-playing]').getBoundingClientRect(),canvas=__japViz.renderer.domElement;return {width:innerWidth,height:innerHeight,dockHeight:d.height,dockBottom:d.bottom,canvas:[canvas.width,canvas.height],dpr:devicePixelRatio,pageScale:visualViewport?.scale,viewport:JSON.parse(NativeAndroid.snapshot()).viewport}})()`
+    `(()=>{const d=document.querySelector('[data-now-playing]').getBoundingClientRect(),canvas=__japViz.renderer.domElement;return {width:innerWidth,height:innerHeight,dockHeight:d.height,dockBottom:d.bottom,canvas:[canvas.width,canvas.height],dpr:devicePixelRatio,pageScale:visualViewport?.scale,browserViewport:[visualViewport?.width,visualViewport?.height],viewport:JSON.parse(NativeAndroid.snapshot()).viewport,webView:navigator.userAgent}})()`
   )
 }
 try {
@@ -53,6 +53,27 @@ try {
     )
     assert.ok(actual.canvas.every((v, i) => Math.abs(v - baseline.canvas[i]) <= 3))
     checks.push({ density, ...actual })
+  }
+  // Reproduce a WebView that keeps its old DIP width after Android changes DPI.
+  try {
+    await c.send('Emulation.setDeviceMetricsOverride', {
+      width: baseline.viewport.width,
+      height: baseline.viewport.height,
+      deviceScaleFactor: 2,
+      mobile: true,
+      screenWidth: baseline.viewport.width,
+      screenHeight: baseline.viewport.height,
+    })
+    const actual = await measure()
+    assert.ok(
+      Math.abs(actual.width - baseline.width) < 4 && Math.abs(actual.height - baseline.height) < 4,
+      JSON.stringify({ baseline, actual })
+    )
+    assert.ok(actual.canvas.every((v, i) => Math.abs(v - baseline.canvas[i]) <= 3))
+    checks.push({ staleBrowserDensity: true, ...actual })
+  } finally {
+    await c.send('Emulation.clearDeviceMetricsOverride')
+    await delay(500)
   }
   for (const scale of [0.85, 1.3]) {
     await c.evaluate(`__jap.useSettings.getState().update({androidUiScale:${scale}})`)

@@ -3,6 +3,7 @@ import type { FileDialogRequest } from '@shared/dialogs'
 import { DEFAULT_SETTINGS, applySettingsPatch, type AppSettings } from '@shared/settings'
 import { IPC } from '@shared/ipc'
 import { AUDIO_EXTENSIONS, discSource, discTrack } from '@shared/audio'
+import { setAndroidSurfaceWidth } from '../lib/pixel-ratio'
 type JapBridge = Window['jap']
 
 interface AndroidNative {
@@ -125,7 +126,12 @@ if (native) {
     if (!meta) return
     const referenceHeight = Math.max(480, Math.min(900, viewport.height / 2))
     const pixelsPerUnit = (viewport.height / referenceHeight) * settings.androidUiScale
-    const scale = pixelsPerUnit / viewport.density
+    // Older WebViews can update devicePixelRatio before their cached DIP size.
+    // Measure the browser's actual unzoomed viewport instead of mixing the two.
+    const browser = window.visualViewport
+    const browserWidth = browser ? browser.width * browser.scale : 0
+    const density = browserWidth > 0 ? viewport.width / browserWidth : viewport.density
+    const scale = pixelsPerUnit / density
     const fixedScale = scale.toFixed(6)
     const content = mini
       ? 'width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no'
@@ -133,8 +139,19 @@ if (native) {
       // scale after a DPI change. The app's own UI-size preference owns zoom.
       : `width=${Math.round(viewport.width / pixelsPerUnit)}, initial-scale=${fixedScale}, minimum-scale=${fixedScale}, maximum-scale=${fixedScale}, user-scalable=no`
     if (meta.content !== content) meta.content = content
+    setAndroidSurfaceWidth(viewport.width)
     document.documentElement.dataset.uiScale = String(settings.androidUiScale)
   }
+  let viewportFrame = 0
+  const scheduleViewport = (): void => {
+    if (viewportFrame) return
+    viewportFrame = requestAnimationFrame(() => {
+      viewportFrame = 0
+      applyViewport()
+    })
+  }
+  window.addEventListener('resize', scheduleViewport)
+  window.visualViewport?.addEventListener('resize', scheduleViewport)
   on('viewport', (value: NonNullable<typeof viewport>) => {
     viewport = value
     applyViewport()

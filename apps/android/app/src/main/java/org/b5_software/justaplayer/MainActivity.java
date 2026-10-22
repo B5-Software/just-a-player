@@ -34,7 +34,10 @@ public final class MainActivity extends Activity {
     JSONObject out = new JSONObject();
     try {
       int width, height;
-      if (Build.VERSION.SDK_INT >= 30) {
+      if (web != null && web.getWidth() > 0 && web.getHeight() > 0) {
+        width = web.getWidth();
+        height = web.getHeight();
+      } else if (Build.VERSION.SDK_INT >= 30) {
         android.graphics.Rect bounds = getWindowManager().getCurrentWindowMetrics().getBounds();
         width = bounds.width();
         height = bounds.height();
