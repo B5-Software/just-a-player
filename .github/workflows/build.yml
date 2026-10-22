@@ -240,16 +240,21 @@ jobs:
         run: node apps/android/scripts/gradle.mjs --stop
       - uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 36
           arch: x86_64
           # userdebug images force WebView debugging even for signed releases.
           # Use the production-style user image and exercise real 16 KiB pages.
+          # API 35's bundled Chromium 124 traps in MemoryInfra on 16 KiB pages.
           target: google_apis_playstore_ps16k
-          disable-animations: true
+          # Keep guest animations: the action's immediate post-boot settings
+          # calls can race the production image's ADB reconnect.
+          disable-animations: false
           emulator-options: -no-window -memory 4096 -gpu swiftshader_indirect -feature -Vulkan -noaudio -no-boot-anim -camera-back none
           script: |
             adb -s emulator-5554 shell getconf PAGESIZE
+            test "$(adb -s emulator-5554 shell getconf PAGESIZE | tr -d '\r')" = 16384
             adb -s emulator-5554 shell cat /proc/meminfo
+            adb -s emulator-5554 shell dumpsys webviewupdate
             adb -s emulator-5554 shell svc wifi disable
             adb -s emulator-5554 shell svc data disable
             node apps/android/scripts/test-emulator.mjs --install

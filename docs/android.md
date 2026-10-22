@@ -73,7 +73,7 @@ FFmpeg 与 x264 从固定源码和 SHA-256 构建；缓存位于 `apps/android/b
 pnpm android:test
 ```
 
-CI 使用配置 4 GiB 内存的 `google_apis_playstore_ps16k` 量产 `user` 镜像，关闭模拟器联网后验证实际 16 KiB 页面、离线播放与签名 Release 包，并固定测试期间的 WebView 版本。
+CI 使用配置 4 GiB 内存的 Android 16 / API 36 `google_apis_playstore_ps16k` 量产 `user` 镜像，关闭模拟器联网后验证实际 16 KiB 页面、离线播放与签名 Release 包，并固定测试期间的 WebView 版本。
 不要用 `google_apis` 的 `userdebug` / `eng` 镜像判断正式包是否关闭调试：
 [Chromium 124 的实现](https://github.com/chromium/chromium/blob/124.0.6367.219/android_webview/glue/java/src/com/android/webview/chromium/SharedStatics.java#L79-L85)
 在这些系统上强制启用 WebView 调试，并忽略应用关闭调试的调用。调试包的功能测试仍可在这类镜像运行。
