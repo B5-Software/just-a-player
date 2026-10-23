@@ -74,6 +74,7 @@ pnpm android:test
 ```
 
 CI 使用配置 4 GiB 内存的 Android 16 / API 36 `google_apis_playstore_ps16k` 量产 `user` 镜像，关闭模拟器联网后验证实际 16 KiB 页面、离线播放与签名 Release 包，并固定测试期间的 WebView 版本。
+仅在 CI 的临时模拟器中停用 Play 商店、Google Play 服务与 Assistant，避免全新镜像首次启动的安装和服务激活占满内存、使系统杀掉正在导出的 WebView。播放器不依赖这些服务，播放、GPU、五种视频音轨、触屏、系统媒体控制和正式包调试检查仍完整执行。
 不要用 `google_apis` 的 `userdebug` / `eng` 镜像判断正式包是否关闭调试：
 [Chromium 124 的实现](https://github.com/chromium/chromium/blob/124.0.6367.219/android_webview/glue/java/src/com/android/webview/chromium/SharedStatics.java#L79-L85)
 在这些系统上强制启用 WebView 调试，并忽略应用关闭调试的调用。调试包的功能测试仍可在这类镜像运行。

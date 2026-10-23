@@ -257,6 +257,12 @@ jobs:
             adb -s emulator-5554 shell dumpsys webviewupdate
             adb -s emulator-5554 shell svc wifi disable
             adb -s emulator-5554 shell svc data disable
+            # The offline player has no dependency on Play/GMS/Assistant.
+            # Their first-boot install/activation storm can exhaust this VM and
+            # LMK even a foreground renderer; isolate the app's QA workload.
+            adb -s emulator-5554 shell pm disable-user --user 0 com.android.vending
+            adb -s emulator-5554 shell pm disable-user --user 0 com.google.android.gms
+            adb -s emulator-5554 shell pm disable-user --user 0 com.google.android.googlequicksearchbox
             node apps/android/scripts/test-emulator.mjs --install
             node apps/android/scripts/test-hdr-gpu.mjs
             node apps/android/scripts/test-hifi.mjs
