@@ -356,7 +356,11 @@ try {
   report.checks.push('Playlist handles reorder with a real touch drag')
   await c.evaluate('__jap.useUi.getState().closePanel()')
   await c.evaluate(
-    `__jap.useUi.getState().setOnboardingOpen(false);__jap.useSettings.getState().update({keepScreenAwake:true})`
+    `__jap.useUi.getState().setOnboardingOpen(false);__jap.usePlayer.getState().play(${q(live)});__jap.useSettings.getState().update({keepScreenAwake:true})`
+  )
+  await wait(
+    `__jap.usePlayer.getState().state==='playing'&&__jap.usePlayer.getState().track?.path===${q(live)}`,
+    'Screen-awake test starts with actual native playback'
   )
   await delay(800)
   await awake(true)
@@ -421,6 +425,14 @@ try {
 } catch (error) {
   report.status = 'failed'
   report.error = String(error)
+  report.playback = await c.evaluate(
+    '({state:__jap.usePlayer.getState().state,track:__jap.usePlayer.getState().track,position:__jap.usePlayer.getState().position,keepScreenAwake:__jap.useSettings.getState().keepScreenAwake,visibility:document.visibilityState})'
+  ).catch(() => null)
+  try {
+    fs.writeFileSync(path.join(out, 'failure-window.txt'), adb('shell', 'dumpsys', 'window', 'windows'))
+    fs.writeFileSync(path.join(out, 'failure-audio.txt'), adb('shell', 'dumpsys', 'audio'))
+    fs.writeFileSync(path.join(out, 'failure-logcat.txt'), adb('logcat', '-d'))
+  } catch { /* Keep the original assertion if the emulator disconnected. */ }
   report.lyricInput = await c.evaluate(
     '({events:window.__lyricTouchQA,viewport:[innerWidth,innerHeight,devicePixelRatio,visualViewport?.scale],dragging:window.__japLyrics?.dragging,interactive:window.__japLyrics?.interactive})'
   ).catch(() => null)
