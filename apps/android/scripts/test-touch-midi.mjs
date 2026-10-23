@@ -288,7 +288,13 @@ try {
     '__jap.useUi.getState().lyricsAdjusting&&__japLyrics.interactive',
     'Onboarding preview lyrics are available for adjustment'
   )
-  await delay(300)
+  // On a software GPU, the preview can still be easing into place after the
+  // panel transition. Target the settled visible text, rather than a glyph
+  // which moves between the CDP coordinate query and the actual touch event.
+  await wait(
+    `(()=>{const r=__japLyrics;return r.ready&&Math.abs(r.pos-2)<.005&&['x','y','z','ox','oy','oz'].every(k=>Math.abs(r.cur[k])<.005)})()`,
+    'Preview lyric layout settles before touch hit testing'
+  )
   const anchor = await c.evaluate(
     `(()=>{const r=__japLyrics,box=r.canvas.getBoundingClientRect();r.scene.updateMatrixWorld(true);for(const line of [...r.lines].filter(l=>l.o?.grp.visible&&l.o.mat.opacity>.1).sort((a,b)=>b.o.mat.opacity-a.o.mat.opacity)){const points=[];line.o.grp.traverse(mesh=>{if(!mesh.isMesh)return;mesh.geometry.computeBoundingBox();const p=mesh.geometry.boundingBox.getCenter(mesh.position.clone());mesh.localToWorld(p);p.project(r.camera);const x=box.x+(p.x+1)*box.width/2,y=box.y+(1-p.y)*box.height/2;if(document.elementFromPoint(x,y)===r.canvas)points.push({x,y})});if(points.length)return points[Math.floor(points.length/2)]}throw Error('No unobscured preview glyph to drag')})()`
   )
@@ -297,7 +303,13 @@ try {
     `(()=>{window.__lyricTouchQA=[];const r=__japLyrics;for(const type of ['pointerdown','pointermove','pointerup','pointercancel','gotpointercapture','lostpointercapture'])r.canvas.addEventListener(type,e=>{window.__lyricTouchQA.push({type,x:e.clientX,y:e.clientY,buttons:e.buttons,pointerType:e.pointerType,dragging:r.dragging,pointer:r.dragPointer});},{capture:true,passive:true})})()`
   )
   const initialLyrics = await c.evaluate('__jap.useSettings.getState().lyricsOffset')
-  await drag(anchor.x, anchor.y, -65, 20)
+  await touch('touchStart', anchor.x, anchor.y)
+  await wait('__japLyrics.dragging', null, 3000)
+  for (let n = 1; n <= 6; n++) {
+    await touch('touchMove', anchor.x - 65 * n / 6, anchor.y + 20 * n / 6)
+    await delay(25)
+  }
+  await touch('touchEnd')
   // Old WebViews may acknowledge CDP input before delivering pointerup to JS.
   // Require the real release handler to commit, rather than assuming it ran synchronously.
   await wait(
