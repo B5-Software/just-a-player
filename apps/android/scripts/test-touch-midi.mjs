@@ -253,7 +253,23 @@ try {
   await c.evaluate(`document.querySelector(${q(es)}).scrollIntoView({block:'center'})`)
   let er = await rect(es),
     eq = await value(es)
-  await drag(er.x + er.w / 2, er.y + er.h / 2, 0, -25)
+  // Stream input without waiting for each remote acknowledgement: that wait
+  // can accidentally hold the finger still for >220 ms on a busy CI emulator.
+  // Chromium still assigns the real event timestamps; no host clock is used.
+  await c.evaluate(`(()=>{window.__eqTouchQA=[];const e=document.querySelector(${q(es)});for(const type of ['pointerdown','pointermove','pointerup','pointercancel'])e.addEventListener(type,p=>__eqTouchQA.push({type,pointerType:p.pointerType,time:p.timeStamp,firstTime:p.getCoalescedEvents?.()[0]?.timeStamp??p.timeStamp,x:p.clientX,y:p.clientY,trusted:p.isTrusted}),{capture:true,passive:true})})()`)
+  const swipeInputs = [touch('touchStart', er.x + er.w / 2, er.y + er.h / 2)]
+  for (let n = 1; n <= 6; n++) {
+    await delay(20)
+    swipeInputs.push(touch('touchMove', er.x + er.w / 2, er.y + er.h / 2 - 25 * n / 6))
+  }
+  swipeInputs.push(touch('touchEnd'))
+  await Promise.all(swipeInputs)
+  await delay(120)
+  report.eqScrollInput = await c.evaluate('__eqTouchQA')
+  const swipeDown = report.eqScrollInput.find(e => e.type === 'pointerdown'),
+    swipeMove = report.eqScrollInput.find(e => e.type === 'pointermove')
+  assert.ok(swipeDown?.trusted && swipeMove?.trusted && swipeMove.pointerType === 'touch')
+  assert.ok(swipeMove.firstTime - swipeDown.time < 220, 'Scroll must move before the hold threshold')
   assert.equal(await value(es), eq)
   er = await rect(es)
   await drag(er.x + er.w / 2, er.y + er.h / 2, 0, -25, 240)
