@@ -4,6 +4,8 @@ import type { Surface, WallpaperState, SystemMediaState } from '../shared/deskto
 import type { VideoRequest, VideoQueueItem } from '../shared/video'
 
 export interface JapBridge {
+  openLightweight(handoff: import('../shared/lightweight').LightweightHandoff): Promise<void>
+  takeLightweightHandoff(): Promise<import('../shared/lightweight').LightweightHandoff | null>
   bundledMidi: boolean
   nativeHdr?: {
     validate?(frame: {

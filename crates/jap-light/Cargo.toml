@@ -1,0 +1,22 @@
+[package]
+name = "jap-light"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+egui = { version = "=0.34.3", default-features = false }
+egui_software_backend = { version = "=0.0.3", default-features = false, features = ["std"] }
+jap-core.workspace = true
+jap-engine.workspace = true
+jap-decode.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+parking_lot.workspace = true
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+base64 = "0.22"
+
+[lints]
+workspace = true

@@ -30,6 +30,12 @@ fn text(path: &Path) -> Value {
         .map(Value::String)
         .unwrap_or(Value::Null)
 }
+fn read_mode(root: &Path) -> Value {
+    text(&root.join("lightweight-mode.json"))
+        .as_str()
+        .and_then(|s| serde_json::from_str::<Value>(s).ok())
+        .unwrap_or(json!({"enabled":false}))
+}
 fn read(path: &Path, limit: u64) -> Result<Value> {
     let file = fs::File::open(path).map_err(err)?;
     if file.metadata().map_err(err)?.len() > limit {
@@ -88,7 +94,7 @@ pub(super) fn request(v: &Value) -> Result<Value> {
     let method = v["method"].as_str().unwrap_or("");
     match method {
         "snapshot" => Ok(
-            json!({"version":"0.1.2","surface":"main","platform":"ohos","settings":text(&root.join("settings.json")).as_str().and_then(|s|serde_json::from_str::<Value>(s).ok()).unwrap_or(json!({})),"fonts":[],"bundledMidi":false}),
+            json!({"version":env!("CARGO_PKG_VERSION"),"lightHandoff":text(&root.join("light-handoff.json")).as_str().and_then(|s|serde_json::from_str::<Value>(s).ok()),"surface":"main","platform":"ohos","settings":text(&root.join("settings.json")).as_str().and_then(|s|serde_json::from_str::<Value>(s).ok()).unwrap_or(json!({})),"fonts":[],"bundledMidi":false}),
         ),
         "settings" => save(
             &root.join("settings.json"),
@@ -96,6 +102,35 @@ pub(super) fn request(v: &Value) -> Result<Value> {
         )
         .map(|_| p["patch"].clone()),
         "libraryLoad" => Ok(text(&root.join("library.json"))),
+        "lightLoad" => Ok(text(&root.join("lightweight.json"))),
+        "lightSave" => save(
+            &root.join("lightweight.json"),
+            p["json"]
+                .as_str()
+                .ok_or("Invalid light preferences")?
+                .as_bytes(),
+        ),
+        "lightHandoff" => {
+            let file = root.join("light-handoff.json");
+            let result = text(&file)
+                .as_str()
+                .and_then(|s| serde_json::from_str::<Value>(s).ok())
+                .unwrap_or(Value::Null);
+            let _ = fs::remove_file(file);
+            Ok(result)
+        }
+        "lightweightMode" => {
+            save(
+                &root.join("light-handoff.json"),
+                p["handoff"].to_string().as_bytes(),
+            )?;
+            save(
+                &root.join("lightweight-mode.json"),
+                json!({"enabled":p["enabled"]}).to_string().as_bytes(),
+            )
+        }
+        "lightMode" => Ok(read_mode(root)),
+        "lightReady" | "lightVisuals" | "lightReplay" => Ok(Value::Null),
         "librarySave" => save(
             &root.join("library.json"),
             p["json"].as_str().ok_or("Invalid library")?.as_bytes(),

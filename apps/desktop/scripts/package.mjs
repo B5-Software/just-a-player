@@ -21,6 +21,7 @@ writeFileSync(
         },
         { from: 'build/notices', to: 'licenses' },
         { from: 'build/media-tools', to: 'media-tools' },
+        { from: 'build/lightweight', to: 'lightweight' },
       ],
       win: { artifactName: 'Just-A-Player-${version}-win-${arch}-' + flavor + '.${ext}' },
       mac: { artifactName: 'Just-A-Player-${version}-mac-${arch}-' + flavor + '.${ext}' },

@@ -1,0 +1,32 @@
+[package]
+name = "jap-lightweight"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+jap-light = { path = "../../crates/jap-light" }
+jap-core.workspace = true
+jap-engine.workspace = true
+jap-decode.workspace = true
+serde_json.workspace = true
+base64 = "0.22"
+anyhow.workspace = true
+clap.workspace = true
+sha2.workspace = true
+
+[target.'cfg(all(not(target_os = "android"), not(target_env = "ohos")))'.dependencies]
+eframe = { version = "=0.34.3", default-features = false, features = ["glow", "x11", "wayland"] }
+raw-window-handle = "0.6"
+souvlaki = "0.8.3"
+url = "2"
+fs2 = "0.4.3"
+keepawake = "0.6.1"
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = ["Win32_UI_Shell"] }
+
+[lints]
+workspace = true

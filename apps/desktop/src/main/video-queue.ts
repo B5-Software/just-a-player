@@ -13,6 +13,9 @@ let worker: BrowserWindow | null = null,
   loaded = false
 let load: (win: BrowserWindow, surface: Surface) => void
 let lastProgress = 0
+export function hasActiveVideoExports(): boolean {
+  return items.some(item => item.state === 'waiting' || item.state === 'rendering')
+}
 export function queueTarget(sender: Electron.WebContents, id: unknown): string | null {
   return sender === worker?.webContents && typeof id === 'string' && current?.id === id
     ? current.target

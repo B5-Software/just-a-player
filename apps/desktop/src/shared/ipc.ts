@@ -35,6 +35,8 @@ export type HostToRenderer =
 
 /** 主进程 IPC 通道名。 */
 export const IPC = {
+  lightweightOpen: 'lightweight:open',
+  lightweightHandoff: 'lightweight:handoff',
   soundfontImport: 'midi:import-soundfont',
   openFiles: 'app:open-files',
   takeOpenFiles: 'app:take-open-files',

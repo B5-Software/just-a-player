@@ -246,12 +246,30 @@ export function OutputPanel(): React.JSX.Element {
           {probe && <p className="text-[11px] leading-relaxed text-fg-muted">{probe}</p>}
           {!!formats.length && (
             <div className="max-h-56 overflow-auto rounded-xl ring-1 ring-line">
-              <table className="w-full text-left text-xs" aria-label="设备支持格式">
-                <thead className="sticky top-0 bg-panel">
+              <table
+                className="w-full border-separate border-spacing-0 text-left text-xs leading-5"
+                aria-label="设备支持格式"
+              >
+                <thead>
                   <tr>
-                    <th className="p-2">采样率</th>
-                    <th className="p-2">位深／编码</th>
-                    <th className="p-2">声道</th>
+                    <th
+                      scope="col"
+                      className="sticky top-0 z-10 bg-surface p-2 font-semibold shadow-[0_1px_0_var(--line)]"
+                    >
+                      采样率
+                    </th>
+                    <th
+                      scope="col"
+                      className="sticky top-0 z-10 bg-surface p-2 font-semibold shadow-[0_1px_0_var(--line)]"
+                    >
+                      位深／编码
+                    </th>
+                    <th
+                      scope="col"
+                      className="sticky top-0 z-10 bg-surface p-2 font-semibold shadow-[0_1px_0_var(--line)]"
+                    >
+                      声道
+                    </th>
                   </tr>
                 </thead>
                 <tbody>

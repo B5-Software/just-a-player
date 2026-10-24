@@ -11,6 +11,8 @@ export interface AudioState {
   gonio: Float32Array
   peak: [number, number]
   rms: [number, number]
+  /** Unsmoothed RMS for the independently calibrated VU ballistics. */
+  rawRms?: [number, number]
   bass: number
   mid: number
   treble: number
@@ -142,6 +144,7 @@ class AudioBus {
     s.peak[1] = smooth(s.peak[1], level(VIZ_HEADER.peakR))
     s.rms[0] = smooth(s.rms[0], level(VIZ_HEADER.rmsL))
     s.rms[1] = smooth(s.rms[1], level(VIZ_HEADER.rmsR))
+    s.rawRms = [level(VIZ_HEADER.rmsL), level(VIZ_HEADER.rmsR)]
 
     s.bass = mean(s.bands, 0, 14)
     s.mid = mean(s.bands, 24, 72)

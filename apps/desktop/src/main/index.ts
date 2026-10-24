@@ -39,12 +39,13 @@ import { listFonts, fontData, importFonts } from './fonts'
 import { setLightingColor, lightingStatus, syncLighting, closeLighting } from './lighting'
 import { initSystemMedia, updateSystemMedia } from './system-media'
 import { registerIdentity } from './identity'
-import { registerVideoQueue } from './video-queue'
+import { registerVideoQueue, hasActiveVideoExports } from './video-queue'
 import { selectGpu, registerGpu } from './gpu'
 import type { Surface } from '../shared/desktop'
 import { discoverAudioTools } from './tools'
 import { installFileOpening, attachFileOpening } from './file-opening'
 import { registerSoundfonts } from './soundfonts'
+import { openLightweight, wantsLightweight, takeLightweightHandoff } from './lightweight'
 
 const isDev = !app.isPackaged
 const isE2E = Boolean(process.env['JAP_E2E'])
@@ -121,6 +122,17 @@ function isStringArray(value: unknown): value is string[] {
 }
 
 function registerIpc(): void {
+  ipcMain.handle(IPC.lightweightHandoff, (event) => isTrustedSender(event) ? takeLightweightHandoff() : null)
+  ipcMain.handle(IPC.lightweightOpen, async (event, handoff) => {
+    if (!isTrustedSender(event)) throw new Error('Untrusted sender')
+    if (hasActiveVideoExports()) throw new Error('视频仍在导出，请在队列完成或取消后切换轻量模式。')
+    try {
+      await openLightweight(handoff, () => { engine?.kill(); engine = null })
+    } catch (error) {
+      if (!engine) attachEngine(BrowserWindow.fromWebContents(event.sender)!)
+      throw error
+    }
+  })
   registerSoundfonts(isTrustedSender)
   ipcMain.on('app:version', (event) => {
     event.returnValue = app.getVersion()
@@ -476,7 +488,10 @@ if (!app.requestSingleInstanceLock()) {
     }
   })
 
-  void app.whenReady().then(() => {
+  void app.whenReady().then(async () => {
+    if (wantsLightweight()) {
+      try { await openLightweight(); return } catch (error) { console.error('[lightweight]', error) }
+    }
     nativeTheme.themeSource = getSettings().themeMode
     nativeTheme.on('updated', () => {
       for (const win of BrowserWindow.getAllWindows()) applyChrome(win)

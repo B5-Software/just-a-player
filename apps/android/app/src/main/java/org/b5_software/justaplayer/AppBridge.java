@@ -50,6 +50,17 @@ final class AppBridge {
     return value == null ? JSONObject.NULL : value;
   }
 
+  JSONObject readLightHandoff() {
+    try {
+      File f = new File(activity.getFilesDir(), "light-handoff.json");
+      return f.isFile()
+          ? new JSONObject(new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8))
+          : null;
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
   @JavascriptInterface
   public String snapshot() {
     try {
@@ -58,6 +69,8 @@ final class AppBridge {
           .put("settings", new JSONObject(prefs.getString("settings", "{}")))
           .put("fonts", new JSONArray(prefs.getString("fonts", "[]")))
           .put("version", BuildConfig.VERSION_NAME)
+          .put("platform", "android")
+          .put("lightHandoff", readLightHandoff())
           .put("viewport", activity.viewportInfo())
           .put("bundledMidi", BuildConfig.BUNDLED_MIDI)
           .put("qa", BuildConfig.DEBUG && activity.getIntent().getBooleanExtra("e2e", false))
@@ -156,6 +169,54 @@ final class AppBridge {
 
   Object call(String method, JSONObject p) throws Exception {
     switch (method) {
+      case "lightLoad":
+        {
+          File file = new File(activity.getFilesDir(), "lightweight.json");
+          return file.isFile()
+              ? new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8)
+              : null;
+        }
+      case "lightSave":
+        atomic(
+            new File(activity.getFilesDir(), "lightweight.json"),
+            p.getString("json").getBytes(StandardCharsets.UTF_8));
+        return null;
+      case "lightHandoff":
+        {
+          File file = new File(activity.getFilesDir(), "light-handoff.json");
+          if (!file.isFile()) return null;
+          JSONObject data =
+              new JSONObject(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+          Files.deleteIfExists(file.toPath());
+          return data;
+        }
+      case "lightweightMode":
+        {
+          if (exporting) throw new IOException("导出界面不能切换播放模式");
+          atomic(
+              new File(activity.getFilesDir(), "light-handoff.json"),
+              p.optJSONObject("handoff").toString().getBytes(StandardCharsets.UTF_8));
+          prefs.edit().putBoolean("lightweight", p.optBoolean("enabled")).apply();
+          activity.runOnUiThread(
+              () -> {
+                try {
+                  activity.configureHdr(false);
+                } catch (Exception ignored) {
+                }
+                activity.root.postDelayed(() -> activity.loadPlayerPage(), 120);
+              });
+          return true;
+        }
+      case "lightVisuals":
+        activity.lightMeters = p.optBoolean("enabled");
+        MainActivity.visualsVisible =
+            MainActivity.visible && !activity.isInPictureInPictureMode() && activity.lightMeters;
+        return null;
+      case "lightReplay":
+        if (PlaybackService.instance != null) PlaybackService.instance.replay();
+        return null;
+      case "lightReady":
+        return null;
       case "nativeHdrTest":
         if (!BuildConfig.DEBUG || !activity.getIntent().getBooleanExtra("e2e", false) || exporting)
           throw new IOException("Native shader QA is unavailable");

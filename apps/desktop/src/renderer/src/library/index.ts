@@ -32,6 +32,20 @@ function serialize(): string {
   }
   return JSON.stringify(data)
 }
+export async function persistLibraryNow(): Promise<string> {
+  window.clearTimeout(saveTimer)
+  saveTimer = 0
+  await window.jap.librarySave(serialize())
+  const state = useLibrary.getState()
+  return JSON.stringify({
+    version: 2,
+    activeListId: state.activeListId,
+    repeat: state.repeat,
+    shuffle: state.shuffle,
+    lists: state.lists,
+    memories: state.memories,
+  } satisfies SavedLibrary)
+}
 
 function schedulePersist(): void {
   window.clearTimeout(saveTimer)

@@ -27,6 +27,6 @@ jobs:
         run: pnpm dlx @deveco/deveco-cli@1.3.7 build --build-mode release
       - uses: actions/upload-artifact@v4
         with:
-          name: HarmonyOS-0.1.2-preview-unsigned-arm64-x86_64
+          name: HarmonyOS-0.1.3-preview-unsigned-arm64-x86_64
           path: apps/harmony/entry/build/default/outputs/default/*-unsigned.hap
           if-no-files-found: error

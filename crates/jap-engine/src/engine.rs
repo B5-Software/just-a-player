@@ -63,6 +63,10 @@ impl Engine {
     pub fn viz_frame(&self, out: &mut Vec<f32>) -> bool {
         self.tap.frame(out)
     }
+    /// Suspend visual-only resampling, history copies and FFT. Audio is unchanged.
+    pub fn set_visualization_enabled(&self, enabled: bool) {
+        self.tap.set_enabled(enabled);
+    }
 
     pub fn send(&self, command: Command) {
         if let Command::SetMidi {

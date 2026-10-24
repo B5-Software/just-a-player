@@ -1,5 +1,13 @@
 # Third-party notices
 
+## Lightweight interface
+
+The embedded 2D interface is original project code (GPL-3.0-or-later) and uses
+installed system fonts; it bundles no additional commercial fonts.
+Desktop hosting uses Wry 0.57.1 (MIT / Apache-2.0), Tao 0.37.2 (Apache-2.0),
+Souvlaki 0.8.3 (MIT), fs2 0.4.3 (MIT / Apache-2.0), and keepawake 0.6.1 (MIT).
+Their full dependency notices are collected by the existing package notice scripts.
+
 ## MIDI synthesis and sound bank
 
 The `with-midi` desktop and Android packages bundle **MuseScore General HQ 0.2.1**, an uncompressed SF2 bank
@@ -100,3 +108,12 @@ USB uses the same libusb transport and LGPL notices as Android. The original
 Huawei DevEco project template headers retain their Apache-2.0 notices; new
 application code is GPL-3.0-or-later. Huawei SDK components are provided by the
 developer's SDK installation and are not included in this repository.
+
+
+## Native lightweight UI
+
+The native frontend uses egui / eframe 0.34.3 (MIT OR Apache-2.0), egui_software_backend 0.0.3 (MIT OR Apache-2.0),
+and the native window / graphics integrations selected by eframe. It does not use Wry or a WebView.
+Android and HarmonyOS present Rust-rasterized pixels using their native View / PixelMap APIs.
+Only Noto Sans SC and Latin fonts are embedded in this UI, under SIL OFL 1.1; see crates/jap-light/fonts/OFL.txt.
+The TTF assets are decoded from the same OFL WOFF2 subsets used by the complete UI.

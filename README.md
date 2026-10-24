@@ -33,6 +33,16 @@
 
 ![时频谱、频率刻度与实时电平读数](docs/screenshots/instruments.png)
 
+### 也可以，安静一点
+
+设置中的 **原生轻量模式** 使用 Rust / egui 直接绘制 2D 界面，支持 Windows、macOS、Linux、
+Android 与鸿蒙预览。轻量界面不使用 WebView；桌面切换后退出 Electron；
+保留封面、逐字歌词、列表、HiFi 输出与 EQ，五种专业仪表各自开关、默认关闭。
+不加载 3D 场景；关闭仪表后连同可视化分析一起停用。
+参见[轻量模式、依赖与构建](docs/lightweight.md)。
+
+![Rust 原生轻量界面、逐字歌词与可选专业仪表](docs/screenshots/lightweight.png)
+
 ### 音乐可以留在桌面
 
 选择悬浮播放，主窗口直接收起为小窗，封面与播放控制仍在手边。Windows 桌面壁纸可全屏展示歌词与视效，支持多显示器、鼠标跟随、日期与时间。
@@ -111,7 +121,7 @@ MIDI 是演奏指令，实际音色取决于音色库与合成器，并不携带
 | `without-midi` | 推荐日常使用：省去约 467 MiB 的内置音色资源；所有录音格式、HiFi 输出和可视化完整保留。仍可导入 SF2 后播放 MIDI |
 | `with-midi` | 即装即播 MIDI：完整内置 MuseScore General HQ，无需另外寻找音色库 |
 
-Android 0.1.2：[轻量版 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.2/Just-A-Player-0.1.2-Android-universal-without-midi.apk) · [含 HQ 音色库 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.2/Just-A-Player-0.1.2-Android-universal-with-midi.apk)。两者包名和签名相同，可相互覆盖升级；此前的 `.debug` 调试包独立安装。
+Android 0.1.3：[无内置音色库 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.3/Just-A-Player-0.1.3-Android-universal-without-midi.apk) · [含 HQ 音色库 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.3/Just-A-Player-0.1.3-Android-universal-with-midi.apk)。两者包名和签名相同，可相互覆盖升级；此前的 `.debug` 调试包独立安装。
 
 发布页附有 `SHA256SUMS.txt`。社区构建暂未使用商业代码签名证书或 Apple 公证。桌面壁纸与 Windows 系统媒体集成为 Windows 功能；其他平台可使用全屏、小窗、媒体键和原生音频输出。
 
@@ -148,7 +158,7 @@ pnpm dev
 
 开发入口会检查并补齐 Electron 可执行文件，避免 pnpm 依赖变体缺少二进制时出现 `Electron uninstall`。首次 `pnpm build` / `pnpm dev` 也会下载并验证本平台的 FFmpeg 工具包，缓存于 `apps/desktop/build/media-cache/`；后续使用缓存，已安装应用不会下载组件。下载地址和 SHA-256 固定于 `apps/desktop/scripts/media-tools.lock.json`。解压需要系统 `tar`（Windows 10/11 已内置）。若只修改界面，后续直接运行 `pnpm dev`；修改 Rust 后先运行 `pnpm engine:build`。
 
-默认构建 `with-midi`，首次会下载并校验 MIDI HQ 音色库，下载约 262 MiB、解包约 467 MiB，不在运行时下载。设置环境变量 `JAP_BUNDLE_MIDI=0` 可构建 `without-midi`；已缓存的音色库也不会进入轻量包。来源、SHA-256 和完整许可见 `assets/soundfonts/documentation/`。
+默认构建 `with-midi`，首次会下载并校验 MIDI HQ 音色库，下载约 262 MiB、解包约 467 MiB，不在运行时下载。设置环境变量 `JAP_BUNDLE_MIDI=0` 可构建 `without-midi`；已缓存的音色库也不会进入该安装包，两种包都可使用轻量模式。来源、SHA-256 和完整许可见 `assets/soundfonts/documentation/`。
 
 ```sh
 pnpm typecheck

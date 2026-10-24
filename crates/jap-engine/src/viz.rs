@@ -1,7 +1,7 @@
 //! 可视化取样点：生产者把解码后的样本推进来，前端按需拉取“此刻正在听到的那一帧”的分析结果。
 
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use jap_analysis::Analyzer;
@@ -29,11 +29,13 @@ struct State {
 
 pub struct VizTap {
     state: Mutex<State>,
+    enabled: AtomicBool,
 }
 
 impl VizTap {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
+            enabled: AtomicBool::new(true),
             state: Mutex::new(State {
                 analyzer: Analyzer::new(),
                 analysis_rate: 44_100,
@@ -44,6 +46,25 @@ impl VizTap {
                 last_emitted: None,
             }),
         })
+    }
+
+    pub fn set_enabled(&self, enabled: bool) {
+        if self.enabled.swap(enabled, Ordering::Relaxed) != enabled {
+            let mut state = self.state.lock();
+            state.analyzer.reset();
+            state.last_emitted = None;
+            state.downsample = None;
+            if enabled && let Some(rate) = state.binding.as_ref().map(|b| b.rate) {
+                state.downsample = AnalysisResampler::new(rate);
+                state.analysis_rate = if state.downsample.is_some() {
+                    96_000
+                } else {
+                    rate
+                };
+                let rate = state.analysis_rate;
+                state.analyzer.set_rate(rate);
+            }
+        }
     }
 
     pub(crate) fn bind(
@@ -58,7 +79,11 @@ impl VizTap {
         st.analyzer.reset();
         // Keep only the visual analysis at <= 96 kHz. The samples sent to the
         // DAC never pass through this filter; native high-rate PCM stays exact.
-        st.downsample = AnalysisResampler::new(rate);
+        st.downsample = if self.enabled.load(Ordering::Relaxed) {
+            AnalysisResampler::new(rate)
+        } else {
+            None
+        };
         st.analysis_rate = if st.downsample.is_some() {
             96_000
         } else {
@@ -90,6 +115,9 @@ impl VizTap {
     }
 
     pub(crate) fn push(&self, start_frame: u64, samples: &[f64], channels: usize) {
+        if !self.enabled.load(Ordering::Relaxed) {
+            return;
+        }
         let mut guard = self.state.lock();
         let st = &mut *guard;
         if let Some(filter) = &mut st.downsample {
@@ -101,6 +129,9 @@ impl VizTap {
 
     /// 取一帧分析结果。没有在播、或暂停且画面没变时返回 `false`。
     pub fn frame(&self, out: &mut Vec<f32>) -> bool {
+        if !self.enabled.load(Ordering::Relaxed) {
+            return false;
+        }
         let mut guard = self.state.lock();
         let st = &mut *guard;
         let Some(binding) = &st.binding else {

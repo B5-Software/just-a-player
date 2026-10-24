@@ -11,12 +11,14 @@ members = [
     "crates/jap-cli",
     "crates/jap-android",
     "crates/jap-harmony",
+    "crates/jap-light",
+    "apps/lightweight",
 ]
 
 [workspace.package]
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.92"
 license = "GPL-3.0-or-later"
 authors = ["B5-Software"]
 repository = "https://github.com/B5-Software/just-a-player"

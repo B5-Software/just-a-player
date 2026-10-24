@@ -7,9 +7,13 @@ import { useUi } from '../ui/store'
 import { RenderSettings } from './RenderSettings'
 import { MidiSettings } from './MidiSettings'
 import { VisualPluginSettings } from './VisualPluginSettings'
+import { enterLightweight } from '../platform/lightweight'
+import { usePlayer } from '../engine/store'
+import { useState } from 'react'
 
 /** 设置：控件自动隐藏，以及文件与播放列表相关的行为开关。 */
 export function SettingsPanel(): React.JSX.Element {
+  const [openingLight, setOpeningLight] = useState(false)
   const autoHide = useSettings((s) => s.autoHideControls)
   const sidecarLyrics = useSettings((s) => s.sidecarLyrics)
   const sidecarCover = useSettings((s) => s.sidecarCover)
@@ -34,6 +38,23 @@ export function SettingsPanel(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-6">
+      <SettingRow
+        title="轻量模式"
+        hint="切换到 Rust / egui 原生界面，无浏览器运行时。封面、歌词和播放列表保留，专业仪表各自可选。"
+      >
+        <Toggle
+          label="轻量模式"
+          checked={openingLight}
+          disabled={openingLight}
+          onChange={() => {
+            setOpeningLight(true)
+            void enterLightweight().catch((error) => {
+              setOpeningLight(false)
+              usePlayer.setState({ error: String(error) })
+            })
+          }}
+        />
+      </SettingRow>
       {window.jap.platform === 'android' && (
         <section className="flex flex-col gap-4">
           <SectionTitle>界面与布局</SectionTitle>

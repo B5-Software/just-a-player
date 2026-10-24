@@ -14,6 +14,7 @@ jap-core.workspace = true
 jap-engine.workspace = true
 jap-output.workspace = true
 jap-decode.workspace = true
+jap-light = { path = "../jap-light" }
 parking_lot.workspace = true
 serde_json.workspace = true
 base64 = "0.22"

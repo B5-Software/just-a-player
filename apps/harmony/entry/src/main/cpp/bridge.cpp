@@ -4,6 +4,7 @@
 #include <memory>
 extern "C" char* jap_harmony_request(const char*);
 extern "C" void jap_harmony_free(char*);
+extern "C" char* jap_harmony_native_render(const char*,unsigned char*,size_t);
 struct Work {std::string input,output;napi_async_work task;napi_deferred result;};
 static napi_value Request(napi_env env,napi_callback_info info) {
   size_t count=1;napi_value arg;napi_get_cb_info(env,info,&count,&arg,nullptr,nullptr);
@@ -18,6 +19,18 @@ static napi_value Request(napi_env env,napi_callback_info info) {
     if(status==napi_ok)napi_resolve_deferred(env,w->result,out);else napi_reject_deferred(env,w->result,out);napi_delete_async_work(env,w->task);
   },work,&work->task);napi_queue_async_work(env,work->task);return promise;
 }
-static napi_value Init(napi_env env,napi_value exports){napi_property_descriptor desc={"request",nullptr,Request,nullptr,nullptr,nullptr,napi_default,nullptr};napi_define_properties(env,exports,1,&desc);return exports;}
+static napi_value NativeRender(napi_env env,napi_callback_info info) {
+  size_t count=3,len=0;napi_value args[3];napi_get_cb_info(env,info,&count,args,nullptr,nullptr);
+  uint32_t width=0,height=0;
+  if(count!=3||napi_get_value_uint32(env,args[0],&width)!=napi_ok||napi_get_value_uint32(env,args[1],&height)!=napi_ok||width<160||height<90||width>2560||height>1600||napi_get_value_string_utf8(env,args[2],nullptr,0,&len)!=napi_ok||len>1024*1024){napi_throw_type_error(env,nullptr,"Invalid native frame");return nullptr;}
+  std::string input(len+1,'\0');napi_get_value_string_utf8(env,args[2],input.data(),len+1,&len);
+  void* pixels=nullptr;napi_value buffer;napi_create_arraybuffer(env,width*height*4,&pixels,&buffer);
+  char* result=jap_harmony_native_render(input.c_str(),static_cast<unsigned char*>(pixels),width*height*4);
+  napi_value out,state;napi_create_object(env,&out);napi_create_string_utf8(env,result?result:"{}",NAPI_AUTO_LENGTH,&state);jap_harmony_free(result);
+  napi_set_named_property(env,out,"pixels",buffer);napi_set_named_property(env,out,"state",state);return out;
+}
+static napi_value Init(napi_env env,napi_value exports){napi_property_descriptor desc[]={
+  {"request",nullptr,Request,nullptr,nullptr,nullptr,napi_default,nullptr},
+  {"nativeRender",nullptr,NativeRender,nullptr,nullptr,nullptr,napi_default,nullptr}};napi_define_properties(env,exports,2,desc);return exports;}
 static napi_module module={1,0,nullptr,Init,"player",nullptr,{0}};
 extern "C" __attribute__((constructor)) void Register(){napi_module_register(&module);}

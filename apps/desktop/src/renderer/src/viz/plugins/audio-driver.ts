@@ -3,6 +3,7 @@ import type { AudioState } from '../audio'
 import type { ShaderDriver } from './shader'
 import type { NativeShaderTexture } from '../native-hdr'
 import { sampleBand } from '../scenes/common'
+import { vuPosition, VU_TICKS, smoothVu } from '../vu-scale'
 
 export const AUDIO_UNIFORMS = `
 uniform vec4 uBands[32];uniform vec4 uHold[32];uniform vec4 uWave[64];uniform highp sampler2D uStereoTrace;
@@ -100,9 +101,9 @@ export function vuDriver(): ShaderDriver {
   const labels = (): void => {
     if (!width || !height || disposed) return
     const canvas = document.createElement('canvas')
-    const density=Math.min(2,2048/width,2048/height)
-    canvas.width = Math.max(1,Math.round(width*density))
-    canvas.height = Math.max(1,Math.round(height*density))
+    const density = Math.min(2, 2048 / width, 2048 / height)
+    canvas.width = Math.max(1, Math.round(width * density))
+    canvas.height = Math.max(1, Math.round(height * density))
     const c = canvas.getContext('2d', { willReadFrequently: true })!
     c.scale(canvas.width / width, canvas.height / height)
     c.fillStyle = '#fff'
@@ -110,14 +111,14 @@ export function vuDriver(): ShaderDriver {
     c.font = `500 ${Math.max(11, height * 0.02)}px "Noto Sans Mono","Noto Sans SC",sans-serif`
     c.fillText('STEREO VU', width * 0.5, height * 0.2)
     c.font = `700 ${Math.max(11, height * 0.017)}px "Noto Sans Mono",monospace`
-    c.fillText('0 VU = −18 dBFS  ·  300 ms', width * 0.5, height * 0.76)
+    c.fillText('PROGRAM RMS · 0 VU = −18 dBFS · 300 ms · +18 VU', width * 0.5, height * 0.76)
     for (let channel = 0; channel < 2; channel++) {
       const center = width * (channel === 0 ? 0.28 : 0.72),
         cy = height * 0.62,
         r = height * 0.25
       c.fillText(channel === 0 ? 'LEFT' : 'RIGHT', center, height * 0.69)
-      for (const db of [-20, -10, -7, -5, -3, -1, 0, 1, 2, 3]) {
-        const p = Math.min(1, Math.pow(10, (db - 3) / 20)),
+      for (const db of VU_TICKS) {
+        const p = (db + 30) / 48,
           angle = 2.55 - p * 1.96
         c.fillText(
           db > 0 ? `+${db}` : `${db}`,
@@ -152,15 +153,14 @@ export function vuDriver(): ShaderDriver {
     update(a) {
       base.update(a)
       for (let ch = 0; ch < 2; ch++) {
-        const target = a.rms[ch]!,
-          k = 1 - Math.exp(-Math.max(0, a.dt) / 0.065)
-        ball[ch] = ball[ch]! + (target - ball[ch]!) * k
+        const target = (a.rawRms ?? a.rms)[ch]!
+        ball[ch] = smoothVu(ball[ch]!, target, a.dt)
         if (a.peak[ch]! >= hold[ch]!) {
           hold[ch] = a.peak[ch]!
           timer[ch] = 1.5
         } else if ((timer[ch]! -= a.dt) <= 0) hold[ch] = hold[ch]! * Math.exp(-a.dt * 0.5)
-        ;(values.uVu as number[])[ch] = Math.min(1, ball[ch]! * Math.pow(10, 15 / 20))
-        ;(values.uVu as number[])[ch + 2] = Math.min(1, hold[ch]! * Math.pow(10, 15 / 20))
+        ;(values.uVu as number[])[ch] = vuPosition(ball[ch]!)
+        ;(values.uVu as number[])[ch + 2] = vuPosition(hold[ch]!)
       }
     },
     dispose() {

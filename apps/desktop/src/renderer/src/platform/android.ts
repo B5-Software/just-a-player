@@ -116,6 +116,14 @@ if (native) {
     )
   }
   const snapshot = JSON.parse(native.snapshot())
+  // Restore native-page audio settings synchronously, before any store connects.
+  if (snapshot.lightHandoff) {
+    const h = snapshot.lightHandoff
+    localStorage.setItem('jap.volume', String(h.volume))
+    localStorage.setItem('jap.output', JSON.stringify(h.output))
+    localStorage.setItem('jap.dsp.v1', JSON.stringify(h.dsp))
+  }
+
   let settings = applySettingsPatch(DEFAULT_SETTINGS, snapshot.settings)
   let viewport = snapshot.viewport as { width: number; height: number; density: number } | undefined
   let mini = false
@@ -221,6 +229,8 @@ if (native) {
     version: snapshot.version,
     surface: snapshot.surface ?? 'main',
     initialSettings: settings,
+    openLightweight: (handoff) => rpc('lightweightMode', { enabled: true, handoff }),
+    takeLightweightHandoff: () => rpc('lightHandoff'),
     initialFonts: snapshot.fonts ?? [],
     onDialogRequest: (fn) => on('dialog', fn),
     browseFiles: (path) => rpc('browse', path ? { path } : {}),

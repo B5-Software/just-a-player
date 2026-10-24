@@ -165,7 +165,19 @@ fn check(code: i32, action: &str) -> Result<()> {
     if code == 0 || code == SUCCESS {
         Ok(())
     } else {
-        Err(OutputError::Backend(format!("{action}失败（ASIO {code}）")))
+        let detail = match code {
+            -1000 => "硬件输入或输出不可用；检查设备连接、底层 USB 驱动绑定及其他程序的独占占用",
+            -999 => "硬件启动故障",
+            -998 => "驱动拒绝了参数",
+            -997 => "设备处于不兼容的模式",
+            -996 => "采样位置未推进",
+            -995 => "设备时钟不可用",
+            -994 => "驱动内存不足",
+            _ => "驱动返回未识别的错误",
+        };
+        Err(OutputError::Backend(format!(
+            "{action}失败（ASIO {code}）：{detail}"
+        )))
     }
 }
 

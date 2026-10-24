@@ -13,6 +13,7 @@ interface Browse { path?: string; }
 interface QaWrite { name:string; data:string; }
 interface Fullscreen { value:boolean; }
 interface Mode { mode:string; }
+interface LightMode { enabled:boolean; }
 interface Settings { patch:AwakeSettings; }
 interface AwakeSettings { keepScreenAwake?:boolean; }
 interface MediaState { state:string; }
@@ -29,9 +30,12 @@ export class PlayerBridge {
   private keepAwake: boolean = false;
   private playing: boolean = false;
   private awake: boolean = false;
+  private lightweight: boolean = false;
+  private lightVisuals: boolean = false;
+  setLightweight(enabled:boolean):void { this.lightweight=enabled; this.lightVisuals=false; }
   constructor(context: common.UIAbilityContext, controller: webview.WebviewController, snapshot: string) {
     this.context=context;this.controller=controller;
-    this.root = context.filesDir; this.state = snapshot;
+    this.root = context.filesDir; this.state = snapshot.slice(0,-1)+',"qa":'+BuildProfile.DEBUG+'}';
     this.keepAwake = (JSON.parse(snapshot) as Snapshot).settings?.keepScreenAwake ?? false;
   }
   snapshot(): string { return this.state; }
@@ -68,7 +72,7 @@ export class PlayerBridge {
       } finally { fs.closeSync(file); }
     }
   }
-  private async connectUsb(): Promise<string> {
+  async connectUsb(): Promise<string> {
     const devices = usbManager.getDevices();
     for (let i = 0; i < devices.length; i++) {
       const device = devices[i];
@@ -94,6 +98,13 @@ export class PlayerBridge {
     }).catch((e: Error) => this.emit('rpc', JSON.stringify({ id: id, error: e.message })));
   }
   private async work(method: string, payload: string): Promise<string> {
+    if(method === 'lightVisuals') { this.lightVisuals=(JSON.parse(payload) as LightMode).enabled;return 'null'; }
+    if(method === 'lightweightMode') {
+      const result=await this.files(method,payload);
+      this.setLightweight((JSON.parse(payload) as LightMode).enabled);
+      setTimeout(()=>AppStorage.setOrCreate('japNativeMode',this.lightweight),120);
+      return result;
+    }
     if(method==='qaWrite') {
       if(!BuildProfile.DEBUG)throw new Error('Test operation unavailable');
       const input=JSON.parse(payload) as QaWrite;
@@ -107,6 +118,11 @@ export class PlayerBridge {
     if(method === 'settings') {
       this.keepAwake = (JSON.parse(payload) as Settings).patch.keepScreenAwake ?? false;
       await this.updateAwake();
+      const result = await this.files(method,payload);
+      const snapshot = JSON.parse(this.state) as Snapshot;
+      snapshot.settings = JSON.parse(result) as AwakeSettings;
+      this.state = JSON.stringify(snapshot);
+      return result;
     }
     if(method === 'systemMedia') {
       this.playing = (JSON.parse(payload) as MediaState).state === 'playing';
@@ -132,9 +148,9 @@ export class PlayerBridge {
     return this.files(method, payload);
   }
   poll(): void {
-    if(this.polling)return;
+    if(this.polling||this.lightweight)return;
     this.polling=true;
-    player.request(`{"op":"poll","visual":${this.visible}}`).then((events: string) => {
+    player.request(`{"op":"poll","visual":${this.visible && (!this.lightweight || this.lightVisuals)}}`).then((events: string) => {
       if(events === '[]')return;
       return this.controller.runJavaScript(`for(const event of ${events})window.__androidEvent?.('engine',event.kind?event:{kind:'event',event})`);
     }).catch(()=>{}).finally(()=>{this.polling=false;});

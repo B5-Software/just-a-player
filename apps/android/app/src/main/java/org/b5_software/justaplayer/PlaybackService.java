@@ -147,6 +147,10 @@ public final class PlaybackService extends Service {
 
   static void command(String command) {
     PlaybackService s = instance;
+    if (s != null && s.getSharedPreferences("player", 0).getBoolean("lightweight", false)) {
+      Native.lightControl("{\"type\":\"media\",\"command\":\"" + command + "\"}");
+      return;
+    }
     // Pause/stop must work even when WebView is absent or busy.
     if (s != null && (command.equals("pause") || command.equals("stop")))
       s.send("{\"kind\":\"command\",\"command\":{\"type\":\"" + command + "\"}}");

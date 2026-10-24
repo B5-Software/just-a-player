@@ -1,6 +1,6 @@
 {
   "name": "just-a-player",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "author": "B5-Software",
   "license": "GPL-3.0-or-later",
@@ -8,6 +8,9 @@
   "description": "Just A Player - HiFi music player (Electron + Rust)",
   "packageManager": "pnpm@12.8.1",
   "scripts": {
+    "light:build": "node scripts/build-lightweight.mjs --debug",
+    "light:release": "node scripts/build-lightweight.mjs",
+    "test:light": "node scripts/test-lightweight.mjs",
     "harmony:build": "pnpm --filter harmony build",
     "harmony:test": "pnpm --filter harmony test",
     "android:build": "pnpm --filter android build",

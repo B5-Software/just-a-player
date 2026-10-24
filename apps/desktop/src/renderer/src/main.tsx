@@ -42,6 +42,7 @@ import { initMidi } from './audio/midi'
 import { initFileOpening } from './library/file-opening'
 import { serializeNativeTextures } from './viz/native-hdr'
 import { prepareScenes } from './viz/scenes'
+import { initLightweightHandoff } from './platform/lightweight'
 
 const surface = window.jap.surface
 document.documentElement.dataset['surface'] = surface
@@ -49,6 +50,7 @@ if (surface === 'main') {
   initMidi()
   initScanner()
   initLibrary()
+  initLightweightHandoff()
   initFileOpening()
   initSystemMediaSync()
   const syncVisual = (): void => {

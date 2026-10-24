@@ -1,7 +1,7 @@
 # HarmonyOS PC 7.0（实验性）
 
 复用 React 界面和 Rust 引擎，通过 ArkWeb + Node-API 接入原生 OHAudio。
-包名 `org.b5_software.justaplayer`，作者 B5-Software，版本 0.1.2。
+包名 `org.b5_software.justaplayer`，作者 B5-Software，版本 0.1.3。
 
 | 用途 | Rust target | HAP ABI |
 | --- | --- | --- |

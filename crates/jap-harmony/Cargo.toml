@@ -12,6 +12,7 @@ crate-type = ["staticlib", "rlib"]
 [dependencies]
 jap-core.workspace = true
 jap-engine.workspace = true
+jap-light = { path = "../jap-light" }
 jap-output.workspace = true
 jap-decode.workspace = true
 parking_lot.workspace = true

@@ -13,9 +13,9 @@ vec3 visualize(vec2 uv){
   vec2 p=(uv-vec2(ch==0?.28:.72,.38))*vec2(uRes.x/uRes.y,1.);float r=length(p),a=atan(p.y,p.x),aa=1.5/uRes.y;
   float arc=(1.-smoothstep(aa,aa*2.,abs(r-.21)))*step(.58,a)*step(a,2.56);
   col+=ink*arc*.45;
-  for(int i=0;i<10;i++){
-   float db=float(i)-7.;if(i==0)db=-20.;if(i==1)db=-10.;if(i==2)db=-7.;if(i==3)db=-5.;if(i==4)db=-3.;if(i==5)db=-1.;if(i==6)db=0.;if(i==7)db=1.;if(i==8)db=2.;if(i==9)db=3.;
-   float at=2.55-pow(10.,(db-3.)/20.)*1.96;vec2 d=vec2(cos(at),sin(at));float tick=1.-smoothstep(aa,aa*2.,vuSegment(p,d*.218,d*.232));col+=mix(ink,uSecond,step(0.,db))*tick*.8;
+    for(int i=0;i<9;i++){
+     float db=-30.;if(i==1)db=-20.;if(i==2)db=-10.;if(i==3)db=-5.;if(i==4)db=0.;if(i==5)db=3.;if(i==6)db=6.;if(i==7)db=12.;if(i==8)db=18.;
+     float at=2.55-((db+30.)/48.)*1.96;vec2 d=vec2(cos(at),sin(at));float tick=1.-smoothstep(aa,aa*2.,vuSegment(p,d*.218,d*.232));col+=mix(ink,uSecond,step(0.,db))*tick*.8;
   }
   float v=ch==0?uVu.x:uVu.y,peak=ch==0?uVu.z:uVu.w;
   float angle=2.55-v*1.96;vec2 tip=vec2(cos(angle),sin(angle))*.205;

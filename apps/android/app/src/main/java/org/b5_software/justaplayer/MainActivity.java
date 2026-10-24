@@ -21,7 +21,10 @@ public final class MainActivity extends Activity {
   static WeakReference<MainActivity> current = new WeakReference<>(null);
   static volatile boolean visible;
   static volatile boolean visualsVisible;
+  volatile boolean lightweight;
+  volatile boolean lightMeters;
   WebView web;
+  NativeLightView lightView;
   AppBridge bridge;
   android.widget.FrameLayout root;
   WebView exportWeb;
@@ -94,11 +97,12 @@ public final class MainActivity extends Activity {
               root.addView(hdrSurface, 0, new android.widget.FrameLayout.LayoutParams(-1, -1));
             }
           } else {
+            getWindow().setColorMode(android.content.pm.ActivityInfo.COLOR_MODE_DEFAULT);
             nativeHdrReady(false, "HDR 已关闭");
             HdrSurface surface = hdrSurface;
             hdrSurface = null;
             if (surface != null)
-              web.postDelayed(
+              root.postDelayed(
                   () -> {
                     root.removeView(surface);
                     if (hdrSurface == null)
@@ -224,7 +228,8 @@ public final class MainActivity extends Activity {
     if (a != null)
       a.runOnUiThread(
           () -> {
-            if (a.web != null)
+            if (a.lightView != null) a.lightView.receive(event, value);
+            else if (a.web != null)
               a.web.evaluateJavascript(
                   "window.__androidEvent?.("
                       + JSONObject.quote(event)
@@ -392,6 +397,14 @@ public final class MainActivity extends Activity {
             WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
     Native.init(getCacheDir().getAbsolutePath(), getApplicationInfo().nativeLibraryDir);
     bindService(new Intent(this, PlaybackService.class), service, Context.BIND_AUTO_CREATE);
+    video = new VideoCoordinator(this);
+    root = new android.widget.FrameLayout(this);
+    bridge = new AppBridge(this);
+    setContentView(root);
+    loadPlayerPage();
+  }
+
+  void createFullWeb() {
     web =
         new WebView(this) {
           @Override
@@ -414,7 +427,7 @@ public final class MainActivity extends Activity {
     s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
     s.setSupportZoom(false);
     WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
-    bridge = new AppBridge(this);
+    if (bridge == null) bridge = new AppBridge(this);
     web.addJavascriptInterface(bridge, "NativeAndroid");
     web.setWebViewClient(
         new WebViewClient() {
@@ -441,7 +454,7 @@ public final class MainActivity extends Activity {
               String name = path.substring(1);
               String ext = MimeTypeMap.getFileExtensionFromUrl(name);
               String mime =
-                  ext.equals("js")
+                  (ext.equals("js") || ext.equals("mjs"))
                       ? "application/javascript"
                       : ext.equals("css")
                           ? "text/css"
@@ -523,12 +536,39 @@ public final class MainActivity extends Activity {
             return true;
           }
         });
-    video = new VideoCoordinator(this);
-    root = new android.widget.FrameLayout(this);
-    root.addView(web, new android.widget.FrameLayout.LayoutParams(-1, -1));
-    setContentView(root);
-    String query = BuildConfig.DEBUG && getIntent().getBooleanExtra("e2e", false) ? "?e2e=1" : "";
-    web.loadUrl(ORIGIN + "/web/index.html" + query);
+  }
+
+  void loadPlayerPage() {
+    lightweight = getSharedPreferences("player", 0).getBoolean("lightweight", false);
+    lightMeters = false;
+    visualsVisible = visible && !isInPictureInPictureMode() && !lightweight;
+    if (lightView != null) {
+      root.removeView(lightView);
+      lightView.close(true);
+      lightView = null;
+    }
+    if (lightweight) {
+      if (web != null) {
+        root.removeView(web);
+        web.removeJavascriptInterface("NativeAndroid");
+        web.destroy();
+        web = null;
+      }
+      lightView = new NativeLightView(this);
+      root.addView(lightView, new android.widget.FrameLayout.LayoutParams(-1, -1));
+    } else {
+      if (web == null) createFullWeb();
+      if (web.getParent() == null)
+        root.addView(web, new android.widget.FrameLayout.LayoutParams(-1, -1));
+      String query = BuildConfig.DEBUG && getIntent().getBooleanExtra("e2e", false) ? "?e2e=1" : "";
+      web.loadUrl(ORIGIN + "/web/index.html" + query);
+    }
+  }
+
+  @Override
+  protected void onActivityResult(int request, int result, Intent data) {
+    super.onActivityResult(request, result, data);
+    if (request == 6190 && result == RESULT_OK && data != null) opened.receive(data);
   }
 
   void mediaPermission() {
@@ -554,7 +594,7 @@ public final class MainActivity extends Activity {
     super.onResume();
     visible = true;
     applyPlaybackWindow();
-    visualsVisible = !isInPictureInPictureMode();
+    visualsVisible = !isInPictureInPictureMode() && (!lightweight || lightMeters);
     emit("visibility", true);
   }
 
@@ -578,7 +618,7 @@ public final class MainActivity extends Activity {
   public void onPictureInPictureModeChanged(boolean mini, Configuration config) {
     super.onPictureInPictureModeChanged(mini, config);
     visible = mini || hasWindowFocus();
-    visualsVisible = visible && !mini;
+    visualsVisible = visible && !mini && (!lightweight || lightMeters);
     if (mini && hdrSurface != null)
       try {
         configureHdr(false);
@@ -591,7 +631,14 @@ public final class MainActivity extends Activity {
   @Override
   public void onBackPressed() {
     if (isInPictureInPictureMode()) moveTaskToBack(true);
-    else
+    else if (lightView != null) {
+      try {
+        if (!new JSONObject(Native.lightControl("{\"type\":\"back\"}")).optBoolean("closed"))
+          moveTaskToBack(true);
+      } catch (Exception ignored) {
+      }
+      lightView.invalidate();
+    } else if (web != null)
       web.evaluateJavascript(
           "(()=>{const"
               + " open=!!document.querySelector('[data-app-dialog],[data-panel-root],[data-onboarding]');if(open)window.dispatchEvent(new"
@@ -603,6 +650,10 @@ public final class MainActivity extends Activity {
 
   @Override
   protected void onDestroy() {
+    if (lightView != null) {
+      lightView.close(false);
+      lightView = null;
+    }
     if (hdrSurface != null) {
       root.removeView(hdrSurface);
       hdrSurface = null;

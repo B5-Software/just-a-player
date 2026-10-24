@@ -18,7 +18,7 @@ mod bridge {
     };
 
     struct Host {
-        engine: Engine,
+        engine: Arc<Engine>,
         events: Arc<Mutex<VecDeque<Value>>>,
         frame: Vec<f32>,
     }
@@ -92,6 +92,136 @@ mod bridge {
             .unwrap_or(std::ptr::null_mut())
     }
     #[unsafe(no_mangle)]
+    pub extern "system" fn Java_org_b5_1software_justaplayer_Native_lightInit(
+        mut env: JNIEnv,
+        _class: JClass,
+        root: JString,
+        settings: JString,
+        handoff: JString,
+    ) -> jstring {
+        let root = read(&mut env, root);
+        let settings = read(&mut env, settings);
+        let handoff = read(&mut env, handoff);
+        output(&mut env, || {
+            let engine = host()
+                .lock()
+                .as_ref()
+                .ok_or("Native engine not initialized")?
+                .engine
+                .clone();
+            jap_light::host::init(
+                engine,
+                root.into(),
+                "android",
+                serde_json::from_str(&settings).unwrap_or_default(),
+                serde_json::from_str(&handoff).unwrap_or_default(),
+            );
+            Ok(json!(true))
+        })
+    }
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_org_b5_1software_justaplayer_Native_lightEvent(
+        mut env: JNIEnv,
+        _class: JClass,
+        message: JString,
+    ) -> jstring {
+        let message = read(&mut env, message);
+        output(&mut env, || {
+            jap_light::host::receive(serde_json::from_str(&message).map_err(|e| e.to_string())?);
+            Ok(Value::Null)
+        })
+    }
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_org_b5_1software_justaplayer_Native_lightControl(
+        mut env: JNIEnv,
+        _class: JClass,
+        message: JString,
+    ) -> jstring {
+        let message = read(&mut env, message);
+        output(&mut env, || {
+            Ok(jap_light::host::control(
+                &serde_json::from_str::<Value>(&message).map_err(|e| e.to_string())?,
+            ))
+        })
+    }
+    #[repr(C)]
+    struct BitmapInfo {
+        width: u32,
+        height: u32,
+        stride: u32,
+        format: i32,
+        flags: u32,
+    }
+    #[link(name = "jnigraphics")]
+    unsafe extern "C" {
+        fn AndroidBitmap_getInfo(
+            env: *mut jni::sys::JNIEnv,
+            bitmap: jni::sys::jobject,
+            info: *mut BitmapInfo,
+        ) -> i32;
+        fn AndroidBitmap_lockPixels(
+            env: *mut jni::sys::JNIEnv,
+            bitmap: jni::sys::jobject,
+            pixels: *mut *mut std::ffi::c_void,
+        ) -> i32;
+        fn AndroidBitmap_unlockPixels(env: *mut jni::sys::JNIEnv, bitmap: jni::sys::jobject)
+        -> i32;
+    }
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_org_b5_1software_justaplayer_Native_lightDraw(
+        mut env: JNIEnv,
+        _class: JClass,
+        bitmap: jni::objects::JObject,
+        input: JString,
+    ) -> jstring {
+        let input = read(&mut env, input);
+        let result = (|| -> Result<Value, String> {
+            let mut info = BitmapInfo {
+                width: 0,
+                height: 0,
+                stride: 0,
+                format: 0,
+                flags: 0,
+            };
+            if unsafe { AndroidBitmap_getInfo(env.get_raw(), bitmap.as_raw(), &mut info) } != 0
+                || info.format != 1
+                || info.width > 2560
+                || info.height > 1600
+                || info.stride < info.width * 4
+            {
+                return Err("Invalid native bitmap".into());
+            }
+            let mut lock = jap_light::host::surface().lock();
+            let ui = lock.as_mut().ok_or("Native UI not initialized")?;
+            let mut input: Value = serde_json::from_str(&input).map_err(|e| e.to_string())?;
+            input["width"] = json!(info.width);
+            input["height"] = json!(info.height);
+            let result = ui.render(&input);
+            let mut pixels = std::ptr::null_mut();
+            if unsafe { AndroidBitmap_lockPixels(env.get_raw(), bitmap.as_raw(), &mut pixels) } != 0
+            {
+                return Err("Cannot lock native bitmap".into());
+            }
+            for row in 0..info.height as usize {
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        ui.pixels
+                            .as_ptr()
+                            .cast::<u8>()
+                            .add(row * info.width as usize * 4),
+                        pixels.cast::<u8>().add(row * info.stride as usize),
+                        info.width as usize * 4,
+                    );
+                }
+            }
+            unsafe {
+                AndroidBitmap_unlockPixels(env.get_raw(), bitmap.as_raw());
+            }
+            Ok(result)
+        })();
+        output(&mut env, || result)
+    }
+    #[unsafe(no_mangle)]
     pub extern "system" fn Java_org_b5_1software_justaplayer_Native_init(
         mut env: JNIEnv,
         _class: JClass,
@@ -128,7 +258,7 @@ mod bridge {
                     }
                 }));
                 *h = Some(Host {
-                    engine,
+                    engine: Arc::new(engine),
                     events,
                     frame: Vec::new(),
                 });
@@ -180,6 +310,9 @@ mod bridge {
         output(&mut env, || {
             let mut lock = host().lock();
             let h = lock.as_mut().ok_or("Native engine not initialized")?;
+            if jap_light::host::surface().lock().is_none() {
+                h.engine.set_visualization_enabled(visual != 0);
+            }
             let mut events: Vec<Value> = h.events.lock().drain(..).collect();
             if visual != 0 {
                 let mut frame = std::mem::take(&mut h.frame);

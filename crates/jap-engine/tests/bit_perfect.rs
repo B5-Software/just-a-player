@@ -178,6 +178,21 @@ fn cfg(rate: u32, channels: u16, format: SampleFormat) -> StreamConfig {
 }
 
 #[test]
+fn lightweight_without_visual_analysis_preserves_audio_bytes() {
+    let h = harness(
+        "light-without-fft",
+        vec![cfg(192000, 2, SampleFormat::I24In32)],
+    );
+    h.engine.set_visualization_enabled(false);
+    let samples = gen_samples(192000 / 5 * 2, 24, 0xb5);
+    let path = write_wav(h.dir(), "light.wav", 192000, 2, 24, &samples);
+    h.play_to_end(&path);
+    let expected = expected_bytes(&samples, 24, SampleFormat::I24In32);
+    assert_eq!(h.captured_prefix(expected.len()), expected);
+    assert!(!h.engine.viz_frame(&mut Vec::new()));
+}
+
+#[test]
 fn seek_then_immediate_pause_retains_the_acknowledged_position() {
     let h = harness("seek-pause-order", vec![cfg(48000, 2, SampleFormat::I16)]);
     let samples = vec![1000; 48000 * 20 * 2];

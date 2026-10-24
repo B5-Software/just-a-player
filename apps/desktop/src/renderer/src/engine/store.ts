@@ -24,7 +24,11 @@ const DEFAULT_OUTPUT: OutputConfig = {
 }
 
 function loadOutput(): OutputConfig {
-  if (window.jap.platform !== 'android' && new URLSearchParams(location.search).has('e2e'))
+  if (
+    window.jap.platform !== 'android' &&
+    window.jap.platform !== 'ohos' &&
+    new URLSearchParams(location.search).has('e2e')
+  )
     return { ...DEFAULT_OUTPUT, api: 'null' }
   try {
     const raw = localStorage.getItem(OUTPUT_KEY)

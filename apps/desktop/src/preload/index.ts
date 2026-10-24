@@ -13,6 +13,8 @@ ipcRenderer.on(IPC.trayState, (_event, value: unknown) => {
   traySnapshot = { ...traySnapshot, ...(value as Record<string, unknown>) }
 })
 contextBridge.exposeInMainWorld('jap', {
+  openLightweight: (handoff: unknown) => ipcRenderer.invoke(IPC.lightweightOpen, handoff),
+  takeLightweightHandoff: () => ipcRenderer.invoke(IPC.lightweightHandoff),
   bundledMidi: ipcRenderer.sendSync('app:bundledMidi') as boolean,
   importSoundfont: () => ipcRenderer.invoke(IPC.soundfontImport),
   takeOpenFiles: () => ipcRenderer.invoke(IPC.takeOpenFiles),

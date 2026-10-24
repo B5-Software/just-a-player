@@ -6,6 +6,7 @@ release
 apps/desktop/build/notices/
 apps/desktop/build/package-variant.json
 apps/desktop/build/media-tools/
+apps/desktop/build/lightweight/
 apps/desktop/build/media-cache/
 apps/desktop/build/.media-tools-*/
 apps/desktop/test-results/
