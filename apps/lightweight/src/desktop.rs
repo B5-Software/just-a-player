@@ -47,6 +47,7 @@ struct App {
     first: bool,
     last_mail: Instant,
     last_media_at: Instant,
+    graphics: Value,
 }
 impl App {
     fn command(&mut self, command: &str) {
@@ -149,10 +150,11 @@ impl eframe::App for App {
                     "close" => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
                     _ => {}
                 }
-                let _ = jap_light::model::save(
-                    &self.root.join("native-report.json"),
-                    &self.player.debug(),
-                );
+                let _ = jap_light::model::save(&self.root.join("native-report.json"), &{
+                    let mut report = self.player.debug();
+                    report["graphics"] = self.graphics.clone();
+                    report
+                });
             }
         }
         ctx.request_repaint_after(Duration::from_millis(if self.player.visible {
@@ -234,6 +236,7 @@ impl eframe::App for App {
             }
             if let Some(report) = &self.smoke {
                 let mut state = self.player.debug();
+                state["graphics"] = self.graphics.clone();
                 state["passed"] = json!(!self.player.controls.is_empty());
                 let _ = jap_light::model::save(report, &state);
                 ui.ctx()
@@ -354,7 +357,18 @@ pub fn run() -> Result<()> {
             .with_title("Just A Player · Native")
             .with_inner_size([1150., 750.])
             .with_min_inner_size([660., 400.]),
-        renderer: eframe::Renderer::Glow,
+        renderer: {
+            #[cfg(windows)]
+            {
+                eframe::Renderer::Wgpu
+            }
+            #[cfg(not(windows))]
+            {
+                eframe::Renderer::Glow
+            }
+        },
+        #[cfg(windows)]
+        wgpu_options: windows_gpu(),
         run_and_return: true,
         ..Default::default()
     };
@@ -363,6 +377,10 @@ pub fn run() -> Result<()> {
         "Just A Player",
         options,
         Box::new(move |cc| {
+            #[cfg(windows)]
+            let graphics=cc.wgpu_render_state.as_ref().map(|s|{let info=s.adapter.get_info();json!({"backend":format!("{:?}",info.backend),"deviceType":format!("{:?}",info.device_type),"name":info.name})}).unwrap_or_default();
+            #[cfg(not(windows))]
+            let graphics=json!({"backend":"OpenGL"});
             jap_light::ui::setup(&cc.egui_ctx);
             *context.lock().unwrap() = Some(cc.egui_ctx.clone());
             #[cfg(windows)]
@@ -411,6 +429,7 @@ pub fn run() -> Result<()> {
                 first: true,
                 last_mail: Instant::now(),
                 last_media_at: Instant::now() - Duration::from_secs(1),
+                graphics,
             }))
         }),
     )
@@ -429,4 +448,34 @@ pub fn run() -> Result<()> {
             .context("无法返回完整播放器")?;
     }
     Ok(())
+}
+
+#[cfg(windows)]
+fn windows_gpu() -> eframe::egui_wgpu::WgpuConfiguration {
+    use eframe::egui_wgpu::{WgpuSetup, WgpuSetupCreateNew};
+    let force_software = std::env::var("JAP_LIGHT_SOFTWARE").is_ok_and(|v| v == "1");
+    let mut setup = WgpuSetupCreateNew::without_display_handle();
+    setup.instance_descriptor.backends = wgpu::Backends::DX12;
+    setup.power_preference = wgpu::PowerPreference::LowPower;
+    setup.native_adapter_selector = Some(Arc::new(move |adapters, surface| {
+        adapters
+            .iter()
+            .filter(|a| {
+                surface.is_none_or(|s| a.is_surface_supported(s))
+                    && (!force_software || a.get_info().device_type == wgpu::DeviceType::Cpu)
+            })
+            .min_by_key(|a| match a.get_info().device_type {
+                wgpu::DeviceType::IntegratedGpu => 0,
+                wgpu::DeviceType::DiscreteGpu => 1,
+                wgpu::DeviceType::VirtualGpu => 2,
+                wgpu::DeviceType::Cpu => 3,
+                _ => 4,
+            })
+            .cloned()
+            .ok_or_else(|| "没有可用的 Direct3D 12 / WARP 渲染设备".into())
+    }));
+    eframe::egui_wgpu::WgpuConfiguration {
+        wgpu_setup: WgpuSetup::CreateNew(setup),
+        ..Default::default()
+    }
 }

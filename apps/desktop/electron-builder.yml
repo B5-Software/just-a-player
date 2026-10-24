@@ -82,4 +82,5 @@ deb:
     - libgl1
     - libegl1
     - libxkbcommon0
+    - libxkbcommon-x11-0
     - libdbus-1-3

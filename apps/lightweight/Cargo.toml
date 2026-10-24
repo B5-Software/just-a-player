@@ -27,6 +27,8 @@ keepawake = "0.6.1"
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = ["Win32_UI_Shell"] }
+eframe = { version = "=0.34.3", default-features = false, features = ["wgpu_no_default_features"] }
+wgpu = { version = "29.0.4", default-features = false, features = ["std", "dx12", "wgsl"] }
 
 [lints]
 workspace = true

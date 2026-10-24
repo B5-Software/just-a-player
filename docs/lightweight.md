@@ -7,7 +7,7 @@
 
 | 平台 | 原生界面 | 音频 |
 | --- | --- | --- |
-| Windows x64 / ARM64 | egui + 原生窗口 / OpenGL | Rust WASAPI / ASIO |
+| Windows x64 / ARM64 | egui + 原生窗口 / Direct3D 12（WARP 回退） | Rust WASAPI / ASIO |
 | macOS Intel / Apple Silicon | egui + 原生窗口 / OpenGL | Rust CoreAudio |
 | Linux x64 / ARM64 | egui + 原生窗口 / OpenGL（X11 / Wayland） | Rust ALSA |
 | Android ARM32 / ARM64 / x86 / x86_64 | 相同 Rust UI，缓存式软件光栅化，Android 原生 View 呈现 | 原有 AAudio / USB 服务 |
@@ -16,6 +16,7 @@
 五种仪表独立开关、默认全关：频谱、示波器、VU、频谱图、相位示波器。
 全部关闭时停止可视化取样、重采样及 FFT；暂停、隐藏、最小化和画中画时停止仪表分析。
 无仪表时界面按需刷新，播放进度约每 200 ms 更新；仪表启用时最多约 30 fps。
+Windows 通过原生 Direct3D 绘制，优先集成显卡；无可用硬件适配器时选择系统 WARP。无需另装 OpenGL 驱动，也不加载浏览器。
 移动端使用有缓存的 Rust 软件光栅化，不把桌面 OpenGL 窗口嵌入系统 WebView。
 
 原生界面提供播放列表、搜索、导入文件和目录、封面、内嵌 / 同名逐字歌词、歌词字号、应用音量、缓冲重置、

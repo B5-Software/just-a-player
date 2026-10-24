@@ -35,6 +35,10 @@ assert.equal(state.renderer, "egui-native");
 assert.equal(state.webview, false);
 assert.equal(state.passed, true);
 assert.equal(state.visual, false);
+if(process.platform==="win32"){
+  assert.equal(state.graphics.backend,"Dx12");
+  if(process.env.JAP_LIGHT_SOFTWARE==="1")assert.equal(state.graphics.deviceType,"Cpu");
+}
 assert(state.controls.play);
 assert(
   existsSync(report.replace(".json", ".png")),
@@ -46,6 +50,7 @@ console.log(
     platform: process.platform,
     arch: process.arch,
     renderer: state.renderer,
+    graphics:state.graphics,
     report,
   }),
 );

@@ -54,7 +54,7 @@ jobs:
           cache-on-failure: true
       - name: Linux dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libasound2-dev xvfb libgtk-3-dev libxkbcommon-dev libwayland-dev libdbus-1-dev libnss3 libgbm1 libxss1
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libasound2-dev xvfb libgtk-3-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libdbus-1-dev libnss3 libgbm1 libxss1
       # Core tests use native fixtures; desktop build acquires checksum-pinned FFmpeg.
       - run: pnpm install --frozen-lockfile
       - uses: actions/cache@v4
@@ -74,6 +74,11 @@ jobs:
       - name: Native lightweight startup (Xvfb)
         if: runner.os == 'Linux'
         run: xvfb-run -a node apps/lightweight/test-smoke.mjs
+      - name: Native software renderer (Direct3D WARP)
+        if: runner.os == 'Windows'
+        env:
+          JAP_LIGHT_SOFTWARE: '1'
+        run: node apps/lightweight/test-smoke.mjs
       - name: Native lightweight player (Rust / egui)
         if: runner.os == 'Windows'
         run: |

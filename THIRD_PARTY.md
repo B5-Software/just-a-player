@@ -113,6 +113,7 @@ developer's SDK installation and are not included in this repository.
 ## Native lightweight UI
 
 The native frontend uses egui / eframe 0.34.3 (MIT OR Apache-2.0), egui_software_backend 0.0.3 (MIT OR Apache-2.0),
+wgpu (MIT OR Apache-2.0) for native Windows Direct3D 12 / WARP,
 and the native window / graphics integrations selected by eframe. It does not use Wry or a WebView.
 Android and HarmonyOS present Rust-rasterized pixels using their native View / PixelMap APIs.
 Only Noto Sans SC and Latin fonts are embedded in this UI, under SIL OFL 1.1; see crates/jap-light/fonts/OFL.txt.
