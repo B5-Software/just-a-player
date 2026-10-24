@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import assert from "node:assert/strict";
 const root = resolve(import.meta.dirname, "../..");
+mkdirSync(join(root, "apps/desktop/test-results"), { recursive: true });
 const data = mkdtempSync(join(root, "apps/desktop/test-results/native-smoke-"));
 const report = join(data, "report.json");
 const child = spawn(
