@@ -92,7 +92,9 @@ mod linux {
             vec![(
                 w as i32,
                 h as i32,
-                rgba.chunks_exact(4)
+                rgba.as_chunks::<4>()
+                    .0
+                    .iter()
                     .flat_map(|c| [c[3], c[0], c[1], c[2]])
                     .collect(),
             )]
