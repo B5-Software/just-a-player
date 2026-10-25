@@ -132,6 +132,20 @@ impl Worker {
                 if n > 0 {
                     self.write(self.pending_off, n);
                     self.pending_off += n;
+                } else {
+                    // A partially written packet must also wait for the consumer.
+                    // Spinning here otherwise consumes a CPU core whenever the ring is full.
+                    // Waiting on the command channel still allows immediate pause/seek/shutdown.
+                    match self.rx.recv_timeout(Duration::from_millis(2)) {
+                        Ok(cmd) => {
+                            if !self.handle(cmd) {
+                                return;
+                            }
+                        }
+                        Err(RecvTimeoutError::Timeout) => {}
+                        Err(RecvTimeoutError::Disconnected) => return,
+                    }
+                    continue;
                 }
             }
 

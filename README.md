@@ -38,7 +38,7 @@
 设置中的 **原生轻量模式** 使用 Rust / egui 直接绘制 2D 界面，支持 Windows、macOS、Linux、
 Android 与鸿蒙预览。轻量界面不使用 WebView；桌面切换后退出 Electron；
 保留封面、逐字歌词、列表、HiFi 输出与 EQ，五种专业仪表各自开关、默认关闭。
-不加载 3D 场景；关闭仪表后连同可视化分析一起停用。
+不加载 3D 场景；关闭仪表后连同可视化分析一起停用。桌面支持后台播放和原生托盘控制，收起后释放界面绘制资源。
 参见[轻量模式、依赖与构建](docs/lightweight.md)。
 
 ![Rust 原生轻量界面、逐字歌词与可选专业仪表](docs/screenshots/lightweight.png)
@@ -121,7 +121,7 @@ MIDI 是演奏指令，实际音色取决于音色库与合成器，并不携带
 | `without-midi` | 推荐日常使用：省去约 467 MiB 的内置音色资源；所有录音格式、HiFi 输出和可视化完整保留。仍可导入 SF2 后播放 MIDI |
 | `with-midi` | 即装即播 MIDI：完整内置 MuseScore General HQ，无需另外寻找音色库 |
 
-Android 0.1.3：[无内置音色库 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.3/Just-A-Player-0.1.3-Android-universal-without-midi.apk) · [含 HQ 音色库 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.3/Just-A-Player-0.1.3-Android-universal-with-midi.apk)。两者包名和签名相同，可相互覆盖升级；此前的 `.debug` 调试包独立安装。
+Android 0.1.4：[无内置音色库 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.4/Just-A-Player-0.1.4-Android-universal-without-midi.apk) · [含 HQ 音色库 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.4/Just-A-Player-0.1.4-Android-universal-with-midi.apk)。两者包名和签名相同，可相互覆盖升级；此前的 `.debug` 调试包独立安装。
 
 发布页附有 `SHA256SUMS.txt`。社区构建暂未使用商业代码签名证书或 Apple 公证。桌面壁纸与 Windows 系统媒体集成为 Windows 功能；其他平台可使用全屏、小窗、媒体键和原生音频输出。
 

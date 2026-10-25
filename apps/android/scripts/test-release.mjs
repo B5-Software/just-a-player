@@ -34,7 +34,7 @@ function run(command, args) {
 }
 const badging = run(path.join(tools, windows ? 'aapt.exe' : 'aapt'), ['dump', 'badging', apk])
 assert.match(badging, /name='org\.b5_software\.justaplayer'/)
-assert.match(badging, /versionName='0\.1\.3'/)
+assert.match(badging, /versionName='0\.1\.4'/)
 assert.doesNotMatch(badging, /application-debuggable/)
 const signature = run(java, [
   '-jar',
@@ -46,7 +46,7 @@ const signature = run(java, [
 ])
 run(path.join(tools, windows ? 'zipalign.exe' : 'zipalign'), ['-c', '-P', '16', '4', apk])
 const checks = [
-  'Release manifest is non-debuggable and versioned 0.1.3',
+  'Release manifest is non-debuggable and versioned 0.1.4',
   'APK signature verified',
   'APK 16 KiB ZIP alignment verified',
 ]

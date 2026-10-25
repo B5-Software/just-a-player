@@ -7,6 +7,10 @@
 mod desktop;
 #[cfg(all(not(target_os = "android"), not(target_env = "ohos")))]
 mod media;
+#[cfg(all(not(target_os = "android"), not(target_env = "ohos")))]
+mod software;
+#[cfg(all(not(target_os = "android"), not(target_env = "ohos")))]
+mod tray;
 
 fn main() -> anyhow::Result<()> {
     #[cfg(all(not(target_os = "android"), not(target_env = "ohos")))]

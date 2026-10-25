@@ -496,7 +496,7 @@ impl Player {
                 }
                 Update::Resources(path, image, lyrics, data) => {
                     if self.current.as_ref().is_some_and(|t| t.path == path) {
-                        self.cover = image.as_ref().map(|im| {
+                        self.cover = image.as_ref().filter(|_| self.visible).map(|im| {
                             ctx.load_texture(
                                 "current-cover",
                                 im.clone(),

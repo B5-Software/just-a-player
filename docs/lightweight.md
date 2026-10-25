@@ -1,4 +1,4 @@
-# 原生轻量模式（0.1.3）
+# 原生轻量模式（0.1.4）
 
 设置顶部打开「轻量模式」，原生窗口右上角「完整模式」返回视觉舞台。
 界面由 Rust / egui 编译并直接绘制，不包含 HTML、CSS、JavaScript 页面或 WebView。
@@ -7,17 +7,17 @@
 
 | 平台 | 原生界面 | 音频 |
 | --- | --- | --- |
-| Windows x64 / ARM64 | egui + 原生窗口 / Direct3D 12（WARP 回退） | Rust WASAPI / ASIO |
-| macOS Intel / Apple Silicon | egui + 原生窗口 / OpenGL | Rust CoreAudio |
-| Linux x64 / ARM64 | egui + 原生窗口 / OpenGL（X11 / Wayland） | Rust ALSA |
+| Windows x64 / ARM64 | egui + 原生窗口 / CPU 缓存光栅化 | Rust WASAPI / ASIO |
+| macOS Intel / Apple Silicon | egui + 原生窗口 / CPU 缓存光栅化 | Rust CoreAudio |
+| Linux x64 / ARM64 | egui + 原生窗口 / CPU 缓存光栅化（X11 / Wayland） | Rust ALSA |
 | Android ARM32 / ARM64 / x86 / x86_64 | 相同 Rust UI，缓存式软件光栅化，Android 原生 View 呈现 | 原有 AAudio / USB 服务 |
 | HarmonyOS ARM64 / x86_64 预览 | 相同 Rust UI，缓存式软件光栅化，ArkUI PixelMap 呈现 | 原有 OHAudio / USB 适配 |
 
 五种仪表独立开关、默认全关：频谱、示波器、VU、频谱图、相位示波器。
 全部关闭时停止可视化取样、重采样及 FFT；暂停、隐藏、最小化和画中画时停止仪表分析。
 无仪表时界面按需刷新，播放进度约每 200 ms 更新；仪表启用时最多约 30 fps。
-Windows 通过原生 Direct3D 绘制，优先集成显卡；无可用硬件适配器时选择系统 WARP。无需另装 OpenGL 驱动，也不加载浏览器。
-移动端使用有缓存的 Rust 软件光栅化，不把桌面 OpenGL 窗口嵌入系统 WebView。
+桌面使用 egui + softbuffer 原生软件呈现，不创建设备级 Direct3D / OpenGL / WebGPU 上下文。
+移动端也使用有缓存的 Rust 软件光栅化，由原生 View / PixelMap 呈现。
 
 原生界面提供播放列表、搜索、导入文件和目录、封面、内嵌 / 同名逐字歌词、歌词字号、应用音量、缓冲重置、
 输出设备和 DSD 模式、设备格式表、信号链、DSP / EQ、预置和质量评分。
@@ -28,12 +28,23 @@ Windows 通过原生 Direct3D 绘制，优先集成显卡；无可用硬件适�
 桌面切换会重新打开音频会话；移动端复用同一个 Rust 音频引擎。
 Windows / macOS / Linux 保留系统媒体控制，Android 保留媒体通知和系统控制；鸿蒙 AVSession 仍属待适配项。
 
+桌面默认允许后台播放，关闭窗口收起到托盘；两个选项均可在原生设置中单独调整。
+托盘左键恢复播放器，右键打开带封面、上一首 / 播放暂停 / 下一首、缓冲重置、恢复和退出的原生面板。
+播放面板复用主窗口和同一个音频引擎。隐藏 / 最小化释放软件帧缓冲、字体图集和 UI 上下文，停止 FFT；
+音频、自动切歌、元数据与系统媒体按键继续运行。恢复时重建界面，不重启音频。
+Linux 需要桌面提供 StatusNotifierItem 托盘宿主；没有托盘宿主时关闭会正常退出，不会把窗口藏到无法恢复的位置。
+应用内与托盘使用相同的 App 图标，托盘图标使用透明圆角；Windows 标题栏和可执行文件也嵌入该图标。
+
+内存验收使用独立进程，记录工作集和私有提交量，测试包括空闲、48 kHz PCM 播放、后台、恢复和多次收起循环。
+Windows x64 本机 Release 验收：空闲约 52 MiB 工作集 / 29 MiB 私有内存，48 kHz PCM + VU 约 66 / 40 MiB，收起到托盘约 36 / 11 MiB。
+这是特定文件和本机环境的测量，音色库、解码器、封面和缓冲配置会影响实际占用；大型 SF2 正在使用时会占用额外内存。
+
 VU 显示音源 RMS（DSP 之后、应用主音量之前），0 VU = −18 dBFS，扩展量程 −30 至 +18 VU；
 显示约 300 ms 达到稳态 99%，峰值保持另行显示。此数字仪表不是模拟 VU 表的计量认证实现。
 ASIO −1000 表示驱动报告硬件不可用；Dawn Pro 2 自制 ASIO 若依赖 libusbK，不能仅有 usbaudio2 绑定。
 不会通过静默切换系统混音输出来冒充 ASIO / Bit-Perfect。
 
-轻量模式专注 2D 播放与仪表，使用 3D、HDR 舞台、壁纸、视频导出或完整托盘控制时切回完整模式。
+轻量模式专注 2D 播放与仪表，使用 3D、HDR 舞台、壁纸、视频导出时切回完整模式。
 鸿蒙沿用原有预览限制；USB DAC / DSD 的硬件验证与平台原生能力分开记录。
 macOS / Linux 的运行验证由对应 CI runner 完成，本机 Windows 不能替代实际平台验证。
 
@@ -41,8 +52,9 @@ macOS / Linux 的运行验证由对应 CI runner 完成，本机 Windows 不能�
 pnpm light:build                     # Rust 原生 Debug 程序
 pnpm light:release                   # Rust 原生 Release 程序
 pnpm test:light                      # 原生指针 / 滑条 / 仪表 / 歌词与 VU 响应
-node apps/lightweight/test-smoke.mjs  # 原生窗口及 GPU 帧截图；Linux 使用 xvfb-run
+node apps/lightweight/test-smoke.mjs  # 原生窗口及软件帧截图；Linux 使用 xvfb-run
 node apps/lightweight/test-native.mjs # 原生播放、队列、仪表和暂停
+node apps/lightweight/test-background.mjs # Windows 托盘、后台自动切歌、隐藏零绘制、实际内存
 ```
 
 原生界面仅内嵌 OFL 的 Noto Sans SC / Latin 字体，许可证位于 crates/jap-light/fonts/OFL.txt。

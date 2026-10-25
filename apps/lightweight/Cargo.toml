@@ -18,7 +18,11 @@ clap.workspace = true
 sha2.workspace = true
 
 [target.'cfg(all(not(target_os = "android"), not(target_env = "ohos")))'.dependencies]
-eframe = { version = "=0.34.3", default-features = false, features = ["glow", "x11", "wayland"] }
+winit = { version = "0.30.13", default-features = false, features = ["x11", "wayland", "rwh_06"] }
+egui-winit = { version = "=0.34.3", default-features = false, features = ["x11", "wayland", "clipboard"] }
+softbuffer = { version = "0.4", default-features = false, features = ["x11", "x11-dlopen", "wayland", "wayland-dlopen"] }
+egui_software_backend = { version = "=0.0.3", default-features = false, features = ["std"] }
+bytemuck = "1"
 raw-window-handle = "0.6"
 souvlaki = "0.8.3"
 url = "2"
@@ -27,8 +31,16 @@ keepawake = "0.6.1"
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = ["Win32_UI_Shell"] }
-eframe = { version = "=0.34.3", default-features = false, features = ["wgpu_no_default_features"] }
-wgpu = { version = "29.0.4", default-features = false, features = ["std", "dx12", "wgsl"] }
+
+
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+tray-icon = { version = "0.24", default-features = false }
+
+[target.'cfg(all(target_os = "linux", not(target_env = "ohos")))'.dependencies]
+zbus = "5"
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = { version = "0.1", default-features = false }
 
 [lints]
 workspace = true

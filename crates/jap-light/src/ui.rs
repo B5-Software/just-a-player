@@ -249,7 +249,7 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
         )
         .show_inside(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("J").size(27.).strong().color(ACCENT));
+                crate::branding::icon(ui, 36.);
                 ui.vertical(|ui| {
                     ui.label(
                         RichText::new("JUST A PLAYER")
@@ -338,27 +338,25 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
                                         ui.add_space(6.);
                                         let items = p.items();
                                         let search = p.search.to_lowercase();
+                                        let filtered: Vec<_> = items
+                                            .iter()
+                                            .filter(|i| {
+                                                search.is_empty()
+                                                    || title(i).to_lowercase().contains(&search)
+                                                    || i["artist"]
+                                                        .as_str()
+                                                        .unwrap_or("")
+                                                        .to_lowercase()
+                                                        .contains(&search)
+                                            })
+                                            .collect();
                                         let selected = p.current.as_ref().map(|t| t.path.clone());
                                         egui::ScrollArea::vertical()
                                             .id_salt("playlist")
                                             .max_height((body_height - 190.).max(70.))
-                                            .show(ui, |ui| {
-                                                for (index, item) in items
-                                                    .iter()
-                                                    .filter(|i| {
-                                                        search.is_empty()
-                                                            || title(i)
-                                                                .to_lowercase()
-                                                                .contains(&search)
-                                                            || i["artist"]
-                                                                .as_str()
-                                                                .unwrap_or("")
-                                                                .to_lowercase()
-                                                                .contains(&search)
-                                                    })
-                                                    .take(2000)
-                                                    .enumerate()
-                                                {
+                                            .show_rows(ui, 46., filtered.len(), |ui, rows| {
+                                                for index in rows {
+                                                    let item = filtered[index];
                                                     let path = item["path"].as_str().unwrap_or("");
                                                     let is_current =
                                                         selected.as_deref() == Some(path);
@@ -536,15 +534,7 @@ fn now_playing(ui: &mut egui::Ui, p: &mut Player, mini: bool) {
                     .corner_radius(18),
             );
         } else {
-            let (r, _) = ui.allocate_exact_size(vec2(size, size), Sense::hover());
-            ui.painter().rect_filled(r, 18., C::from_rgb(75, 62, 101));
-            ui.painter().text(
-                r.center(),
-                egui::Align2::CENTER_CENTER,
-                "J",
-                FontId::proportional(size * 0.42),
-                ACCENT,
-            );
+            crate::branding::icon(ui, size);
         }
         ui.add_space(12.);
         ui.vertical(|ui| {
@@ -820,6 +810,30 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                                     .size(12.)
                                     .color(MUTED),
                             );
+                            if !["android", "ohos"].contains(&p.platform.as_str()) {
+                                for (key, label) in [
+                                    ("backgroundPlayback", "后台继续播放"),
+                                    ("closeToTray", "关闭窗口后收起到托盘"),
+                                ] {
+                                    let native_preference = key == "closeToTray";
+                                    let enabled = if native_preference {
+                                        &p.prefs[key]
+                                    } else {
+                                        &p.settings[key]
+                                    }
+                                    .as_bool()
+                                    .unwrap_or(true);
+                                    if switch(ui, p, key, label, enabled) {
+                                        if native_preference {
+                                            p.prefs[key] = json!(!enabled);
+                                            p.persist();
+                                        } else {
+                                            p.settings[key] = json!(!enabled);
+                                            p.actions.push(json!({"type":"settings"}));
+                                        }
+                                    }
+                                }
+                            }
                             if button(ui, p, "output", "输出设备、DSD 与格式表") {
                                 p.dialog = "output".into();
                                 p.query(Query::ListOutputDevices { api: p.output.api });
@@ -1088,7 +1102,7 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                                             let is_dir = path.is_dir();
                                             let label = format!(
                                                 "{} {}",
-                                                if is_dir { "＋" } else { "J" },
+                                                if is_dir { "＋" } else { "♫" },
                                                 path.file_name()
                                                     .unwrap_or_default()
                                                     .to_string_lossy()

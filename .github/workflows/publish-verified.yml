@@ -7,7 +7,7 @@ on:
         type: string
         required: true
       release_tag:
-        description: Existing immutable version tag, e.g. v0.1.3
+        description: Version tag to create for the verified commit, or verify if it already exists
         type: string
         required: true
 permissions:
@@ -47,9 +47,9 @@ jobs:
           assert.equal(run.event,'push')
           assert.equal(run.head_branch,'main')
           assert.equal(run.path,'.github/workflows/build.yml')
-          execFileSync('git',['fetch','--no-tags','origin','refs/tags/'+tag],{stdio:'inherit'})
-          const sha=execFileSync('git',['rev-parse','FETCH_HEAD^{commit}'],{encoding:'utf8'}).trim()
-          assert.equal(run.head_sha,sha,'Artifact commit must equal the immutable release tag')
+          const sha=run.head_sha
+          assert.match(sha,/^[a-f0-9]{40}$/)
+          execFileSync('git',['fetch','--no-tags','origin',sha],{stdio:'inherit'})
           const pkg=JSON.parse(execFileSync('git',['show',sha+':package.json'],{encoding:'utf8'}))
           assert.equal('v'+pkg.version,tag)
           const jobs=api('repos/'+repo+'/actions/runs/'+id+'/jobs?per_page=100').jobs.filter(j=>j.name!=='Publish release')
@@ -58,6 +58,18 @@ jobs:
           const artifacts=api('repos/'+repo+'/actions/runs/'+id+'/artifacts?per_page=100').artifacts.filter(a=>a.name.startsWith('just-a-player-'))
           assert.equal(artifacts.length,14)
           assert(artifacts.every(a=>!a.expired))
+          // Create the immutable tag only after every platform has passed.
+          // GITHUB_TOKEN avoids recursively rebuilding the already verified commit.
+          let existing
+          try { existing=api('repos/'+repo+'/git/ref/tags/'+tag) }
+          catch(error) { if(!/HTTP 404/.test(String(error.stderr)))throw error }
+          if(!existing){
+            const annotated=JSON.parse(execFileSync('gh',['api','--method','POST','repos/'+repo+'/git/tags','-f','tag='+tag,'-f','message=Just A Player '+tag,'-f','object='+sha,'-f','type=commit'],{encoding:'utf8'}))
+            execFileSync('gh',['api','--method','POST','repos/'+repo+'/git/refs','-f','ref=refs/tags/'+tag,'-f','sha='+annotated.sha],{stdio:'inherit'})
+          }
+          execFileSync('git',['fetch','--no-tags','origin','refs/tags/'+tag],{stdio:'inherit'})
+          const tagged=execFileSync('git',['rev-parse','FETCH_HEAD^{commit}'],{encoding:'utf8'}).trim()
+          assert.equal(tagged,sha,'Artifact commit must equal the immutable release tag')
           appendFileSync(process.env.GITHUB_OUTPUT,'sha='+sha+'\n')
           writeFileSync(process.env.RUNNER_TEMP+'/release-provenance.json',JSON.stringify({tag,commit:sha,sourceRun:run.html_url,checks:jobs.map(j=>({name:j.name,conclusion:j.conclusion,url:j.html_url})),artifacts:artifacts.map(a=>({name:a.name,digest:a.digest}))},null,2))
           console.log('Verified exact tagged source and all 14 successful build combinations:',sha)
