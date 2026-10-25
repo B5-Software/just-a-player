@@ -113,16 +113,26 @@ try {
   c.close()
   c = null
   const native = async () => {
-    if (!harmony)
-      return JSON.parse(
-        host.adb(
-          'shell',
-          'run-as',
-          'org.b5_software.justaplayer.debug',
-          'cat',
-          'files/native-report.json'
-        )
-      )
+    if (!harmony) {
+      // The debug View rewrites this file; ADB can observe its truncate/write gap.
+      // Retry only incomplete JSON, so transport failures still fail the test.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          return JSON.parse(
+            host.adb(
+              'shell',
+              'run-as',
+              'org.b5_software.justaplayer.debug',
+              'cat',
+              'files/native-report.json'
+            )
+          )
+        } catch (error) {
+          if (!(error instanceof SyntaxError) || attempt >= 7) throw error
+          await new Promise((resolve) => setTimeout(resolve, 25))
+        }
+      }
+    }
     host.shell('uitest dumpLayout -p /data/local/tmp/jap-native-layout.json')
     const tree = JSON.parse(
       host.shell('cat /data/local/tmp/jap-native-layout.json')
