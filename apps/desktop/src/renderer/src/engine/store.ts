@@ -116,6 +116,7 @@ export const usePlayer = create<PlayerStore>((set, get) => ({
     const { state, track } = get()
     if (state === 'playing') engine.send({ type: 'pause' })
     else if (state === 'paused') engine.send({ type: 'resume' })
+    else if (track?.path.startsWith('external://')) engine.send({ type: 'resume' })
     else if (track) engine.send({ type: 'play', path: track.path })
   },
 

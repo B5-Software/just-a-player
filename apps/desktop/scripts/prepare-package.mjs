@@ -70,6 +70,7 @@ const packagePath = join(app, 'package.json'),
   p = JSON.parse(readFileSync(packagePath, 'utf8'))
 for (const name of [
   ...Object.keys(p.dependencies),
+  ...(existsSync(join(app, 'node_modules/frida')) ? ['frida'] : []),
   'react',
   'react-dom',
   'three',
@@ -78,6 +79,10 @@ for (const name of [
   '@phosphor-icons/react'
 ])
   visit(name, packagePath)
+// The published Frida npm tarball omits the upstream COPYING document.
+// Include the exact pinned license and library terms with every bundled copy.
+copyFileSync(join(root,'assets/licenses/frida/COPYING'),join(notices,'Frida-COPYING'))
+copyFileSync(join(root,'assets/licenses/frida/LGPL-2.0.txt'),join(notices,'Frida-LGPL-2.0.txt'))
 const metadata = JSON.parse(
   execFileSync('cargo', ['metadata', '--locked', '--format-version', '1'], {
     cwd: root,

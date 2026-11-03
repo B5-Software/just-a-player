@@ -2,9 +2,11 @@ import type { Command } from './protocol/Command'
 import type { Event } from './protocol/Event'
 import type { Query } from './protocol/Query'
 import type { QueryResponse } from './protocol/QueryResponse'
+import type { ExternalAction, ExternalPlayerState } from './external-player'
 
 /** 渲染进程 -> 引擎宿主（utilityProcess），经 MessagePort 直连，不经过主进程。 */
 export type RendererToHost =
+  | { kind: 'external'; id: number; action: ExternalAction; positionMs?: number; force?: boolean }
   | {
       kind: 'offline'
       id: number
@@ -26,6 +28,8 @@ export interface CoverPayload {
 }
 
 export type HostToRenderer =
+  | { kind: 'externalState'; state: ExternalPlayerState }
+  | { kind: 'externalResult'; id: number; state?: ExternalPlayerState; error?: string }
   | { kind: 'offlineResult'; id: number; frame?: Float32Array; audioPath?: string; error?: string }
   | { kind: 'event'; event: Event }
   | { kind: 'queryResult'; id: number; response: QueryResponse }

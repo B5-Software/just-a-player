@@ -72,6 +72,21 @@ Android 与鸿蒙预览。轻量界面不使用 WebView；桌面切换后退出 
 
 macOS 与 Linux 的后端由原生 CI 编译和空设备冒烟测试覆盖；具体 DAC、独占格式及 DSD 档位仍需对应硬件验证。软件无法替代设备厂商的驱动，也不会把驱动未提供的 DSD256 能力标记为可用。
 
+### 接管网易云客户端的播放
+
+Windows 完整版和 Rust 原生模式设置中的 **外部播放器 · 网易云音乐** 可连接本机已启动的 64 位客户端。连接后，在客户端输出设备里选择 **Just A Player HiFi Bridge (Black Hole)**，或点击卡片中的切换按钮。这个设备由随附 Rust 模块实现，只出现在已连接的客户端中，不安装系统驱动，也不打开 DAC。客户端最终混音直接丢弃，避免它与本播放器争用同一输出设备。
+
+- FLAC 优先传递音效处理前的原始压缩包，由 Rust 流式解码；其他受支持的编码传递客户端原生解码后、音效处理前的 PCM。音频经过有内存上限的队列，不生成临时整曲文件。
+- 曲名、歌手、封面、时间轴和歌词同步至播放器；播放 / 暂停、切歌、进度条和媒体控制转发到客户端。逐字歌词使用现有 2D / 3D 歌词渲染器，客户端提供逐字时间轴时生效。
+- **强制接管** 可跳过已验证版本白名单，尝试模块编号变化及更多 PCM 格式。数据长度、时间戳和内存边界仍需有效；不把未经确认的格式标成 bit-perfect。
+- 断开、退出或切换至本地歌曲时，先释放 Rust 输出，再恢复并读回客户端原先的设备。暂停时停止接收预解码数据，恢复时重新同步，避免暂停期间填满队列。
+
+原生模式仅在连接时启动无界面的适配进程，通过有界二进制管道向 Rust 内核传递样本，断开后退出该进程。窗口不使用 WebView，前端绘制和音频输出仍由 Rust 执行。
+
+当前验证的客户端为网易云音乐 **3.1.41 x64 / CEF 91 / FFmpeg 58**。此功能按需加载进程适配器；其他播放器和客户端新版仍需分别适配。无损 FLAC 的软件样本一致性已做比对；实际 DAC 的 bit-perfect 仍取决于独占输出、格式协商、关闭 DSP 及应用音量 100%。AAC / MP3 的原生解码转发不会恢复有损压缩丢失的信息。实时接管的歌曲不提供基于完整文件的音源评分或离线视频导出。
+
+开发验证可运行 `node apps/desktop/scripts/e2e-external-player.mjs --live-client`：需要先构建引擎、虚拟输出模块和桌面前端，并在网易云中选中带封面的测试曲目。脚本通过终端 API 检查连接、路由、封面、元数据、暂停恢复、跳转、重置与设备还原，Rust 使用空输出，不向 DAC 发声；它会操作客户端当前的播放，请使用测试曲目。
+
 ### 本地曲库，好好整理
 
 FLAC、WAV、AIFF、ALAC、MP3、AAC、Ogg 等常见格式，另支持 APE、DTS、DSD、SACD ISO、CD ISO / CUE。SACD ISO 读取曲目目录与曲目信息，按独立歌曲导入，优先立体声区域；每首分别计时、跳转和导出，无需解包。CD 镜像按配套 CUE 的音轨与 CD-Text 拆分，也支持多文件 CUE 的原始 CD-DA 扇区。只有裸音频数据而没有轨道表的 CD 镜像无法可靠恢复原始分轨。APE / DTS 等扩展格式使用内置 FFmpeg；24-bit / 768 kHz FLAC 由原生 Rust 解码器按块读取，保留原始样本与采样率，支持精确跳转。
@@ -121,7 +136,7 @@ MIDI 是演奏指令，实际音色取决于音色库与合成器，并不携带
 | `without-midi` | 推荐日常使用：省去约 467 MiB 的内置音色资源；所有录音格式、HiFi 输出和可视化完整保留。仍可导入 SF2 后播放 MIDI |
 | `with-midi` | 即装即播 MIDI：完整内置 MuseScore General HQ，无需另外寻找音色库 |
 
-Android 0.1.4：[无内置音色库 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.4/Just-A-Player-0.1.4-Android-universal-without-midi.apk) · [含 HQ 音色库 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.4/Just-A-Player-0.1.4-Android-universal-with-midi.apk)。两者包名和签名相同，可相互覆盖升级；此前的 `.debug` 调试包独立安装。
+Android 0.1.5：[无内置音色库 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.5/Just-A-Player-0.1.5-Android-universal-without-midi.apk) · [含 HQ 音色库 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.5/Just-A-Player-0.1.5-Android-universal-with-midi.apk)。两者包名和签名相同，可相互覆盖升级；此前的 `.debug` 调试包独立安装。
 
 发布页附有 `SHA256SUMS.txt`。社区构建暂未使用商业代码签名证书或 Apple 公证。桌面壁纸与 Windows 系统媒体集成为 Windows 功能；其他平台可使用全屏、小窗、媒体键和原生音频输出。
 

@@ -8,6 +8,7 @@ mod dst;
 mod dst_dff;
 mod error;
 mod ffmpeg;
+pub mod live;
 mod lyrics;
 pub mod midi;
 mod ncm;

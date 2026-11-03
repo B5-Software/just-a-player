@@ -53,6 +53,7 @@ pub fn now_id() -> String {
 enum Task {
     Import(Vec<String>, String),
     Resources(String),
+    ExternalAssets(String, Option<Vec<u8>>, String),
     Preview(String, u64),
     Query(Query),
     Persist(PathBuf, Value),
@@ -79,6 +80,10 @@ pub struct Player {
     pub dsp: DspConfig,
     pub signal: Option<jap_core::SignalPath>,
     pub engine: Arc<Engine>,
+    pub external_connection: Option<Arc<dyn crate::external::Connection>>,
+    pub external_state: Value,
+    pub external_auto_route: bool,
+    pub external_auto_resume: bool,
     pub frame: Vec<f32>,
     pub lyrics: Vec<Line>,
     pub cover: Option<TextureHandle>,
@@ -111,6 +116,11 @@ pub struct Player {
     last_save: Instant,
     last_meter: Instant,
     visuals: bool,
+    external_path: String,
+    external_cover: Option<Vec<u8>>,
+    external_lyrics: String,
+    external_assets_dirty: bool,
+    last_source_external: bool,
 }
 impl Player {
     pub fn new(
@@ -170,6 +180,36 @@ impl Player {
                 while let Ok(task) = tasks.recv() {
                     match task {
                         Task::Stop => break,
+                        Task::ExternalAssets(path, cover, text) => {
+                            let image = cover
+                                .as_ref()
+                                .and_then(|b| image::load_from_memory(b).ok())
+                                .map(|im| {
+                                    let im = im.thumbnail(768, 768).to_rgba8();
+                                    ColorImage::from_rgba_unmultiplied(
+                                        [im.width() as usize, im.height() as usize],
+                                        im.as_raw(),
+                                    )
+                                });
+                            let data = cover
+                                .as_ref()
+                                .and_then(|b| image::load_from_memory(b).ok())
+                                .and_then(|im| {
+                                    let mut output = std::io::Cursor::new(Vec::new());
+                                    image::DynamicImage::ImageRgb8(
+                                        im.thumbnail(512, 512).to_rgb8(),
+                                    )
+                                    .write_to(&mut output, image::ImageFormat::Jpeg)
+                                    .ok()?;
+                                    Some(STANDARD.encode(output.into_inner()))
+                                });
+                            let _ = updates.send(Update::Resources(
+                                path,
+                                image,
+                                lyrics::parse(&text),
+                                data,
+                            ));
+                        }
                         Task::Preview(path, position) => {
                             if let QueryResponse::Track { track } =
                                 backend.query(Query::ProbeTrack { path })
@@ -299,6 +339,10 @@ impl Player {
             dsp,
             signal: None,
             engine,
+            external_connection: None,
+            external_state: json!({"phase":"disconnected"}),
+            external_auto_route: false,
+            external_auto_resume: false,
             frame: vec![0.; 648],
             lyrics: vec![],
             cover: None,
@@ -331,6 +375,11 @@ impl Player {
             last_save: Instant::now(),
             last_meter: Instant::now(),
             visuals: false,
+            external_path: String::new(),
+            external_cover: None,
+            external_lyrics: String::new(),
+            external_assets_dirty: false,
+            last_source_external: false,
         };
         p.command(Command::SetVolume { gain: volume });
         let soundfont = p.prefs["soundfont"]
@@ -351,7 +400,9 @@ impl Player {
                 config: p.dsp.clone(),
             });
         }
-        if let Some(track) = &p.current {
+        if let Some(track) = &p.current
+            && !track.path.starts_with("external://")
+        {
             let _ = p.tx.send(Task::Resources(track.path.clone()));
         }
         p.command(Command::QueueNext { path: None });
@@ -375,6 +426,7 @@ impl Player {
         if !p.mobile()
             && p.state == PlaybackState::Playing
             && let Some(t) = p.current.clone()
+            && !t.path.starts_with("external://")
         {
             p.command(Command::Play {
                 path: t.path,
@@ -388,7 +440,29 @@ impl Player {
     }
     pub fn command(&self, c: Command) {
         // Engine dispatch is non-blocking; file imports must never delay mute or pause.
+        if self
+            .external_connection
+            .as_ref()
+            .is_some_and(|e| e.command(&c))
+        {
+            return;
+        }
         self.engine.send(c);
+    }
+    pub fn external_request(&mut self, action: &str) {
+        let force = self.prefs["externalForce"] == true;
+        match self
+            .external_connection
+            .as_ref()
+            .ok_or_else(|| "连接组件不可用，请通过完整安装包启动原生模式".to_string())
+            .and_then(|e| e.request(action, None, force))
+        {
+            Ok(()) if action == "connect" => {
+                self.external_state = json!({"phase":"connecting","message":"正在连接网易云音乐…"})
+            }
+            Ok(()) => {}
+            Err(e) => self.error = Some(e),
+        }
     }
     pub fn query(&self, q: Query) {
         let _ = self.tx.send(Task::Query(q));
@@ -438,10 +512,16 @@ impl Player {
                     .push(json!({"type":"media","value":self.media()}));
             }
             Event::TrackChanged { track } => {
+                self.last_source_external = track.path.starts_with("external://");
                 self.cover = None;
                 self.cover_data = None;
+                self.cover_image = None;
                 self.position = 0;
-                let _ = self.tx.send(Task::Resources(track.path.clone()));
+                if self.last_source_external {
+                    self.external_assets_dirty = true;
+                } else {
+                    let _ = self.tx.send(Task::Resources(track.path.clone()));
+                }
                 self.current = Some(track);
                 self.queue_next();
             }
@@ -451,7 +531,8 @@ impl Player {
             Event::Volume { gain } => self.volume = gain,
             Event::DspChanged { config } => self.dsp = config,
             Event::SignalPath { path } => self.signal = Some(path),
-            Event::QueueEnded => self.neighbour(1, true),
+            Event::QueueEnded if !self.last_source_external => self.neighbour(1, true),
+            Event::QueueEnded => {}
             Event::Error { message } | Event::QualityError { message, .. } => {
                 self.error = Some(message)
             }
@@ -460,6 +541,88 @@ impl Player {
         }
     }
     pub fn tick(&mut self, ctx: &egui::Context) {
+        let messages = self
+            .external_connection
+            .as_ref()
+            .map(|e| e.poll())
+            .unwrap_or_default();
+        for (value, data) in messages {
+            if value["kind"] == "requestError" {
+                self.error = value["message"].as_str().map(str::to_owned);
+                continue;
+            }
+            if value["kind"] != "externalState" {
+                continue;
+            }
+            let state = &value["state"];
+            if let Some(id) = state["snapshot"]["track"]["id"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+            {
+                let mut path = "external://netease/".to_string();
+                for b in id.bytes() {
+                    if b.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&b) {
+                        path.push(b as char)
+                    } else {
+                        path.push_str(&format!("%{b:02X}"))
+                    }
+                }
+                if self.external_path != path {
+                    self.external_path = path;
+                    self.external_cover = None;
+                    self.external_lyrics.clear();
+                    self.external_assets_dirty = true;
+                }
+            }
+            if state.get("cover").is_some() {
+                self.external_cover = (!data.is_empty()).then_some(data);
+                self.external_assets_dirty = true;
+            }
+            let text = state["lyricsText"].as_str().unwrap_or("");
+            if self.external_lyrics != text {
+                self.external_lyrics = text.into();
+                self.external_assets_dirty = true;
+            }
+            if matches!(state["phase"].as_str(), Some("disconnected" | "error"))
+                && self.last_source_external
+            {
+                self.current = None;
+                self.state = PlaybackState::Stopped;
+                self.cover = None;
+                self.cover_data = None;
+                self.lyrics.clear();
+                self.cover_image = None;
+                self.external_cover = None;
+                self.external_path.clear();
+                self.external_assets_dirty = false;
+            }
+            self.external_state = state.clone();
+            self.dirty = true;
+            if self.external_auto_route && self.external_state["phase"] == "ready" {
+                self.external_auto_route = false;
+                self.external_request("route");
+            }
+            if self.external_auto_resume
+                && self.external_state["snapshot"]["devices"]["currentDevice"]["name"]
+                    == "Just A Player HiFi Bridge (Black Hole)"
+            {
+                self.external_auto_resume = false;
+                self.external_request("resume");
+            }
+        }
+        if self.external_assets_dirty
+            && self
+                .current
+                .as_ref()
+                .is_some_and(|t| t.path == self.external_path)
+        {
+            let _ = self.tx.send(Task::ExternalAssets(
+                self.external_path.clone(),
+                self.external_cover.clone(),
+                self.external_lyrics.clone(),
+            ));
+            self.external_assets_dirty = false;
+        }
         while let Ok(update) = self.rx.try_recv() {
             self.dirty = true;
             match update {
@@ -579,6 +742,17 @@ impl Player {
         });
     }
     pub fn toggle(&mut self) {
+        if self.external_state["phase"] == "routing"
+            || self.external_state["snapshot"]["devices"]["currentDevice"]["name"]
+                == "Just A Player HiFi Bridge (Black Hole)"
+        {
+            self.external_request(if self.state == PlaybackState::Playing {
+                "pause"
+            } else {
+                "resume"
+            });
+            return;
+        }
         match self.state {
             PlaybackState::Playing => self.command(Command::Pause),
             PlaybackState::Paused => self.command(Command::Resume),
@@ -626,6 +800,15 @@ impl Player {
         result
     }
     pub fn neighbour(&mut self, delta: i32, automatic: bool) {
+        if self.external_state["phase"] == "routing"
+            || self.external_state["snapshot"]["devices"]["currentDevice"]["name"]
+                == "Just A Player HiFi Bridge (Black Hole)"
+        {
+            if !automatic {
+                self.external_request(if delta > 0 { "next" } else { "previous" });
+            }
+            return;
+        }
         let items = self.ordered();
         if items.is_empty() {
             return;
@@ -694,12 +877,12 @@ impl Player {
             "playlists.json"
         };
         let _ = self.tx.send(Task::Persist(self.root.join(file), saved));
-        let _=self.tx.send(Task::Persist(self.root.join("lightweight.json"),json!({"prefs":self.prefs,"last":if memory {self.current.as_ref().map(|t|json!({"path":t.path,"positionMs":self.position}))}else{None}})));
+        let _=self.tx.send(Task::Persist(self.root.join("lightweight.json"),json!({"prefs":self.prefs,"last":if memory {self.current.as_ref().filter(|t|!t.path.starts_with("external://")).map(|t|json!({"path":t.path,"positionMs":self.position}))}else{None}})));
         self.last_save = Instant::now();
     }
     pub fn handoff(&mut self) -> Value {
         self.persist();
-        json!({"libraryJson":self.library.to_string(),"track":self.current,"state":self.state,"positionMs":self.position,"volume":self.volume,"output":self.output,"dsp":self.dsp})
+        json!({"libraryJson":self.library.to_string(),"track":self.current,"state":self.state,"positionMs":self.position,"volume":self.volume,"output":self.output,"dsp":self.dsp,"externalForce":self.prefs["externalForce"]==true})
     }
     pub fn media(&self) -> Value {
         let mut value = json!({"title":self.current.as_ref().and_then(|t|t.title.clone()).unwrap_or_else(||self.current.as_ref().map(|t|title(&json!(t))).unwrap_or_default()),"artist":self.current.as_ref().and_then(|t|t.artist.clone()),"album":self.current.as_ref().and_then(|t|t.album.clone()),"positionMs":self.position,"durationMs":self.current.as_ref().and_then(|t|t.duration_ms),"state":self.state});
@@ -711,7 +894,7 @@ impl Player {
         value
     }
     pub fn debug(&self) -> Value {
-        json!({"hasCover":self.cover.is_some(),"hasMediaCover":self.cover_data.is_some(),"lyricLines":self.lyrics.len(),"viewport":self.viewport,"renderer":"egui-native","webview":false,"state":self.state,"current":self.current,"position":self.position,"volume":self.volume,"library":self.library,"visual":self.visuals,"draws":self.renders,"analysisFrames":self.analysis_frames,"meters":self.prefs["meters"],"rms":self.meter_levels,"controls":self.controls,"error":self.error})
+        json!({"hasCover":self.cover.is_some(),"hasDecodedCover":self.cover_image.is_some(),"hasMediaCover":self.cover_data.is_some(),"lyricLines":self.lyrics.len(),"viewport":self.viewport,"renderer":"egui-native","webview":false,"state":self.state,"current":self.current,"position":self.position,"volume":self.volume,"dsp":self.dsp,"external":{"available":self.external_connection.is_some(),"phase":self.external_state["phase"],"message":self.external_state["message"],"audioPackets":self.external_state["audioPackets"],"device":self.external_state["snapshot"]["devices"]["currentDevice"]["name"],"sourceState":self.external_state["snapshot"]["state"],"sourcePosition":self.external_state["snapshot"]["positionMs"],"nullBytes":self.external_state["nullBytes"]},"library":self.library,"visual":self.visuals,"draws":self.renders,"analysisFrames":self.analysis_frames,"meters":self.prefs["meters"],"rms":self.meter_levels,"controls":self.controls,"error":self.error})
     }
 }
 impl Drop for Player {

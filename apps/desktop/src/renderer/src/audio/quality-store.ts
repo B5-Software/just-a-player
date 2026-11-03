@@ -12,6 +12,10 @@ export const useQuality = create<QualityStore>((set) => ({
   analyze: () => {
     const path = usePlayer.getState().track?.path
     if (!path) return
+    if (path.startsWith('external://')) {
+      set({ pending: null, report: null, error: '实时路由未保存整首音频，暂不进行多位置文件取样分析。' })
+      return
+    }
     set({ pending: path, error: null, report: null })
     engine.send({ type: 'analyzeQuality', path })
   },
@@ -20,7 +24,7 @@ export const useQuality = create<QualityStore>((set) => ({
 engine.onEvent((event) => {
   if (event.type === 'trackChanged') {
     useQuality.setState({ report: null, error: null, pending: null })
-    if (useQuality.getState().automatic) useQuality.getState().analyze()
+    if (useQuality.getState().automatic && !event.track.path.startsWith('external://')) useQuality.getState().analyze()
   } else if (event.type === 'quality' && event.report.path === usePlayer.getState().track?.path) {
     useQuality.setState({ report: event.report, pending: null, error: null })
   } else if (event.type === 'qualityError' && event.path === useQuality.getState().pending) {

@@ -48,12 +48,17 @@ import { registerSoundfonts } from './soundfonts'
 import { openLightweight, wantsLightweight, takeLightweightHandoff } from './lightweight'
 
 const isDev = !app.isPackaged
+process.env['JAP_VIRTUAL_OUTPUT_PATH'] ||= isDev
+  ? join(__dirname, '../../build/virtual-output/jap_virtual_output.dll')
+  : join(process.resourcesPath, 'virtual-output/jap_virtual_output.dll')
 const isE2E = Boolean(process.env['JAP_E2E'])
 // 端到端测试用独立数据目录，不碰用户的设置，也不与正在运行的实例抢单例锁
 if (isE2E)
   app.setPath('userData', process.env['JAP_E2E_USERDATA'] || join(tmpdir(), 'jap-e2e-userdata'))
 
 let engine: UtilityProcess | null = null
+let quitCleanupDone = false
+let quitCleanupRunning = false
 let exportEngine: UtilityProcess | null = null
 const surfaces = new Map<number, Surface>()
 app.setName('Just A Player')
@@ -88,6 +93,21 @@ function startEngine(): UtilityProcess {
     if (exportEngine === child) exportEngine = null
   })
   return child
+}
+
+async function disconnectExternalPlayer(host: UtilityProcess | null): Promise<void> {
+  if (!host) return
+  await new Promise<void>((resolve) => {
+    let complete = false
+    const finish = (): void => {
+      if (complete) return
+      complete = true; clearTimeout(timer); host.off('message', onMessage); host.off('exit', finish); resolve()
+    }
+    const onMessage = (value: unknown): void => { if ((value as { type?: string })?.type === 'externalShutdownDone') finish() }
+    const timer = setTimeout(finish, 12000)
+    host.on('message', onMessage); host.once('exit', finish)
+    host.postMessage({ type: 'externalShutdown' })
+  })
 }
 
 /** 每次页面加载都建一条新的 MessagePort 直连引擎，引擎本身不受页面刷新影响。 */
@@ -127,6 +147,7 @@ function registerIpc(): void {
     if (!isTrustedSender(event)) throw new Error('Untrusted sender')
     if (hasActiveVideoExports()) throw new Error('视频仍在导出，请在队列完成或取消后切换轻量模式。')
     try {
+      await disconnectExternalPlayer(engine)
       await openLightweight(handoff, () => { engine?.kill(); engine = null })
     } catch (error) {
       if (!engine) attachEngine(BrowserWindow.fromWebContents(event.sender)!)
@@ -426,7 +447,7 @@ function createWindow(): void {
     },
   })
 
-  win.once('ready-to-show', () => win.show())
+  win.once('ready-to-show', () => { if (!isE2E || process.env['JAP_E2E_HIDDEN'] !== '1') win.show() })
   surfaces.set(win.webContents.id, 'main')
   attachFileOpening(win, () => {
     if (getWindowMode() !== 'normal') void setWindowMode(win, 'normal')
@@ -505,7 +526,15 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   app.on('window-all-closed', () => app.quit())
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
+    if (engine && !quitCleanupDone) {
+      event.preventDefault()
+      if (!quitCleanupRunning) {
+        quitCleanupRunning = true
+        void disconnectExternalPlayer(engine).finally(() => { quitCleanupDone = true; app.quit() })
+      }
+      return
+    }
     if (displayBlocker !== null) powerSaveBlocker.stop(displayBlocker)
     closeLighting()
     engine?.kill()

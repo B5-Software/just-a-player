@@ -1,5 +1,18 @@
 # Third-party notices
 
+## External player connection
+
+The optional Windows NetEase desktop adapter uses Frida 17.25.1 for local process
+instrumentation under the LGPL-2.0 with the WxWindows-exception-3.1. Packages
+include the upstream license texts in `resources/licenses/`.
+[Frida Node source](https://github.com/frida/frida-node/tree/17.25.1) and
+[Frida Core source](https://github.com/frida/frida-core/tree/17.25.1).
+
+The `jap-virtual-output` DirectSound black-hole device and its hook
+adapters are original GPL-3.0-or-later project code. This is a process-local
+client device, not an installed Windows audio driver; it opens no hardware audio
+endpoint. NetEase client code and private lyric/audio test captures are not bundled.
+
 ## Lightweight interface
 
 The embedded 2D interface is original project code (GPL-3.0-or-later) and uses

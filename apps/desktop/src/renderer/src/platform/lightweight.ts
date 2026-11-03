@@ -37,6 +37,7 @@ export async function enterLightweight(): Promise<void> {
     volume: player.volume,
     output: player.output,
     dsp: useDsp.getState().config,
+    externalForce: localStorage.getItem('jap.external.force') === '1',
   })
 }
 export function initLightweightHandoff(): void {
@@ -51,6 +52,13 @@ export function initLightweightHandoff(): void {
       usePlayer.getState().setOutput(handoff.output)
       useDsp.getState().update(handoff.dsp)
       if (handoff.track) {
+        if (handoff.track.path.startsWith('external://')) {
+          usePlayer.setState({ track: handoff.track, state: 'paused', position: { ms: handoff.positionMs, at: performance.now() } })
+          await engine.external('connect', undefined, handoff.externalForce === true)
+          await engine.external('route')
+          if (handoff.state === 'playing') await engine.external('resume')
+          return
+        }
         const library = useLibrary.getState()
         const contains = (list: (typeof library.lists)[number]): boolean =>
           list.items.some((item) => item.path === handoff.track!.path)

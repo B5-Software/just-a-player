@@ -17,6 +17,12 @@ interface Option {
   label: ReactNode
   disabled: boolean
 }
+function optionText(children: ReactNode): string {
+  return Children.toArray(children).map(child => {
+    if (typeof child === 'string' || typeof child === 'number') return String(child)
+    return isValidElement<{ children?: ReactNode }>(child) ? optionText(child.props.children) : ''
+  }).join('').replace(/\s+/g, ' ').trim()
+}
 /** Shared styled listbox: Android never invokes WebView's platform select dialog. */
 export function Select({
   children,
@@ -39,7 +45,7 @@ export function Select({
       return []
     return [
       {
-        value: String(child.props.value ?? ''),
+        value: String(child.props.value ?? optionText(child.props.children)),
         label: child.props.children,
         disabled: !!child.props.disabled,
       },

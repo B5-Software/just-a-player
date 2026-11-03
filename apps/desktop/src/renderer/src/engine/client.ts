@@ -3,6 +3,7 @@ import type { Event } from '@shared/protocol/Event'
 import type { Query } from '@shared/protocol/Query'
 import type { QueryResponse } from '@shared/protocol/QueryResponse'
 import { IPC, type CoverPayload, type HostToRenderer, type RendererToHost } from '@shared/ipc'
+import type { ExternalAction, ExternalPlayerState } from '@shared/external-player'
 
 type EventListener = (event: Event) => void
 type VizListener = (frame: Float32Array) => void
@@ -13,6 +14,18 @@ class EngineClient {
   private nextId = 1
   private readonly pending = new Map<number, (response: QueryResponse) => void>()
   private readonly pendingCovers = new Map<number, (cover: CoverPayload | null) => void>()
+  private readonly externalListeners = new Set<(state: ExternalPlayerState) => void>()
+  private readonly pendingExternal = new Map<number, { resolve: (state: ExternalPlayerState) => void; reject: (error: Error) => void }>()
+  private externalState: ExternalPlayerState | null = null
+  external(action: ExternalAction, positionMs?: number, force?: boolean): Promise<ExternalPlayerState> {
+    const id = this.nextId++
+    return new Promise((resolve, reject) => { this.pendingExternal.set(id, { resolve, reject }); this.post({ kind: 'external', id, action, positionMs, force }) })
+  }
+  onExternal(listener: (state: ExternalPlayerState) => void): () => void {
+    this.externalListeners.add(listener)
+    if (this.externalState) listener(this.externalState)
+    return () => this.externalListeners.delete(listener)
+  }
   private readonly pendingOffline = new Map<
     number,
     {
@@ -97,6 +110,17 @@ class EngineClient {
 
   private receive(message: HostToRenderer): void {
     switch (message.kind) {
+      case 'externalState':
+        this.externalState = { ...message.state, cover: message.state.cover === undefined ? this.externalState?.cover : message.state.cover }
+        for (const listener of this.externalListeners) listener(this.externalState)
+        break
+      case 'externalResult': {
+        const pending = this.pendingExternal.get(message.id)
+        this.pendingExternal.delete(message.id)
+        if (message.error) pending?.reject(new Error(message.error))
+        else if (message.state) pending?.resolve(message.state)
+        break
+      }
       case 'offlineResult': {
         const pending = this.pendingOffline.get(message.id)
         if (message.error) pending?.reject(new Error(message.error))

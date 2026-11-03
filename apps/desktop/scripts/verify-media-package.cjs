@@ -13,6 +13,10 @@ module.exports = async (context) => {
         )
       : join(context.appOutDir, 'resources')
   const tools = join(resources, 'media-tools')
+  if (platform === 'win32' && !existsSync(join(resources, 'virtual-output', 'jap_virtual_output.dll')))
+    throw new Error('Missing native client black-hole output module')
+  if (platform === 'win32' && !existsSync(join(resources, 'app.asar.unpacked', 'node_modules', 'frida', 'build', 'frida_binding.node')))
+    throw new Error('Missing unpacked native client connection binding')
   const { statSync } = require('node:fs')
   const font = join(resources, 'soundfonts', 'MuseScore_General_HQ.sf2')
   if (

@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import type { HostToRenderer, RendererToHost } from '../shared/ipc'
 import type { Event } from '../shared/protocol/Event'
 import { VIZ } from '../shared/viz'
+import { ExternalPlayer } from './external-player'
 
 const parentPort = process.parentPort
 
@@ -44,14 +45,32 @@ function post(message: HostToRenderer): void {
   for (const port of ports.values()) port.postMessage(message)
 }
 
+let external: ExternalPlayer | null = null
 const engine = new Engine((json: string) => {
   const event = JSON.parse(json) as Event
+  external?.engineEvent(event)
+  // The client owns advancement of its live queue. Closing/resetting an input
+  // must not make the local library interpret temporary EOF as "next song".
+  if (event.type === 'queueEnded' && latest.trackChanged?.type === 'trackChanged' && latest.trackChanged.track.path.startsWith('external://')) return
   if (REPLAYABLE.includes(event.type)) latest[event.type] = event
   post({ kind: 'event', event })
 })
+external = new ExternalPlayer(
+  engine,
+  process.env['JAP_VIRTUAL_OUTPUT_PATH'] || join(process.resourcesPath, 'virtual-output', 'jap_virtual_output.dll'),
+  (state) => post({ kind: 'externalState', state }),
+  readCover
+)
 
 function onPortMessage(message: RendererToHost, reply: Electron.MessagePortMain): void {
   const post = (value: HostToRenderer): void => reply.postMessage(value)
+  if (message.kind === 'external') {
+    void external!.action(message.action, message.positionMs, message.force).then(
+      state => post({ kind: 'externalResult', id: message.id, state }),
+      error => post({ kind: 'externalResult', id: message.id, error: String(error) })
+    )
+    return
+  }
   if (message.kind === 'offline') {
     try {
       if (message.action === 'original') {
@@ -103,6 +122,31 @@ function onPortMessage(message: RendererToHost, reply: Electron.MessagePortMain)
   }
   try {
     if (message.kind === 'command') {
+      if (external?.connected) {
+        const command = message.command
+        if (command.type === 'play') {
+          void external.disconnect().then(() => engine.send(JSON.stringify(command)))
+          return
+        }
+        if (command.type === 'queueNext' && external.ownsTransport) return
+        if (external.ownsTransport && (command.type === 'resetBuffer' || command.type === 'setOutput')) {
+          const position = (latest.position?.type === 'position' ? latest.position.positionMs : undefined) ?? external.snapshot().snapshot?.positionMs ?? 0
+          if (command.type === 'setOutput') {
+            engine.send(JSON.stringify({ type: 'stop' }))
+            engine.send(JSON.stringify(command))
+          }
+          void external.action('seek', position).then(() => {
+            if (command.type === 'resetBuffer') post({ kind: 'event', event: { type: 'bufferReset', automatic: false } })
+          }).catch(error => post({ kind: 'event', event: { type: 'error', message: String(error) } }))
+          return
+        }
+        if (external.ownsTransport && ['pause', 'resume', 'stop', 'seek'].includes(command.type)) {
+          const action = command.type === 'stop' ? 'pause' : command.type as 'pause' | 'resume' | 'seek'
+          void external.action(action, command.type === 'seek' ? command.positionMs : undefined).catch(error => post({ kind: 'event', event: { type: 'error', message: String(error) } }))
+          if (command.type === 'pause' || command.type === 'stop') engine.send(JSON.stringify({ type: 'pause' }))
+          return
+        }
+      }
       engine.send(JSON.stringify(message.command))
     } else if (message.kind === 'query') {
       const response = JSON.parse(engine.query(JSON.stringify(message.query)))
@@ -130,6 +174,7 @@ function attach(next: Electron.MessagePortMain, surface: string): void {
     const event = latest[type]
     if (event) next.postMessage({ kind: 'event', event })
   }
+  next.postMessage({ kind: 'externalState', state: external!.snapshot() })
 }
 
 parentPort.on('message', (e) => {
@@ -140,6 +185,7 @@ parentPort.on('message', (e) => {
     vizActive = data.visible !== false
     vizSurface = data.surface ?? 'main'
   }
+  if (data.type === 'externalShutdown') void external!.disconnect().finally(() => parentPort.postMessage({ type: 'externalShutdownDone' }))
 })
 
 // 引擎是“被拉取”的：约 60 Hz 询问一次，没在播或画面没变时引擎返回 null，不会白白发消息

@@ -2,6 +2,8 @@ use std::io;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecodeError {
+    #[error("实时音源正在等待数据")]
+    Pending,
     #[error("无法读取文件: {0}")]
     Io(#[from] io::Error),
     #[error("不支持的格式: {0}")]

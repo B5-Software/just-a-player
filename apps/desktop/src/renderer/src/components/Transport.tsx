@@ -9,23 +9,26 @@ import {
   playPrevious
 } from '../library/playback'
 import { useLibrary } from '../library/store'
+import { useExternal } from '../external/store'
 
 const round = 'grid place-items-center rounded-full transition-colors'
 
 export function Transport({ compact = false }: { compact?: boolean }): React.JSX.Element {
   const state = usePlayer((s) => s.state)
   const hasTrack = usePlayer((s) => s.track !== null)
+  const external = useExternal((s) => s.phase === 'routing' || s.snapshot?.devices?.currentDevice.name === 'Just A Player HiFi Bridge (Black Hole)')
   const hasItems = useLibrary((s) => {
     const list = s.lists.find((l) => l.id === s.activeListId) ?? s.lists[0]
     return (list?.items.length ?? 0) > 0
   })
-  const canPlay = hasTrack || hasItems
-  const canNext = useLibrary((s) => {
+  const canPlay = external || hasTrack || hasItems
+  const libraryNext = useLibrary((s) => {
     if (s.playback !== null && findNeighbour(s, s.playback, 1, false) !== null) return true
     const list = s.lists.find((l) => l.id === s.activeListId) ?? s.lists[0]
     return (list?.items.length ?? 0) > 1
   })
-  const canPrev = hasTrack || hasItems
+  const canNext = external || libraryNext
+  const canPrev = external || hasTrack || hasItems
 
   const openFiles = async (): Promise<void> => {
     const paths = await window.jap.openAudioFiles()

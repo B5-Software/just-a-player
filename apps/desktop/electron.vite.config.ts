@@ -6,11 +6,15 @@ import { defineConfig } from 'electron-vite'
 export default defineConfig({
   main: {
     build: {
+      // Frida resolves its N-API binding relative to its own package URL.
+      // Keep the lazy ESM import intact, including for optional dependencies.
+      rollupOptions: { external: ['frida'] },
       lib: {
         // 第二个入口是跑 Rust 引擎的 utilityProcess，与主进程同目录输出
         entry: {
           index: resolve('src/main/index.ts'),
-          'engine-host': resolve('src/utility/engine-host.ts')
+          'engine-host': resolve('src/utility/engine-host.ts'),
+          'external-service': resolve('src/utility/external-service.ts')
         }
       }
     }

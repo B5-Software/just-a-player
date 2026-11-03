@@ -5,6 +5,8 @@
 
 #[cfg(all(not(target_os = "android"), not(target_env = "ohos")))]
 mod desktop;
+#[cfg(windows)]
+mod external;
 #[cfg(all(not(target_os = "android"), not(target_env = "ohos")))]
 mod media;
 #[cfg(all(not(target_os = "android"), not(target_env = "ohos")))]

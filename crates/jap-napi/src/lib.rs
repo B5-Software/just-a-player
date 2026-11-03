@@ -45,6 +45,7 @@ fn init_logging() {
 #[napi(js_name = "Engine")]
 pub struct JapEngine {
     inner: jap_engine::Engine,
+    live: parking_lot::Mutex<Option<jap_decode::live::LiveInput>>,
 }
 
 /// 可视化帧的布局常量，前端启动时校验与自己的假设一致。
@@ -100,6 +101,7 @@ impl JapEngine {
         });
         Self {
             inner: jap_engine::Engine::new(sink),
+            live: parking_lot::Mutex::new(None),
         }
     }
 
@@ -110,6 +112,41 @@ impl JapEngine {
             .map_err(|e| napi::Error::from_reason(format!("无法解析命令: {e}")))?;
         self.inner.send(command);
         Ok(())
+    }
+
+    #[napi]
+    pub fn open_live(&self, config_json: String) -> napi::Result<()> {
+        let config = serde_json::from_str(&config_json)
+            .map_err(|e| napi::Error::from_reason(format!("实时流参数: {e}")))?;
+        let input = jap_decode::live::LiveInput::new(config)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let mut live = self.live.lock();
+        if let Some(previous) = live.replace(input.clone()) {
+            previous.close();
+        }
+        self.inner.play_live(input);
+        Ok(())
+    }
+
+    #[napi]
+    pub fn push_live(&self, pts: f64, frames: u32, data: Buffer) -> napi::Result<()> {
+        if !pts.is_finite() || pts < 0. || pts.fract() != 0. || pts > 9_007_199_254_740_991. {
+            return Err(napi::Error::from_reason("无效实时流时间戳"));
+        }
+        let live = self.live.lock();
+        let input = live
+            .as_ref()
+            .ok_or_else(|| napi::Error::from_reason("没有连接实时音源"))?;
+        input
+            .push(pts as u64, frames, data.to_vec())
+            .map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
+
+    #[napi]
+    pub fn close_live(&self) {
+        if let Some(input) = self.live.lock().take() {
+            input.close();
+        }
     }
 
     /// 同步查询（`Query` 的 JSON），返回 `QueryResponse` 的 JSON。

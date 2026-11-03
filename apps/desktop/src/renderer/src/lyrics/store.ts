@@ -3,7 +3,7 @@ import { decodeText } from '../lib/text'
 import { useSettings } from '../settings/store'
 import { engine } from '../engine/client'
 
-export type LyricsSource = 'imported' | 'sidecar' | 'embedded'
+export type LyricsSource = 'imported' | 'sidecar' | 'embedded' | 'external'
 
 interface LyricsState {
   path: string | null
@@ -14,12 +14,23 @@ interface LyricsState {
 export const useLyrics = create<LyricsState>(() => ({ path: null, text: null, source: null }))
 
 let token = 0
+const external = new Map<string, string | null>()
+export function setExternalLyrics(path: string, text: string | null): void {
+  external.delete(path); external.set(path, text)
+  while (external.size > 8) external.delete(external.keys().next().value!)
+  ++token
+  useLyrics.setState({ path, text, source: 'external' })
+}
 
 /** 歌词来源优先级：用户导入 > 同名 .lrc 侧车文件 > 音频内嵌 LYRICS。 */
 export async function loadLyrics(path: string | null): Promise<void> {
   const id = ++token
   if (!path) {
     useLyrics.setState({ path: null, text: null, source: null })
+    return
+  }
+  if (path.startsWith('external://')) {
+    useLyrics.setState({ path, text: external.get(path) ?? null, source: 'external' })
     return
   }
   useLyrics.setState({ path, text: null, source: null })

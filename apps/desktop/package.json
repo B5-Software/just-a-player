@@ -1,6 +1,6 @@
 {
   "name": "desktop",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "author": {
     "name": "B5-Software",
@@ -15,8 +15,8 @@
   "description": "Just A Player",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "node scripts/ensure-electron.mjs && node ../../scripts/build-lightweight.mjs --debug && node ../../scripts/prepare-soundfonts.mjs && node scripts/prepare-media-tools.mjs && electron-vite dev",
-    "build": "node ../../scripts/build-lightweight.mjs && node ../../scripts/prepare-soundfonts.mjs && node scripts/prepare-media-tools.mjs && electron-vite build",
+    "dev": "node scripts/ensure-electron.mjs && node ../../scripts/build-lightweight.mjs --debug && node ../../scripts/build-virtual-output.mjs --debug && node ../../scripts/prepare-soundfonts.mjs && node scripts/prepare-media-tools.mjs && electron-vite dev",
+    "build": "node ../../scripts/build-lightweight.mjs && node ../../scripts/build-virtual-output.mjs && node ../../scripts/prepare-soundfonts.mjs && node scripts/prepare-media-tools.mjs && electron-vite build",
     "package": "node ../../scripts/prepare-soundfonts.mjs && node scripts/prepare-media-tools.mjs && node scripts/prepare-package.mjs && node scripts/package.mjs",
     "media:prepare": "node scripts/prepare-media-tools.mjs",
     "test:e2e:media": "node scripts/e2e-media.mjs",
@@ -41,6 +41,8 @@
     "test:e2e:polish": "node scripts/e2e-polish.mjs",
     "test:e2e:renderer": "node scripts/e2e-renderer.mjs",
     "test:e2e:stage": "node scripts/e2e-stage.mjs",
+    "test:e2e:external": "node scripts/e2e-external-player.mjs",
+    "test:e2e:dsp": "node scripts/e2e-dsp.mjs",
     "fonts:vendor": "node scripts/vendor-fonts.mjs"
   },
   "dependencies": {
@@ -80,5 +82,8 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
     "zustand": "^5.0.15"
+  },
+  "optionalDependencies": {
+    "frida": "17.25.1"
   }
 }

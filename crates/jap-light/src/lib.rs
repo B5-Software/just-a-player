@@ -1,5 +1,6 @@
 //! Native Rust player UI. No HTML, JavaScript, DOM, WebView or browser runtime.
 pub mod branding;
+pub mod external;
 pub mod host;
 pub mod lyrics;
 pub mod model;

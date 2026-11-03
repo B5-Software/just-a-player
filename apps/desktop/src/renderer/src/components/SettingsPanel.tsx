@@ -10,6 +10,7 @@ import { VisualPluginSettings } from './VisualPluginSettings'
 import { enterLightweight } from '../platform/lightweight'
 import { usePlayer } from '../engine/store'
 import { useState } from 'react'
+import { ExternalPlayerSettings } from './ExternalPlayerSettings'
 
 /** 设置：控件自动隐藏，以及文件与播放列表相关的行为开关。 */
 export function SettingsPanel(): React.JSX.Element {
@@ -79,6 +80,7 @@ export function SettingsPanel(): React.JSX.Element {
         </section>
       )}
       <LightingSettings />
+      <ExternalPlayerSettings />
       <RenderSettings />
       <VisualPluginSettings />
       <MidiSettings />

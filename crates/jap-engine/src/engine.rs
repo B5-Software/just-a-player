@@ -26,6 +26,7 @@ const POSITION_INTERVAL: Duration = Duration::from_millis(33);
 
 enum Msg {
     Command(Command),
+    Live(jap_decode::live::LiveInput),
     Shutdown,
 }
 
@@ -78,6 +79,11 @@ impl Engine {
             return;
         }
         let _ = self.tx.send(Msg::Command(command));
+    }
+
+    /// Connect a bounded, sample-addressed stream without a temporary audio file.
+    pub fn play_live(&self, input: jap_decode::live::LiveInput) {
+        let _ = self.tx.send(Msg::Live(input));
     }
 
     pub fn query(&self, query: Query) -> QueryResponse {
@@ -168,6 +174,7 @@ struct Core {
     pending_recovery: bool,
     control_request: u64,
     pending_control: Option<u64>,
+    live: Option<jap_decode::live::LiveInput>,
 }
 
 impl Core {
@@ -195,6 +202,7 @@ impl Core {
             pending_recovery: false,
             control_request: 0,
             pending_control: None,
+            live: None,
         }
     }
 
@@ -202,6 +210,7 @@ impl Core {
         loop {
             match rx.recv_timeout(TICK) {
                 Ok(Msg::Command(command)) => self.handle(command),
+                Ok(Msg::Live(input)) => self.play_live(input),
                 Ok(Msg::Shutdown) | Err(RecvTimeoutError::Disconnected) => break,
                 Err(RecvTimeoutError::Timeout) => {}
             }
@@ -284,6 +293,8 @@ impl Core {
             tracing::warn!("起播位置跳转失败，从头播放: {e}");
         }
 
+        self.live = None;
+
         self.pending_next = None;
         self.queued_next_path = None;
         self.last_position_ms = start_ms;
@@ -293,6 +304,28 @@ impl Core {
             return;
         }
         self.current_path = Some(path.to_owned());
+        self.drain_started = None;
+        self.set_state(PlaybackState::Playing);
+    }
+
+    fn play_live(&mut self, input: jap_decode::live::LiveInput) {
+        let source = match input.source() {
+            Ok(source) => source,
+            Err(error) => return self.error(error.to_string()),
+        };
+        self.session = None;
+        self.pending_next = None;
+        self.queued_next_path = None;
+        self.last_position_ms =
+            source.position_frames() * 1000 / u64::from(source.info().format.sample_rate);
+        let info = Arc::new(source.info().clone());
+        self.current_path = Some(info.path.clone());
+        self.live = Some(input);
+        if let Err(error) = self.start_track(Loaded { source, info }) {
+            self.error(error);
+            self.stop();
+            return;
+        }
         self.drain_started = None;
         self.set_state(PlaybackState::Playing);
     }
@@ -571,6 +604,9 @@ impl Core {
     fn stop(&mut self) {
         self.pending_control = None;
         self.session = None;
+        if let Some(input) = self.live.take() {
+            input.close();
+        }
         self.pending_next = None;
         self.queued_next_path = None;
         self.drain_started = None;
@@ -601,7 +637,11 @@ impl Core {
     fn replay(&mut self, path: &str, position_ms: u64) {
         let was_paused = self.state == PlaybackState::Paused;
         let queued = self.queued_next_path.clone();
-        self.play(path, position_ms);
+        if let Some(input) = self.live.clone() {
+            self.play_live(input);
+        } else {
+            self.play(path, position_ms);
+        }
         if queued.is_some() {
             self.queue_next(queued);
         }

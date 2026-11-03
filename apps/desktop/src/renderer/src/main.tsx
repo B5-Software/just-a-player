@@ -43,6 +43,7 @@ import { initFileOpening } from './library/file-opening'
 import { serializeNativeTextures } from './viz/native-hdr'
 import { prepareScenes } from './viz/scenes'
 import { initLightweightHandoff } from './platform/lightweight'
+import { useExternal } from './external/store'
 
 const surface = window.jap.surface
 document.documentElement.dataset['surface'] = surface
@@ -138,6 +139,10 @@ createRoot(document.getElementById('root')!).render(
 if (new URLSearchParams(location.search).has('e2e')) {
   ;(window as unknown as Record<string, unknown>)['__jap'] = {
     engine,
+    useExternal,
+    playNeighbour,
+    playPrevious,
+    playDefaultOrResume,
     serializeNativeTextures,
     prepareScenes,
     useDialogs,

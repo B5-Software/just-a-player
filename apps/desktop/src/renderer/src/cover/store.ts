@@ -31,6 +31,15 @@ const CACHE_LIMIT = 40
 const cache = new Map<string, CoverEntry>()
 /** 切歌很快时，只让最后一次请求落地。 */
 let token = 0
+const external = new Map<string, { mime: string; data: Uint8Array } | null>()
+export function setExternalCover(path: string, payload: { mime: string; data: Uint8Array } | null): void {
+  external.delete(path); external.set(path, payload)
+  while (external.size > 8) external.delete(external.keys().next().value!)
+  const previous = cache.get(path)
+  if (previous?.art) URL.revokeObjectURL(previous.art.url)
+  cache.delete(path)
+  void loadCover(path)
+}
 
 function remember(path: string, entry: CoverEntry): void {
   cache.delete(path)
@@ -53,6 +62,7 @@ export function clearCoverCache(): void {
 }
 
 async function fetchCover(path: string): Promise<{ mime: string; data: Uint8Array } | null> {
+  if (path.startsWith('external://')) return external.get(path) ?? null
   const embedded = await engine.cover(path)
   if (embedded) return embedded
   if (!useSettings.getState().sidecarCover) return null
@@ -73,6 +83,10 @@ export async function loadCover(path: string | null): Promise<void> {
   const id = ++token
   if (!path) {
     useCover.setState({ path: null, art: null, palette: null, backdrop: null })
+    return
+  }
+  if (path.startsWith('external://') && !external.has(path)) {
+    useCover.setState({ path })
     return
   }
   const cached = cache.get(path)

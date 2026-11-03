@@ -32,6 +32,8 @@ struct Args {
     /// Local file-based native QA. No debugger, HTTP port or browser is started.
     #[arg(long)]
     qa: bool,
+    #[arg(long, requires = "qa")]
+    qa_hidden: bool,
     #[arg(long)]
     smoke_report: Option<PathBuf>,
     #[arg(trailing_var_arg = true)]
@@ -76,6 +78,7 @@ struct App {
     main_position: Option<PhysicalPosition<i32>>,
     capture: bool,
     background_ctx: egui::Context,
+    qa_hidden: bool,
 }
 impl App {
     fn command(&mut self, command: &str) {
@@ -341,6 +344,23 @@ impl App {
                     }
                 }
                 "dialog" => self.player.dialog = input["name"].as_str().unwrap_or("").into(),
+                "external-connect" => {
+                    self.player.prefs["externalForce"] = input["force"].clone();
+                    self.player.external_request("connect");
+                }
+                "external-action" => self
+                    .player
+                    .external_request(input["action"].as_str().unwrap_or("status")),
+                "dsp-preset" => {
+                    if let Some(config) =
+                        jap_core::DspConfig::preset(input["name"].as_str().unwrap_or(""))
+                    {
+                        self.player.command(Command::SetDsp { config });
+                    }
+                }
+                "seek" => self.player.command(Command::Seek {
+                    position_ms: input["positionMs"].as_u64().unwrap_or(0),
+                }),
                 "screenshot" => self.capture = true,
                 "full" => {
                     let handoff = self.player.handoff();
@@ -424,6 +444,7 @@ impl ApplicationHandler<UserEvent> for App {
         }
         let icon = (jap_light::branding::rgba(128), 128, 128);
         let attributes = Window::default_attributes()
+            .with_visible(!self.qa_hidden)
             .with_title("Just A Player · Native")
             .with_theme(Some(winit::window::Theme::Dark))
             .with_inner_size(LogicalSize::new(1150., 750.))
@@ -481,7 +502,11 @@ impl ApplicationHandler<UserEvent> for App {
         self.main_size = window.inner_size();
         self.main_position = window.outer_position().ok();
         self.window = Some(window);
-        self.show(None);
+        if self.qa_hidden {
+            self.release_ui();
+        } else {
+            self.show(None);
+        }
     }
     fn user_event(&mut self, _: &ActiveEventLoop, event: UserEvent) {
         match event {
@@ -650,15 +675,22 @@ pub fn run() -> Result<()> {
     let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
     let proxy = event_loop.create_proxy();
     let events = Arc::new(Mutex::new(Vec::<Value>::new()));
+    let external_events: Arc<Mutex<Option<Arc<dyn jap_light::external::Connection>>>> =
+        Arc::new(Mutex::new(None));
+    let external_sink = external_events.clone();
     let sink = events.clone();
     let wake = proxy.clone();
     let engine = Arc::new(jap_engine::Engine::new(Arc::new(move |event| {
         let position = matches!(event, jap_core::Event::Position { .. });
+        let value = serde_json::to_value(event).unwrap_or_default();
+        if let Some(connection) = external_sink.lock().unwrap().as_ref() {
+            connection.event(&value);
+        }
         let mut queue = sink.lock().unwrap();
         if position {
             queue.retain(|v| v["type"] != "position");
         }
-        queue.push(serde_json::to_value(event).unwrap_or_default());
+        queue.push(value);
         drop(queue);
         if !position {
             let _ = wake.send_event(UserEvent::Wake);
@@ -677,9 +709,55 @@ pub fn run() -> Result<()> {
         root.clone(),
         platform.into(),
         jap_light::model::read(&root.join("settings.json")),
-        handoff,
+        handoff.clone(),
         args.return_app.is_some(),
     );
+    #[cfg(windows)]
+    {
+        let resources = args.resources.clone().or_else(|| {
+            std::env::current_exe()
+                .ok()?
+                .parent()?
+                .parent()
+                .map(PathBuf::from)
+        });
+        if let Some(resources) = resources {
+            let executable = args
+                .return_app
+                .clone()
+                .or_else(|| resources.parent().map(|p| p.join("Just A Player.exe")));
+            let service = args
+                .return_entry
+                .as_ref()
+                .and_then(|p| p.parent())
+                .map(|p| p.join("external-service.js"))
+                .unwrap_or_else(|| resources.join("app.asar/out/main/external-service.js"));
+            let dll = resources.join("virtual-output/jap_virtual_output.dll");
+            if let Some(executable) = executable.filter(|p| p.is_file())
+                && dll.is_file()
+            {
+                let connection: Arc<dyn jap_light::external::Connection> =
+                    Arc::new(crate::external::Client::new(
+                        executable,
+                        service,
+                        dll,
+                        player.engine.clone(),
+                        root.join("external-bridge.log"),
+                    ));
+                *external_events.lock().unwrap() = Some(connection.clone());
+                player.external_connection = Some(connection);
+                if handoff["track"]["path"]
+                    .as_str()
+                    .is_some_and(|p| p.starts_with("external://"))
+                {
+                    player.prefs["externalForce"] = handoff["externalForce"].clone();
+                    player.external_auto_route = true;
+                    player.external_auto_resume = handoff["state"] == "playing";
+                    player.external_request("connect");
+                }
+            }
+        }
+    }
     if !args.files.is_empty() {
         player.external(args.files);
     }
@@ -707,8 +785,13 @@ pub fn run() -> Result<()> {
         main_position: None,
         capture: false,
         background_ctx: egui::Context::default(),
+        qa_hidden: args.qa_hidden,
     };
     event_loop.run_app(&mut app)?;
+    if let Some(connection) = &app.player.external_connection {
+        connection.shutdown();
+    }
+    *external_events.lock().unwrap() = None;
     let returned = app.returned;
     drop(app);
     if returned && let Some(executable) = args.return_app {

@@ -83,6 +83,21 @@ jobs:
           node apps/lightweight/test-native.mjs
       - run: pnpm build
       - run: pnpm typecheck
+      - name: External adapter version gates and lyric timing
+        run: |
+          node apps/desktop/scripts/test-external-agents.mjs
+          node apps/desktop/scripts/test-external-lyrics.mjs
+          node apps/desktop/scripts/test-external-cover.mjs
+          node apps/desktop/scripts/test-external-routing.mjs
+      - name: Native external audio pipe (Windows)
+        if: runner.os == 'Windows'
+        run: node apps/lightweight/test-external-protocol.mjs
+      - name: DSP preset controls
+        if: runner.os != 'Linux'
+        run: pnpm --filter desktop test:e2e:dsp
+      - name: DSP preset controls (Xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm --filter desktop test:e2e:dsp
       - name: Full to lightweight process handoff (Windows)
         if: runner.os == 'Windows'
         run: node apps/desktop/scripts/e2e-lightweight.mjs
@@ -299,7 +314,7 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           mkdir -p apps/android/release
-          cp apps/android/app/build/outputs/apk/release/app-release.apk apps/android/release/Just-A-Player-0.1.4-Android-universal-${{ matrix.midi }}.apk
+          cp apps/android/app/build/outputs/apk/release/app-release.apk apps/android/release/Just-A-Player-0.1.5-Android-universal-${{ matrix.midi }}.apk
           cp apps/android/build/codecs/ffmpeg.tar.xz apps/android/release/android-ffmpeg-9.0.2-source.tar.xz
           cp apps/android/build/codecs/x264.tar.gz apps/android/release/android-x264-c24e06c-source.tar.gz
       - uses: actions/upload-artifact@v4

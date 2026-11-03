@@ -88,6 +88,14 @@ export function DspPanel(): React.JSX.Element {
     }
   })
   const [name, setName] = useState('')
+  const presets = [...DSP_PRESETS, ...custom]
+  const selectedPreset = presets.find(p => {
+    const wanted = { ...DEFAULT_DSP, ...p.patch, enabled: true }
+    return Object.keys(wanted).every(key => {
+      const a = config[key as keyof DspConfig], b = wanted[key as keyof DspConfig]
+      return Array.isArray(a) && Array.isArray(b) ? a.every((v, i) => v === b[i]) : a === b
+    })
+  })?.name ?? ''
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between rounded-2xl bg-hover p-3">
@@ -111,20 +119,19 @@ export function DspPanel(): React.JSX.Element {
         音效预置
         <Select
           aria-label="音效预置"
-          defaultValue=""
+          value={selectedPreset}
           disabled={dsd}
           onChange={(e) => {
-            const preset = [...DSP_PRESETS, ...custom].find((p) => p.name === e.target.value)
-            if (preset) update({ ...preset.patch, enabled: true })
-            e.target.value = ''
+            const preset = presets.find((p) => p.name === e.target.value)
+            if (preset) update({ ...DEFAULT_DSP, ...preset.patch, enabled: true })
           }}
           className="rounded-xl bg-hover p-2 text-fg"
         >
           <option value="" disabled>
             选择预置
           </option>
-          {[...DSP_PRESETS, ...custom].map((p) => (
-            <option key={p.name}>{p.name}</option>
+          {presets.map((p) => (
+            <option key={p.name} value={p.name}>{p.name}</option>
           ))}
         </Select>
       </label>

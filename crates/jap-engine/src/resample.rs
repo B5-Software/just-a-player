@@ -23,6 +23,7 @@ struct RateSource {
     position: u64,
     delay: usize,
     source_rate: u32,
+    filled: usize,
 }
 fn error(e: impl std::fmt::Display) -> DecodeError {
     DecodeError::Decode(format!("重采样: {e}"))
@@ -83,6 +84,7 @@ impl RateSource {
             position,
             delay,
             source_rate,
+            filled: 0,
         })
     }
 }
@@ -102,7 +104,7 @@ impl AudioSource for RateSource {
                 return Ok(0);
             }
             let wanted = self.fft.input_frames_next();
-            let mut used = 0;
+            let mut used = self.filled;
             while used < wanted {
                 if self.offset >= self.decoded.len() {
                     if self.eof {
@@ -110,9 +112,17 @@ impl AudioSource for RateSource {
                     }
                     self.decoded.clear();
                     self.offset = 0;
-                    if self.source.read(&mut self.decoded)? == 0 {
-                        self.eof = true;
-                        break;
+                    match self.source.read(&mut self.decoded) {
+                        Ok(0) => {
+                            self.eof = true;
+                            break;
+                        }
+                        Ok(_) => {}
+                        Err(DecodeError::Pending) => {
+                            self.filled = used;
+                            return Err(DecodeError::Pending);
+                        }
+                        Err(e) => return Err(e),
                     }
                 }
                 let take = (wanted - used).min((self.decoded.len() - self.offset) / channels);
@@ -126,6 +136,7 @@ impl AudioSource for RateSource {
                 used += take;
             }
             self.input_frames += used as u64;
+            self.filled = 0;
             for channel in &mut self.input {
                 channel[used..].fill(0.);
             }
@@ -163,6 +174,7 @@ impl AudioSource for RateSource {
         self.input_frames = 0;
         self.emitted = 0;
         self.position = actual * u64::from(self.format.sample_rate) / 1000;
+        self.filled = 0;
         Ok(actual)
     }
     fn position_frames(&self) -> u64 {
@@ -261,6 +273,50 @@ mod tests {
             assert_eq!(source.position_frames(), 3600);
             assert_eq!(all(source.as_mut()).len(), 12000);
         }
+    }
+    #[test]
+    fn temporary_live_starvation_preserves_partial_fft_input() {
+        struct Intermittent {
+            inner: Box<dyn AudioSource>,
+            wait: bool,
+        }
+        impl AudioSource for Intermittent {
+            fn info(&self) -> &TrackInfo {
+                self.inner.info()
+            }
+            fn position_frames(&self) -> u64 {
+                self.inner.position_frames()
+            }
+            fn seek(&mut self, ms: u64) -> Result<u64> {
+                self.inner.seek(ms)
+            }
+            fn read(&mut self, out: &mut Vec<f64>) -> Result<usize> {
+                self.wait = !self.wait;
+                if self.wait {
+                    Err(DecodeError::Pending)
+                } else {
+                    self.inner.read(out)
+                }
+            }
+        }
+        let expected = all(adapt(tone(96000, 523), 48000).unwrap().as_mut());
+        let mut source = adapt(
+            Box::new(Intermittent {
+                inner: tone(96000, 523),
+                wait: false,
+            }),
+            48000,
+        )
+        .unwrap();
+        let mut got = Vec::new();
+        loop {
+            match source.read(&mut got) {
+                Ok(0) => break,
+                Ok(_) | Err(DecodeError::Pending) => {}
+                Err(e) => panic!("{e}"),
+            }
+        }
+        assert_eq!(got, expected);
     }
     #[test]
     #[ignore = "Read-only local high-rate source benchmark; set JAP_HIGH_RATE_QA_PATH"]

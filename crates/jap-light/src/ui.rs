@@ -766,6 +766,7 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
     let kind = p.dialog.clone();
     let heading = match kind.as_str() {
         "settings" => "原生轻量模式",
+        "external" => "外部播放器 · 网易云音乐",
         "output" => "音频输出",
         "eq" => "DSP 与均衡器",
         "import" => "导入音乐",
@@ -841,6 +842,9 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                             if button(ui, p, "eq", "DSP / EQ") {
                                 p.dialog = "eq".into();
                             }
+                            if p.platform=="win32" && button(ui,p,"external-player","连接网易云音乐") {
+                                p.dialog="external".into();
+                            }
                             if button(ui, p, "quality", "音源质量分析") {
                                 p.dialog = "quality".into();
                             }
@@ -862,6 +866,31 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                                     json!(p.settings["keepScreenAwake"] != true);
                                 p.actions
                                     .push(json!({"type":"settings","settings":p.settings}));
+                            }
+                        }
+                        "external" => {
+                            ui.label(RichText::new("原生 HiFi 通路").color(ACCENT).strong());
+                            ui.label("客户端输出进入专用黑洞，原始音频交给此窗口的 Rust 引擎。歌词、封面与系统控制同步。");
+                            let phase=p.external_state["phase"].as_str().unwrap_or("disconnected").to_owned();
+                            let connected=matches!(phase.as_str(),"ready"|"routing");
+                            ui.add_enabled_ui(phase!="connecting" && p.external_connection.is_some(),|ui| {
+                                if switch(ui,p,"external-connect","连接网易云音乐",connected) {
+                                    p.external_request(if connected {"disconnect"}else{"connect"});
+                                }
+                            });
+                            ui.add_enabled_ui(!connected&&phase!="connecting",|ui| {
+                                if switch(ui,p,"external-force","强制接管",p.prefs["externalForce"]==true) {
+                                    p.prefs["externalForce"]=json!(p.prefs["externalForce"]!=true);p.persist();
+                                }
+                            });
+                            if phase=="ready" && button(ui,p,"external-route","切换客户端到黑洞设备") {p.external_request("route");}
+                            if p.external_connection.is_none() {ui.label("需要安装包中的连接组件；开发时请从完整版进入原生模式。");}
+                            if let Some(message)=p.external_state["message"].as_str() {ui.label(RichText::new(message).size(12.).color(ACCENT));}
+                            if connected {
+                                let packets=p.external_state["audioPackets"].as_u64().unwrap_or(0);
+                                let bytes=p.external_state["nullBytes"].as_str().and_then(|s|s.parse::<u64>().ok()).unwrap_or(0);
+                                ui.label(format!("音频包 {packets}    黑洞 {:.1} MiB",bytes as f64/1048576.));
+                                ui.label(RichText::new("仅连接时启动无界面适配进程；界面绘制、DSP、解码和硬件输出仍由 Rust 执行。").size(12.).color(MUTED));
                             }
                         }
                         "output" => {
@@ -1001,6 +1030,10 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                             }
                         }
                         "eq" => {
+                            if p.current.as_ref().is_some_and(|t|t.format.is_dsd()) && p.output.dsd_mode!=jap_core::device::DsdMode::Pcm && p.state!=PlaybackState::Stopped {
+                                ui.label("DSD 直通绕过 DSP；请先切换为 DSD → PCM。");
+                                ui.disable();
+                            }
                             if switch(ui, p, "dsp-enabled", "开启 DSP", p.dsp.enabled) {
                                 p.dsp.enabled = !p.dsp.enabled;
                                 p.command(Command::SetDsp {
@@ -1020,15 +1053,10 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                                 p.dsp.preamp_db = value as f64;
                                 changed = true;
                             }
-                            ui.horizontal(|ui| {
-                                for (name, eq) in [
-                                    ("平直", [0.; 10]),
-                                    ("温暖", [3., 3., 2., 1., 0., 0., -1., -1., 0., 0.]),
-                                    ("人声", [-2., -1., 0., 1., 2., 3., 3., 1., 0., -1.]),
-                                ] {
-                                    if ui.button(name).clicked() {
-                                        p.dsp.eq_db = eq;
-                                        p.dsp.preamp_db = -6.;
+                            ui.horizontal_wrapped(|ui| {
+                                for (index, name) in jap_core::DspConfig::PRESETS.iter().enumerate() {
+                                    if button(ui, p, &format!("dsp-preset-{index}"), name) {
+                                        p.dsp = jap_core::DspConfig::preset(name).unwrap();
                                         changed = true;
                                     }
                                 }

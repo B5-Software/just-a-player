@@ -9,4 +9,5 @@ export interface LightweightHandoff {
   volume: number
   output: OutputConfig
   dsp: DspConfig
+  externalForce?: boolean
 }

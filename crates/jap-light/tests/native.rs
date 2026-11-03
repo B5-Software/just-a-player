@@ -101,3 +101,23 @@ fn native_surface_has_no_browser_assets_or_dependencies() {
     assert!(!desktop.contains("wry ="));
     assert!(!desktop.contains("tao ="));
 }
+
+#[test]
+fn clicking_a_native_dsp_preset_enables_the_processor_and_updates_all_gains() {
+    let mut s = surface("preset");
+    s.player.dialog = "eq".into();
+    render(&mut s, json!([]));
+    render(&mut s, json!([]));
+    assert!(!s.player.dsp.enabled);
+    click(&mut s, "dsp-preset-1");
+    assert_eq!(s.player.dsp, jap_core::DspConfig::preset("温暖").unwrap());
+    click(&mut s, "dsp-preset-6");
+    assert_eq!(s.player.dsp.crossfeed, 0.65);
+    assert!(s.player.dsp.enabled);
+    for name in jap_core::DspConfig::PRESETS {
+        jap_core::DspConfig::preset(name)
+            .unwrap()
+            .validate()
+            .unwrap();
+    }
+}

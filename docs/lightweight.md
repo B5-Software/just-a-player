@@ -1,4 +1,4 @@
-# 原生轻量模式（0.1.4）
+# 原生轻量模式（0.1.5）
 
 设置顶部打开「轻量模式」，原生窗口右上角「完整模式」返回视觉舞台。
 界面由 Rust / egui 编译并直接绘制，不包含 HTML、CSS、JavaScript 页面或 WebView。
@@ -36,7 +36,7 @@ Linux 需要桌面提供 StatusNotifierItem 托盘宿主；没有托盘宿主时
 应用内与托盘使用相同的 App 图标，托盘图标使用透明圆角；Windows 标题栏和可执行文件也嵌入该图标。
 
 内存验收使用独立进程，记录工作集和私有提交量，测试包括空闲、48 kHz PCM 播放、后台、恢复和多次收起循环。
-Windows x64 本机 Release 验收：空闲约 52 MiB 工作集 / 29 MiB 私有内存，48 kHz PCM + VU 约 66 / 40 MiB，收起到托盘约 36 / 11 MiB。
+v0.1.4 Windows x64 本机 Release（未连接客户端）验收：空闲约 52 MiB 工作集 / 29 MiB 私有内存，48 kHz PCM + VU 约 66 / 40 MiB，收起到托盘约 36 / 11 MiB。
 这是特定文件和本机环境的测量，音色库、解码器、封面和缓冲配置会影响实际占用；大型 SF2 正在使用时会占用额外内存。
 
 VU 显示音源 RMS（DSP 之后、应用主音量之前），0 VU = −18 dBFS，扩展量程 −30 至 +18 VU；
@@ -59,3 +59,11 @@ node apps/lightweight/test-background.mjs # Windows 托盘、后台自动切歌�
 
 原生界面仅内嵌 OFL 的 Noto Sans SC / Latin 字体，许可证位于 crates/jap-light/fonts/OFL.txt。
 构建需要 Rust 1.92 或更新版本；不再依赖 WebView2 或 WebKitGTK。
+
+## 网易云连接（Windows）
+
+原生设置中打开「连接网易云音乐」，可选强制接管。选择专用黑洞设备后，FLAC 原始包或原生解码 PCM 通过有界二进制管道进入此窗口的 Rust 引擎，封面、歌词、元数据、托盘和系统媒体控制继续由原生界面处理。
+
+此功能按需启动安装包内的无界面进程适配器，使用 Frida 连接客户端；不创建 Electron 渲染窗口或 WebView，不通过浏览器输出音频。连接期间会增加适配进程的内存，断开后退出并释放它。退出先暂停客户端、释放 Rust 设备，再恢复客户端原先的输出。
+
+本地集成验证：`node apps/lightweight/test-external.mjs --live-client`，Rust 使用空输出；CI 使用 `test-external-protocol.mjs` 验证二进制传输、封面歌词、控制和退出确认，无需安装网易云。

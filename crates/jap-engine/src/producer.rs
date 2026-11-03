@@ -336,6 +336,10 @@ impl Worker {
                 );
                 quantize_into(&self.mapped, self.ctx.config.format, &mut self.pending);
             }
+            Err(jap_decode::DecodeError::Pending) => {
+                // Yield to controls while the connected source waits for its next packet.
+                thread::sleep(Duration::from_millis(2));
+            }
             Err(e) => {
                 let _ = self.ctx.errors.send(format!("解码出错: {e}"));
                 self.on_track_end();

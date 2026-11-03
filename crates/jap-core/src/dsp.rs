@@ -29,6 +29,29 @@ impl Default for DspConfig {
 }
 
 impl DspConfig {
+    pub const PRESETS: [&str; 7] = ["平直", "温暖", "人声", "摇滚", "爵士", "清亮", "耳机串音"];
+
+    pub fn preset(name: &str) -> Option<Self> {
+        let (eq_db, preamp_db, stereo_width, crossfeed) = match name {
+            "平直" => ([0.; 10], -6., 1., 0.),
+            "温暖" => ([3., 3., 2., 1., 0., 0., -1., -1., 0., 0.], -5., 1., 0.),
+            "人声" => ([-2., -1., 0., 1., 2., 3., 3., 1., 0., -1.], -5., 1., 0.),
+            "摇滚" => ([4., 3., 1., -1., -2., 0., 2., 3., 2., 1.], -6., 1.1, 0.),
+            "爵士" => ([2., 1., 0., 0., -1., 1., 2., 1., 2., 2.], -5., 1.05, 0.),
+            "清亮" => ([-1., -1., 0., 0., 0., 1., 2., 3., 3., 2.], -6., 1., 0.),
+            "耳机串音" => ([0.; 10], -4., 0.95, 0.65),
+            _ => return None,
+        };
+        Some(Self {
+            enabled: true,
+            eq_db,
+            preamp_db,
+            stereo_width,
+            crossfeed,
+            ..Self::default()
+        })
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         let valid = |v: f64, min, max| v.is_finite() && v >= min && v <= max;
         if !valid(self.preamp_db, -24.0, 12.0)

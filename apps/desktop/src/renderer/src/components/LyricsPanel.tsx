@@ -253,7 +253,9 @@ export function LyricsPanel(): React.JSX.Element {
       <section className="flex flex-col gap-3">
         <SectionTitle>歌词文件</SectionTitle>
         <p className="text-sm text-fg-muted">
-          {source === 'imported'
+          {source === 'external'
+            ? '来自外部播放器 · 实时同步'
+            : source === 'imported'
             ? '正在使用导入的歌词（优先于同名 .lrc）'
             : source === 'sidecar'
               ? '正在使用同名 .lrc 文件'
