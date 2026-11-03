@@ -31,7 +31,7 @@ jobs:
           - { os: ubuntu-24.04, platform: linux, arch: x64 }
           - { os: ubuntu-24.04-arm, platform: linux, arch: arm64 }
     runs-on: ${{ matrix.target.os }}
-    timeout-minutes: 45
+    timeout-minutes: ${{ matrix.target.os == 'macos-15-intel' && 90 || 45 }}
     env:
       JAP_BUNDLE_MIDI: ${{ matrix.midi == 'with-midi' && '1' || '0' }}
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
