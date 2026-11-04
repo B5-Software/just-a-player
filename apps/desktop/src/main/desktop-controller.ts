@@ -7,6 +7,7 @@ import { desktopLayout } from '../shared/desktop-layout'
 import { getSettings, updateSettings } from './settings'
 import { icon } from './desktop-icon'
 import { getLightingAccent } from './lighting'
+import { tMain } from './i18n'
 
 type Mode = 'normal' | 'mini' | 'wallpaper'
 let mode: Mode = 'normal',
@@ -87,6 +88,14 @@ export function setDesktopMedia(value: SystemMediaState): void {
 }
 function sendCommand(value: string): void {
   primary?.webContents.send(IPC.mediaCommand, value)
+}
+function updateThumbar(): void {
+  if (process.platform === 'win32' && primary && !primary.isDestroyed())
+    primary.setThumbarButtons([
+      {tooltip:tMain('上一首'),icon:icon('previous'),click:()=>sendCommand('previous')},
+      {tooltip:tMain('播放 / 暂停'),icon:icon('play'),click:()=>sendCommand('toggle')},
+      {tooltip:tMain('下一首'),icon:icon('next'),click:()=>sendCommand('next')},
+    ])
 }
 function ensureWallpaper(): Promise<BrowserWindow> {
   if (wallPromise) return wallPromise
@@ -233,6 +242,7 @@ async function refresh(): Promise<void> {
   }
 }
 export function refreshDesktopSettings(): void {
+  updateThumbar()
   void refresh()
   popup?.webContents.send(IPC.trayState, {
     ...media,
@@ -401,12 +411,7 @@ export function installDesktop(
       ['MediaStop', 'stop']
     ] as const)
       globalShortcut.register(key, () => sendCommand(action))
-  if (process.platform === 'win32')
-    win.setThumbarButtons([
-      { tooltip: '上一首', icon: icon('previous'), click: () => sendCommand('previous') },
-      { tooltip: '播放 / 暂停', icon: icon('play'), click: () => sendCommand('toggle') },
-      { tooltip: '下一首', icon: icon('next'), click: () => sendCommand('next') }
-    ])
+  updateThumbar()
   const visibility = (): void => {
     void refresh()
   }

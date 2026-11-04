@@ -100,23 +100,22 @@ impl Gui {
     }
 }
 fn tray_panel(ui: &mut egui::Ui, p: &mut Player) {
-    use egui::{Color32, RichText, vec2};
+    jap_light::i18n::configure(&p.settings);
+    use egui::{RichText, vec2};
     use serde_json::json;
     p.tick(ui.ctx());
+    jap_light::theme::apply(ui, p);
+    let palette = jap_light::theme::colors(ui);
     p.controls.clear();
     p.viewport = ui.ctx().content_rect().size().into();
     egui::CentralPanel::default()
-        .frame(
-            egui::Frame::new()
-                .fill(Color32::from_rgb(24, 22, 32))
-                .inner_margin(18.),
-        )
+        .frame(egui::Frame::new().fill(palette.panel).inner_margin(18.))
         .show_inside(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 6.;
             ui.label(
                 RichText::new("JUST A PLAYER")
                     .size(12.)
-                    .color(jap_light::ui::ACCENT)
+                    .color(palette.accent_text)
                     .strong(),
             );
             ui.add_space(10.);
@@ -134,7 +133,7 @@ fn tray_panel(ui: &mut egui::Ui, p: &mut Player) {
                                 p.current
                                     .as_ref()
                                     .map(|t| jap_light::model::title(&json!(t)))
-                                    .unwrap_or_else(|| "音乐随行".into()),
+                                    .unwrap_or_else(|| jap_light::i18n::tr("音乐随行").into()),
                             )
                             .size(18.)
                             .strong(),
@@ -145,7 +144,7 @@ fn tray_panel(ui: &mut egui::Ui, p: &mut Player) {
                         ui.label(
                             RichText::new(track.artist.as_deref().unwrap_or(""))
                                 .size(13.)
-                                .color(Color32::from_gray(160)),
+                                .color(palette.muted),
                         );
                     }
                 });
@@ -155,7 +154,7 @@ fn tray_panel(ui: &mut egui::Ui, p: &mut Player) {
                 if tray_button(&mut columns[0], p, "previous", "上一首") {
                     p.neighbour(-1, false);
                 }
-                let playing = p.state == jap_core::PlaybackState::Playing;
+                let playing = p.transport_playing();
                 if tray_button(
                     &mut columns[1],
                     p,
@@ -187,10 +186,16 @@ fn tray_panel(ui: &mut egui::Ui, p: &mut Player) {
         });
 }
 fn tray_button(ui: &mut egui::Ui, p: &mut Player, id: &str, label: &str) -> bool {
-    let r = ui.add_sized([ui.available_width(), 37.], egui::Button::new(label));
+    if matches!(id, "previous" | "play" | "next") {
+        return jap_light::ui::icon_button(ui, p, id, label, ui.available_width());
+    }
+    let r = ui.add_sized(
+        [ui.available_width(), 37.],
+        egui::Button::new(jap_light::i18n::tr(label)),
+    );
     p.controls.insert(
         id.into(),
-        serde_json::json!([r.rect.min.x, r.rect.min.y, r.rect.max.x, r.rect.max.y]),
+        serde_json::json!([r.rect.min.x, r.rect.min.y, r.rect.width(), r.rect.height()]),
     );
     r.clicked()
 }

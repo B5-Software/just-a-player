@@ -31,6 +31,19 @@ export const AUDIO_EXTENSIONS = [
 
 const AUDIO_EXTENSION_SET: ReadonlySet<string> = new Set(AUDIO_EXTENSIONS)
 
+export function radioUrl(path: string): URL | null {
+  if (!/^https?:\/\//i.test(path) || path.length > 4096 || /[\u0000-\u001f\u007f]/.test(path))
+    return null
+  try {
+    const url = new URL(path)
+    if (!url.hostname || url.username || url.password) return null
+    url.hash = ''
+    return url
+  } catch {
+    return null
+  }
+}
+
 export function isAudioPath(path: string): boolean {
   if (discTrack(path)) return true
   const dot = path.lastIndexOf('.')
@@ -39,6 +52,8 @@ export function isAudioPath(path: string): boolean {
 }
 
 export function baseName(path: string): string {
+  const radio = radioUrl(path)
+  if (radio) return radio.hostname
   const disc = discTrack(path)
   if (disc) return `${baseName(disc.path)} · 曲目 ${disc.track}`
   return path.split(/[\\/]/).pop() ?? path
@@ -51,6 +66,8 @@ export function dirName(path: string): string {
 }
 /** Windows paths are case insensitive; do not merge distinct POSIX filenames. */
 export function pathKey(path: string): string {
+  const radio = radioUrl(path)
+  if (radio) return radio.href
   const disc = discTrack(path)
   if (disc) return `disc:${pathKey(disc.path)}:${disc.track}`
   const normalized = path.replace(/\\/g, '/')

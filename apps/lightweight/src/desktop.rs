@@ -29,6 +29,8 @@ struct Args {
     handoff: Option<PathBuf>,
     #[arg(long)]
     ready_file: Option<PathBuf>,
+    #[arg(long)]
+    audio_endpoint: Option<PathBuf>,
     /// Local file-based native QA. No debugger, HTTP port or browser is started.
     #[arg(long)]
     qa: bool,
@@ -203,6 +205,8 @@ impl App {
         // Clone the window before mutably rebuilding the renderer.
         let window = window.clone();
         self.resume_ui();
+        // Present the rebuilt software surface before Windows reveals the client area.
+        self.render();
         window.set_visible(true);
         window.focus_window();
         window.request_redraw();
@@ -443,10 +447,15 @@ impl ApplicationHandler<UserEvent> for App {
             return;
         }
         let icon = (jap_light::branding::rgba(128), 128, 128);
+        let theme = match self.player.settings["themeMode"].as_str() {
+            Some("light") => Some(winit::window::Theme::Light),
+            Some("dark") => Some(winit::window::Theme::Dark),
+            _ => None,
+        };
         let attributes = Window::default_attributes()
             .with_visible(!self.qa_hidden)
             .with_title("Just A Player · Native")
-            .with_theme(Some(winit::window::Theme::Dark))
+            .with_theme(theme)
             .with_inner_size(LogicalSize::new(1150., 750.))
             .with_min_inner_size(LogicalSize::new(660., 400.))
             .with_window_icon(winit::window::Icon::from_rgba(icon.0, icon.1, icon.2).ok());
@@ -680,7 +689,7 @@ pub fn run() -> Result<()> {
     let external_sink = external_events.clone();
     let sink = events.clone();
     let wake = proxy.clone();
-    let engine = Arc::new(jap_engine::Engine::new(Arc::new(move |event| {
+    let event_sink: jap_engine::EventSink = Arc::new(move |event| {
         let position = matches!(event, jap_core::Event::Position { .. });
         let value = serde_json::to_value(event).unwrap_or_default();
         if let Some(connection) = external_sink.lock().unwrap().as_ref() {
@@ -695,7 +704,12 @@ pub fn run() -> Result<()> {
         if !position {
             let _ = wake.send_event(UserEvent::Wake);
         }
-    })));
+    });
+    let engine = Arc::new(if let Some(endpoint) = &args.audio_endpoint {
+        jap_engine::Engine::connect(endpoint, event_sink).map_err(anyhow::Error::msg)?
+    } else {
+        jap_engine::Engine::new(event_sink)
+    });
     engine.set_visualization_enabled(false);
     let platform = if cfg!(windows) {
         "win32"
@@ -712,6 +726,9 @@ pub fn run() -> Result<()> {
         handoff.clone(),
         args.return_app.is_some(),
     );
+    if let Some(shared) = player.engine.shared() {
+        player.external_connection = Some(Arc::new(crate::shared::SharedConnection(shared)));
+    }
     #[cfg(windows)]
     {
         let resources = args.resources.clone().or_else(|| {
@@ -735,6 +752,7 @@ pub fn run() -> Result<()> {
             let dll = resources.join("virtual-output/jap_virtual_output.dll");
             if let Some(executable) = executable.filter(|p| p.is_file())
                 && dll.is_file()
+                && player.engine.shared().is_none()
             {
                 let connection: Arc<dyn jap_light::external::Connection> =
                     Arc::new(crate::external::Client::new(
@@ -793,11 +811,18 @@ pub fn run() -> Result<()> {
     }
     *external_events.lock().unwrap() = None;
     let returned = app.returned;
+    if !returned && let Some(shared) = app.player.engine.shared() {
+        shared.shutdown();
+        std::thread::sleep(Duration::from_millis(100));
+    }
     drop(app);
     if returned && let Some(executable) = args.return_app {
         let mut command = std::process::Command::new(executable);
         if let Some(entry) = args.return_entry {
             command.arg(entry);
+        }
+        if args.qa {
+            command.arg("--remote-debugging-port=0");
         }
         command
             .arg("--jap-full")

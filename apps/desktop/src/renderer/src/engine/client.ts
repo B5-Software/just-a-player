@@ -17,6 +17,10 @@ class EngineClient {
   private readonly externalListeners = new Set<(state: ExternalPlayerState) => void>()
   private readonly pendingExternal = new Map<number, { resolve: (state: ExternalPlayerState) => void; reject: (error: Error) => void }>()
   private externalState: ExternalPlayerState | null = null
+  externalTransportState(): 'playing' | 'paused' | 'stopped' | null {
+    const state = this.externalState
+    return state && (state.phase === 'routing' || state.snapshot?.devices?.currentDevice.name === 'Just A Player HiFi Bridge (Black Hole)') ? state.snapshot?.state ?? null : null
+  }
   external(action: ExternalAction, positionMs?: number, force?: boolean): Promise<ExternalPlayerState> {
     const id = this.nextId++
     return new Promise((resolve, reject) => { this.pendingExternal.set(id, { resolve, reject }); this.post({ kind: 'external', id, action, positionMs, force }) })
@@ -53,7 +57,9 @@ class EngineClient {
   private readonly listeners = new Set<EventListener>()
   private readonly vizListeners = new Set<VizListener>()
   private readonly backlog: RendererToHost[] = []
-  private readonly connectListeners = new Set<() => void>()
+  private readonly connectListeners = new Set<(active: boolean) => void>()
+  private connected = false
+  private sharedPlayback = false
 
   attach(port: MessagePort): void {
     this.port?.close()
@@ -61,7 +67,11 @@ class EngineClient {
     port.onmessage = (e: MessageEvent<HostToRenderer>) => this.receive(e.data)
     port.start()
     for (const message of this.backlog.splice(0)) port.postMessage(message)
-    for (const fn of this.connectListeners) fn()
+    this.connected = false
+    if (window.jap.platform === 'android' || window.jap.platform === 'ohos') {
+      this.connected = true
+      for (const fn of this.connectListeners) fn(false)
+    }
   }
 
   send(command: Command): void {
@@ -97,9 +107,9 @@ class EngineClient {
   }
 
   /** 每次（重新）连上引擎时回调，页面热更新后也会触发。 */
-  onConnect(listener: () => void): () => void {
+  onConnect(listener: (active: boolean) => void): () => void {
     this.connectListeners.add(listener)
-    if (this.port) listener()
+    if (this.connected) listener(this.sharedPlayback)
     return () => this.connectListeners.delete(listener)
   }
 
@@ -110,8 +120,16 @@ class EngineClient {
 
   private receive(message: HostToRenderer): void {
     switch (message.kind) {
+      case 'hostReady':
+        this.sharedPlayback = message.active
+        if (this.connected) break
+        this.connected = true
+        for (const listener of this.connectListeners) listener(message.active)
+        break
       case 'externalState':
-        this.externalState = { ...message.state, cover: message.state.cover === undefined ? this.externalState?.cover : message.state.cover }
+        this.externalState = { ...message.state,
+          snapshot: message.state.snapshot ? {...message.state.snapshot,queue:message.state.snapshot.queue ?? this.externalState?.snapshot?.queue} : null,
+          cover: message.state.cover === undefined ? this.externalState?.cover : message.state.cover }
         for (const listener of this.externalListeners) listener(this.externalState)
         break
       case 'externalResult': {

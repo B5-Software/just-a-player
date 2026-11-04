@@ -12,6 +12,7 @@ pub mod live;
 mod lyrics;
 pub mod midi;
 mod ncm;
+pub mod radio;
 mod sacd;
 mod source;
 mod symphonia_source;

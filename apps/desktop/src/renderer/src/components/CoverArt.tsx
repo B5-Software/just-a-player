@@ -1,12 +1,14 @@
+import { ui, useLocale } from '../i18n'
 import { useCover } from '../cover/store'
 import { MusicNotes } from '../icons'
 import { CoverFade } from './CoverFade'
 
 /** 当前曲目的封面：有封面就显示封面，没有就沿用强调色渐变的音符占位。 */
 export function CoverArt({ size }: { size: number }): React.JSX.Element {
+  useLocale()
   const art = useCover((s) => s.art)
   return (
-    <div
+    ui(<div
       className="relative shrink-0 overflow-hidden rounded-2xl ring-1 ring-white/15 shadow-[0_24px_60px_-20px_rgb(var(--accent)/0.6)]"
       style={{ width: size, height: size }}
     >
@@ -29,6 +31,6 @@ export function CoverArt({ size }: { size: number }): React.JSX.Element {
           />
         </div>
       )}
-    </div>
+    </div>)
   )
 }

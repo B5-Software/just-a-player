@@ -1,3 +1,4 @@
+import { useLocale } from '../i18n'
 import { type LyricsPosition } from '@shared/settings'
 import { motion } from 'motion/react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -10,7 +11,7 @@ import { useSettings } from '../settings/store'
 import { useUi } from '../ui/store'
 import { parseLRC, wordProgress, type LyricLine } from './parse'
 import { useLyrics } from './store'
-import { PREVIEW_LYRICS } from './preview'
+import { previewLyrics } from './preview'
 
 const LINE_HEIGHT = 58
 
@@ -25,6 +26,7 @@ function WordLine({
   active: boolean
   color: string
 }): React.JSX.Element {
+  useLocale()
   const track = useRef<HTMLSpanElement>(null)
   useLayoutEffect(() => {
     const element = track.current
@@ -82,6 +84,7 @@ function WordLine({
 export function Lyrics2D({
   frozenTime = null,
 }: { frozenTime?: number | null } = {}): React.JSX.Element | null {
+  useLocale()
   const visible = useSettings((s) => s.lyricsVisible)
   const position = useSettings((s) => s.lyricsPosition)
   const offset = useSettings((s) => s.lyricsOffset)
@@ -93,7 +96,7 @@ export function Lyrics2D({
   const live = useLivePosition(durationMs)
   const sourceText = useLyrics((s) => s.text)
   const preview = useUi((s) => s.lyricsPreview && s.onboardingOpen) && window.jap.surface === 'main'
-  const text = preview ? PREVIEW_LYRICS : sourceText
+  const text = preview ? previewLyrics() : sourceText
   const { primary } = useActiveAccents()
 
   const lines = useMemo<LyricLine[]>(() => (text ? parseLRC(text) : []), [text])

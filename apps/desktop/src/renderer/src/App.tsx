@@ -1,3 +1,4 @@
+import { ui, useLocale } from './i18n'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useState } from 'react'
 import { usePlayer } from './engine/store'
@@ -24,11 +25,12 @@ const LYRICS_LIKE = /\.(lrc|txt)$/i
 const PLAYLIST_LIKE = /\.(m3u8?|json)$/i
 
 function ErrorToast(): React.JSX.Element {
+  useLocale()
   const error = usePlayer((s) => s.error)
   const dismiss = usePlayer((s) => s.dismissError)
 
   return (
-    <AnimatePresence>
+    ui(<AnimatePresence>
       {error && (
         <motion.div
           role="alert"
@@ -50,12 +52,13 @@ function ErrorToast(): React.JSX.Element {
           </button>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>)
   )
 }
 
 /** 全窗口的 3D 舞台，所有控件悬浮在上面；全屏只是窗口级的全屏，布局不变。 */
 export function App(): React.JSX.Element {
+  useLocale()
   const fullscreen = useViz((s) => s.fullscreen)
   const visible = useChromeVisible()
   const [dragging, setDragging] = useState(false)
@@ -127,7 +130,7 @@ export function App(): React.JSX.Element {
   }
 
   return (
-    <div
+    ui(<div
       data-player-app
       className={`relative h-full w-full overflow-hidden bg-[#07070b] ${fullscreen && !visible ? 'cursor-none' : ''}`}
       onDragOver={(e) => {
@@ -142,7 +145,7 @@ export function App(): React.JSX.Element {
       onDrop={(e) => void onDrop(e)}
     >
       <div data-player-stage className="absolute inset-0">
-        <GraphicsBoundary fallback={(retry) => <StageFallback retry={retry} />}>
+        <GraphicsBoundary fallback={(retry) => ui(<StageFallback retry={retry} />)}>
           <Visualizer />
           <LyricsLayer />
         </GraphicsBoundary>
@@ -174,6 +177,6 @@ export function App(): React.JSX.Element {
       </AnimatePresence>
 
       <ErrorToast />
-    </div>
+    </div>)
   )
 }

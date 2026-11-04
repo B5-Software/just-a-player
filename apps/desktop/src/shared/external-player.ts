@@ -11,6 +11,13 @@ export interface ExternalSnapshot {
   state: 'playing' | 'paused' | 'stopped'
   positionMs: number
   speed: number
+  mode?: 'off' | 'all' | 'one' | 'shuffle' | 'fm' | 'ai'
+  queue?: {
+    name: string
+    items: { id: string; title: string; artist: string; album: string; durationMs: number }[]
+    total: number
+    truncated: boolean
+  }
   lyrics: {
     trackId: string
     type: string
@@ -24,6 +31,7 @@ export interface ExternalSnapshot {
   deviceError: string | null
 }
 export interface ExternalPlayerState {
+  lyricsText?: string | null
   phase: 'disconnected' | 'connecting' | 'ready' | 'routing' | 'error'
   message: string
   snapshot: ExternalSnapshot | null
@@ -33,4 +41,4 @@ export interface ExternalPlayerState {
   audioPackets: number
   nullBytes: string
 }
-export type ExternalAction = 'connect' | 'disconnect' | 'route' | 'pause' | 'resume' | 'next' | 'previous' | 'seek' | 'status'
+export type ExternalAction = 'connect' | 'disconnect' | 'route' | 'pause' | 'resume' | 'next' | 'previous' | 'seek' | 'status' | 'playIndex' | 'repeatOff' | 'repeatAll' | 'repeatOne' | 'shuffleOn' | 'shuffleOff'

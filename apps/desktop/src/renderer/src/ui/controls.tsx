@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import { Range } from './Range'
 import { motion } from 'motion/react'
 import type { ReactNode } from 'react'
@@ -13,8 +14,9 @@ export function Toggle({
   label: string
   disabled?: boolean
 }): React.JSX.Element {
+  useLocale()
   return (
-    <button
+    ui(<button
       type="button"
       role="switch"
       aria-checked={checked}
@@ -31,7 +33,7 @@ export function Toggle({
         animate={{ left: checked ? 22 : 2 }}
         transition={{ type: 'spring', stiffness: 500, damping: 34 }}
       />
-    </button>
+    </button>)
   )
 }
 
@@ -54,8 +56,9 @@ export function Slider({
   format?: (value: number) => string
   disabled?: boolean
 }): React.JSX.Element {
+  useLocale()
   return (
-    <div className="flex items-center gap-3">
+    ui(<div className="flex items-center gap-3">
       <Range
         aria-label={label}
         min={min}
@@ -69,7 +72,7 @@ export function Slider({
       <span className="w-12 shrink-0 text-right font-mono text-xs text-fg-muted">
         {format ? format(value) : value}
       </span>
-    </div>
+    </div>)
   )
 }
 
@@ -79,21 +82,23 @@ export function SettingRow({
   hint,
   children,
 }: {
-  title: string
-  hint?: string
+  title: ReactNode
+  hint?: ReactNode
   children: ReactNode
 }): React.JSX.Element {
+  useLocale()
   return (
-    <div className="flex items-center justify-between gap-4">
+    ui(<div className="flex items-center justify-between gap-4">
       <div className="min-w-0">
         <div className="text-sm font-medium">{title}</div>
         {hint && <div className="mt-0.5 text-xs leading-relaxed text-fg-muted">{hint}</div>}
       </div>
       <div className="shrink-0">{children}</div>
-    </div>
+    </div>)
   )
 }
 
 export function SectionTitle({ children }: { children: ReactNode }): React.JSX.Element {
-  return <h3 className="text-xs font-semibold tracking-wide text-fg-subtle">{children}</h3>
+  useLocale()
+  return ui(<h3 className="text-xs font-semibold tracking-wide text-fg-subtle">{children}</h3>)
 }

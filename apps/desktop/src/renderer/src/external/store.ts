@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ExternalPlayerState } from '@shared/external-player'
+import type { ExternalAction, ExternalPlayerState } from '@shared/external-player'
 import { engine } from '../engine/client'
 import { usePlayer } from '../engine/store'
 import { setExternalCover } from '../cover/store'
@@ -28,9 +28,18 @@ engine.onExternal(state => {
   lastPath = path
 })
 
-export function externalControl(action: 'next' | 'previous' | 'resume' | 'pause'): boolean {
+export function externalControl(action: 'next' | 'previous' | 'resume' | 'pause' | 'toggle'): boolean {
   const external=useExternal.getState()
   if (external.phase !== 'routing' && external.snapshot?.devices?.currentDevice.name !== 'Just A Player HiFi Bridge (Black Hole)') return false
-  void engine.external(action).catch(error => usePlayer.setState({ error: String(error) }))
+  void engine.external(action === 'toggle' ? (external.snapshot?.state === 'playing' ? 'pause' : 'resume') : action).catch(error => usePlayer.setState({ error: String(error) }))
   return true
+}
+
+export function setExternalMode(mode: string): void {
+  const action: ExternalAction | undefined = {off:'repeatOff',all:'repeatAll',one:'repeatOne',shuffle:'shuffleOn'}[mode] as ExternalAction | undefined
+  if (action) void engine.external(action).catch(error => usePlayer.setState({error:String(error)}))
+}
+export function externalOwnsTransport(): boolean {
+  const state = useExternal.getState()
+  return state.phase === 'routing' || state.snapshot?.devices?.currentDevice.name === 'Just A Player HiFi Bridge (Black Hole)'
 }

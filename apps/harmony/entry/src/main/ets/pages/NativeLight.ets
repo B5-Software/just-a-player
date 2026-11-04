@@ -3,6 +3,7 @@ import { common } from '@kit.AbilityKit';
 import { image } from '@kit.ImageKit';
 import { picker, fileIo as fs } from '@kit.CoreFileKit';
 import { window } from '@kit.ArkUI';
+import { i18n } from '@kit.LocalizationKit';
 import player from 'libplayer.so';
 import BuildProfile from 'BuildProfile';
 
@@ -60,7 +61,7 @@ export struct NativeLight {
     try{
       const scale=Math.min(1,1600/this.surfaceWidth,1000/this.surfaceHeight);
       const width=Math.max(160,Math.round(this.surfaceWidth*scale)),height=Math.max(90,Math.round(this.surfaceHeight*scale));
-      const frame=player.nativeRender(width,height,JSON.stringify({width:width,height:height,visible:this.visible,events:this.events})) as NativePixels;
+      const frame=player.nativeRender(width,height,JSON.stringify({width:width,height:height,visible:this.visible,systemLocale:i18n.System.getSystemLanguage(),events:this.events})) as NativePixels;
       this.events=[];
       const state=JSON.parse(frame.state) as NativeFrame;
       if(state.error)throw new Error(state.error);

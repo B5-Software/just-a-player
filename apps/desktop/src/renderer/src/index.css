@@ -47,11 +47,9 @@ html[data-platform='android'] { -webkit-tap-highlight-color: transparent; }
   html[data-platform='android'] [data-onboarding] { top: 130px; left: 12px; right: 12px; width: auto; max-height: 32dvh; overflow-y: auto; }
   html[data-platform='android'] .app-dialog-backdrop { padding: 12px; }
   html[data-platform='android'] .app-dialog { max-height: calc(100dvh - 24px); overflow-y: auto; padding: 20px; }
-  html[data-platform='android'] .file-browser-body { height: 40dvh; }
 }
 @media (max-height: 500px) and (orientation: landscape) {
   html[data-platform='android'] .app-dialog { max-height: calc(100dvh - 20px); overflow-y: auto; padding: 18px 22px; }
-  html[data-platform='android'] .file-browser-body { height: 28dvh; }
   html[data-platform='android'] [data-onboarding] { top: 88px; max-height: calc(100dvh - 220px); overflow-y: auto; }
   html[data-platform='android'] [data-player-topbar] { padding-right: 42px; }
   html[data-platform='android'] [data-player-dock] { bottom: 8px; left: 8px; right: 8px; }
@@ -67,7 +65,51 @@ html[data-platform='android'] { -webkit-tap-highlight-color: transparent; }
 .app-dialog-wide { width: min(780px, 100%); }
 .app-dialog-orbit { position: absolute; z-index: -1; pointer-events: none; width: 280px; height: 280px; top: -170px; left: -80px; border-radius: 50%; background: radial-gradient(circle, rgb(var(--accent) / .22), transparent 72%); }
 .file-browser-body { height: min(380px, 46dvh); }
+.app-dialog-file { display: flex; flex-direction: column; overflow: hidden; }
+.app-dialog-file > :not(.file-browser-body):not(.app-dialog-orbit) { flex-shrink: 0; }
+.app-dialog-file .file-browser-body { flex: 1 1 380px; }
+.file-browser-search-toggle { display: none; }
+.file-browser-toolbar input { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 @media(max-width: 540px) { .app-dialog { border-radius: 24px; padding: 20px; } .file-browser-body { grid-template-columns: 1fr; height: min(440px, 54dvh); gap: 8px; } .file-browser-body nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; } .file-browser-body nav button { flex-shrink: 0; } }
+html[data-platform='android'] .app-dialog-file {
+  width: min(1080px, 100%);
+  height: calc(100dvh - 24px);
+  max-height: calc(100dvh - 24px);
+  padding: 14px 18px;
+  border-radius: 22px;
+}
+html[data-platform='android'] .app-dialog-file .app-dialog-header { align-items: center; }
+html[data-platform='android'] .app-dialog-file .app-dialog-brand { display: none; }
+html[data-platform='android'] .app-dialog-file h2 { font-size: 18px; }
+html[data-platform='android'] .app-dialog-file .file-browser-toolbar { margin-top: 8px; }
+html[data-platform='android'] .app-dialog-file .file-browser-body {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 40px minmax(0, 1fr);
+  gap: 6px;
+  margin-top: 6px;
+  height: auto;
+  flex: 1 1 0;
+}
+html[data-platform='android'] .app-dialog-file nav {
+  flex-direction: row;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+html[data-platform='android'] .app-dialog-file nav button { flex-shrink: 0; white-space: nowrap; padding: 8px 12px; }
+html[data-platform='android'] .app-dialog-file .file-browser-search-toggle { display: grid; }
+html[data-platform='android'] .app-dialog-file .file-browser-search { display: none; }
+html[data-platform='android'] .app-dialog-file [data-search-open='true'] .file-browser-search { display: flex; }
+html[data-platform='android'] .app-dialog-file [role='option'] { min-height: 44px; padding-block: 7px; }
+html[data-platform='android'] .app-dialog-file .file-browser-footer,
+html[data-platform='android'] .app-dialog-file .file-browser-filename { margin-top: 8px; }
+html[data-platform='android'] .app-dialog-file .file-browser-message { margin-top: 6px; padding: 8px 12px; }
+@media (max-height: 360px) {
+  html[data-platform='android'] .app-dialog-file { height: calc(100dvh - 12px); max-height: calc(100dvh - 12px); padding: 8px 12px; }
+  html[data-platform='android'] .app-dialog-file .file-browser-body { grid-template-rows: 0 minmax(0, 1fr); gap: 0; }
+  html[data-platform='android'] .app-dialog-file nav { visibility: hidden; }
+}
 html[data-surface='tray'], html[data-surface='tray'] body, html[data-surface='tray'] #root { background: transparent !important; }
 
 :root { --accent-focus: 79 55 214; }

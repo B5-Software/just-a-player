@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import { Select } from '../ui/Select'
 import { useState } from 'react'
 import { usePlayer } from '../engine/store'
@@ -9,6 +10,7 @@ import { useSettings } from '../settings/store'
 import { useFontCatalog } from '../fonts/catalog'
 import { useUi } from '../ui/store'
 export function VideoPanel(): React.JSX.Element {
+  useLocale()
   const track = usePlayer((s) => s.track),
     lists = useLibrary((s) => s.lists),
     selected = useLibrary((s) => s.selected)
@@ -35,7 +37,7 @@ export function VideoPanel(): React.JSX.Element {
   const path = source === 'selected' ? selectedTrack?.path : track?.path
   const selectClass = 'rounded-xl bg-hover p-2 text-xs text-fg'
   return (
-    <div className="flex flex-col gap-4">
+    ui(<div className="flex flex-col gap-4">
       <p className="text-xs leading-relaxed text-fg-muted">
         独立后台渲染，继续听歌与操作播放器。任务加入队列时保存当前场景、歌词、字体与署名，按顺序导出。
       </p>
@@ -54,7 +56,7 @@ export function VideoPanel(): React.JSX.Element {
             </option>
           </Select>
         </SettingRow>
-        <p className="truncate text-xs text-accent-text">
+        <p translate={selectedTrack && source === 'selected' || track ? 'no' : undefined} className="truncate text-xs text-accent-text">
           {source === 'selected' && selectedTrack
             ? displayTitle(selectedTrack)
             : (track?.title ?? track?.path ?? '请先选择歌曲')}
@@ -68,7 +70,7 @@ export function VideoPanel(): React.JSX.Element {
           >
             {['1280x720', '1920x1080', '2560x1440', '3840x2160', '1080x1920', '1080x1080'].map(
               (s) => (
-                <option key={s}>{s}</option>
+                ui(<option key={s}>{s}</option>)
               )
             )}
           </Select>
@@ -81,9 +83,9 @@ export function VideoPanel(): React.JSX.Element {
             className={selectClass}
           >
             {[24, 30, 60].map((n) => (
-              <option key={n} value={n}>
+              ui(<option key={n} value={n}>
                 {n} FPS
-              </option>
+              </option>)
             ))}
           </Select>
         </SettingRow>
@@ -159,9 +161,9 @@ export function VideoPanel(): React.JSX.Element {
               {[96, 128, 192, 256, 320, 512]
                 .filter((n) => audio === 'opus' || n <= 320)
                 .map((n) => (
-                  <option key={n} value={n}>
+                  ui(<option key={n} value={n}>
                     {n} kbps
-                  </option>
+                  </option>)
                 ))}
             </Select>
           </SettingRow>
@@ -201,9 +203,9 @@ export function VideoPanel(): React.JSX.Element {
             className={`${selectClass} max-w-44`}
           >
             {[...LYRICS_FONTS, ...imported].map((f) => (
-              <option key={f.id} value={f.id}>
+              ui(<option key={f.id} value={f.id}>
                 {f.label}
-              </option>
+              </option>)
             ))}
           </Select>
         </SettingRow>
@@ -224,7 +226,7 @@ export function VideoPanel(): React.JSX.Element {
               ['结束秒数 · 0 为曲终', end, setEnd],
             ] as const
           ).map(([label, value, setter]) => (
-            <label key={label} className="flex flex-col gap-2 text-xs text-fg-muted">
+            ui(<label key={label} className="flex flex-col gap-2 text-xs text-fg-muted">
               {label}
               <input
                 aria-label={label}
@@ -234,7 +236,7 @@ export function VideoPanel(): React.JSX.Element {
                 onChange={(e) => setter(Number(e.target.value))}
                 className="rounded-xl bg-hover p-2 text-fg"
               />
-            </label>
+            </label>)
           ))}
         </div>
       </fieldset>
@@ -286,6 +288,6 @@ export function VideoPanel(): React.JSX.Element {
           ? '支持 NCM、DSD 等解码来源；Android 使用内置 FFmpeg / x264 在后台编码，前台可继续听歌。'
           : '支持 NCM、DSD 等解码来源；编码由 FFmpeg 完成，可自动选择可用的硬件视频编码器。'}
       </p>
-    </div>
+    </div>)
   )
 }

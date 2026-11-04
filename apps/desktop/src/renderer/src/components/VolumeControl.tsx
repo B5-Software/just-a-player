@@ -1,11 +1,13 @@
+import { ui, useLocale } from '../i18n'
 import { Range } from '../ui/Range'
 import { usePlayer } from '../engine/store'
 import { SpeakerHigh, ArrowCounterClockwise } from '../icons'
 
 export function VolumeControl({ compact = false }: { compact?: boolean }): React.JSX.Element {
+  useLocale()
   const volume = usePlayer((s) => s.volume)
   return (
-    <div className="flex items-center gap-2">
+    ui(<div className="flex items-center gap-2">
       <button
         type="button"
         aria-label={volume === 0 ? '取消静音' : '静音'}
@@ -38,6 +40,6 @@ export function VolumeControl({ compact = false }: { compact?: boolean }): React
           <ArrowCounterClockwise size={16} />
         </button>
       )}
-    </div>
+    </div>)
   )
 }

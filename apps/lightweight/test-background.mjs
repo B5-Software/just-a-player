@@ -77,8 +77,8 @@ async function send(value) {
 async function click(id) {
   const r = report().controls[id];
   assert(r, `Missing ${id}`);
-  const x = (r[0] + r[2]) / 2,
-    y = (r[1] + r[3]) / 2;
+  const x = r[0] + r[2] / 2,
+    y = r[1] + r[3] / 2;
   await send({ type: "pointer", x, y, down: true });
   await delay(150);
   await send({ type: "pointer", x, y, down: false });
@@ -133,6 +133,26 @@ try {
   await wait((s) => s.library.lists[0].items.length === 2);
   await send({ type: "command", command: "play" });
   await wait((s) => s.state === "playing" && s.position > 300 && s.hasCover);
+  await click('playlist-toggle');
+  await wait(s=>!s.controls['track-0']);
+  await click('playlist-toggle');
+  await wait(s=>s.controls['track-0']);
+  checks.push('playlist collapses and expands without interrupting playback');
+  if (process.platform === 'win32') {
+    const script = `
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+$null=[Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]
+function Await($op,$type) { $m=[System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.IsGenericMethod -and $_.GetParameters().Count -eq 1 -and $_.GetGenericArguments().Count -eq 1 } | Select-Object -First 1; $t=$m.MakeGenericMethod($type).Invoke($null,@($op)); if(!$t.Wait(5000)){throw 'SMTC timeout'}; $t.Result }
+$manager=Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+$session=$manager.GetSessions() | Where-Object { $_.SourceAppUserModelId -eq 'B5Software.JustAPlayer' } | Select-Object -First 1
+if(!$session){throw 'Native session missing'}
+$props=Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
+@{thumbnail=($null -ne $props.Thumbnail)} | ConvertTo-Json -Compress`;
+    const result=spawnSync('powershell',['-NoProfile','-Command',script],{windowsHide:true,encoding:'utf8',timeout:15000});
+    assert.equal(result.status,0,result.stderr);
+    assert.equal(JSON.parse(result.stdout).thumbnail,true,'native system controls must receive actual artwork');
+    checks.push('Windows media controller exposes native artwork');
+  }
   await send({ type: "meter", id: "vu", enabled: true });
   await wait((s) => s.analysisFrames >= 4);
   measurements.playing = memory();
@@ -169,7 +189,7 @@ try {
   assert.equal(report().renderResourcesResident, true);
   for (const id of ["previous", "play", "next", "reset", "show", "quit"])
     assert(
-      report().controls[id][3] <= report().viewport[1],
+      report().controls[id][1] + report().controls[id][3] <= report().viewport[1],
       `Clipped tray button: ${id}`,
     );
   await send({ type: "screenshot" });

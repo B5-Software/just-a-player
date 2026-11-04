@@ -4,6 +4,8 @@
 
 # Just A Player
 
+**简体中文** · [English](README.en.md)
+
 ### HiFi，也好看。
 
 让声音长出形状。一个由 **[B5-Software](https://b5-software.org)** 打造的本地音乐播放器。
@@ -20,6 +22,8 @@
 ![封面取色的玻璃界面、缎面雕塑与毛笔 3D 歌词](docs/screenshots/hero.png)
 
 ## 看见音乐
+
+界面支持简体中文与英文，默认跟随系统语言，可在设置中修改；未适配的系统语言使用英文。完整界面、原生界面与托盘共用语言设置，歌曲、文件名与歌词保持原文。
 
 封面的颜色缓缓流入背景、控件与光影。3D 场景随音乐起伏，歌词也有自己的空间、字体和姿态。
 
@@ -38,6 +42,7 @@
 设置中的 **原生轻量模式** 使用 Rust / egui 直接绘制 2D 界面，支持 Windows、macOS、Linux、
 Android 与鸿蒙预览。轻量界面不使用 WebView；桌面切换后退出 Electron；
 保留封面、逐字歌词、列表、HiFi 输出与 EQ，五种专业仪表各自开关、默认关闭。
+桌面两种界面共享后台音频会话，切换不暂停、不重新打开 DAC；后台仅运行无界面的 Node 宿主和 Rust 引擎，网易云适配器按需加载。单独启动 Rust 可执行程序时仍可直接使用纯原生音频引擎。
 不加载 3D 场景；关闭仪表后连同可视化分析一起停用。桌面支持后台播放和原生托盘控制，收起后释放界面绘制资源。
 参见[轻量模式、依赖与构建](docs/lightweight.md)。
 
@@ -77,11 +82,11 @@ macOS 与 Linux 的后端由原生 CI 编译和空设备冒烟测试覆盖；具
 Windows 完整版和 Rust 原生模式设置中的 **外部播放器 · 网易云音乐** 可连接本机已启动的 64 位客户端。连接后，在客户端输出设备里选择 **Just A Player HiFi Bridge (Black Hole)**，或点击卡片中的切换按钮。这个设备由随附 Rust 模块实现，只出现在已连接的客户端中，不安装系统驱动，也不打开 DAC。客户端最终混音直接丢弃，避免它与本播放器争用同一输出设备。
 
 - FLAC 优先传递音效处理前的原始压缩包，由 Rust 流式解码；其他受支持的编码传递客户端原生解码后、音效处理前的 PCM。音频经过有内存上限的队列，不生成临时整曲文件。
-- 曲名、歌手、封面、时间轴和歌词同步至播放器；播放 / 暂停、切歌、进度条和媒体控制转发到客户端。逐字歌词使用现有 2D / 3D 歌词渲染器，客户端提供逐字时间轴时生效。
+- 曲名、歌手、封面、时间轴、歌词与播放队列同步至两种界面；可直接点播客户端队列中的歌曲，列表循环、单曲循环与随机播放也转发到客户端。自动切歌只由客户端负责，避免本地队列重复推进。
 - **强制接管** 可跳过已验证版本白名单，尝试模块编号变化及更多 PCM 格式。数据长度、时间戳和内存边界仍需有效；不把未经确认的格式标成 bit-perfect。
 - 断开、退出或切换至本地歌曲时，先释放 Rust 输出，再恢复并读回客户端原先的设备。暂停时停止接收预解码数据，恢复时重新同步，避免暂停期间填满队列。
 
-原生模式仅在连接时启动无界面的适配进程，通过有界二进制管道向 Rust 内核传递样本，断开后退出该进程。窗口不使用 WebView，前端绘制和音频输出仍由 Rust 执行。
+从完整版切入原生模式时，共享后台音频宿主与网易云连接，界面不使用 WebView。独立启动 Rust 程序时，客户端适配进程仅按需启动。音频传递队列有内存上限，窗口绘制和音频处理仍由 Rust 执行。
 
 当前验证的客户端为网易云音乐 **3.1.41 x64 / CEF 91 / FFmpeg 58**。此功能按需加载进程适配器；其他播放器和客户端新版仍需分别适配。无损 FLAC 的软件样本一致性已做比对；实际 DAC 的 bit-perfect 仍取决于独占输出、格式协商、关闭 DSP 及应用音量 100%。AAC / MP3 的原生解码转发不会恢复有损压缩丢失的信息。实时接管的歌曲不提供基于完整文件的音源评分或离线视频导出。
 
@@ -99,6 +104,7 @@ FLAC、WAV、AIFF、ALAC、MP3、AAC、Ogg 等常见格式，另支持 APE、DTS
 - 每个列表分别记住曲目、进度与随机顺序；重启不自动播放，点击播放后续播。
 - 尚未播放时，底栏显示**列表名称**及**即将播放曲目的封面**。
 - 在系统“打开方式”中选择播放器，曲目会追加到“外部打开”列表并开始播放，保留已有列表。Windows / macOS / Linux 安装包声明音乐文件关联，Android 接收文件管理器授权的音频 URI。MIDI 和同名录音属于不同内容，均予以保留。
+- 在播放列表中点「在线电台」，粘贴 HTTP / HTTPS 直连音频地址或包含直连地址的 M3U / PLS 链接。电台保存到当前列表，断流后自动尝试重连，暂停后恢复到直播。普通 M3U 列表也可混排本地歌曲和电台链接。HLS 分段流暂未支持。
 
 ![待播放状态显示列表名称与下一首封面](docs/screenshots/playlist.png)
 
@@ -136,7 +142,7 @@ MIDI 是演奏指令，实际音色取决于音色库与合成器，并不携带
 | `without-midi` | 推荐日常使用：省去约 467 MiB 的内置音色资源；所有录音格式、HiFi 输出和可视化完整保留。仍可导入 SF2 后播放 MIDI |
 | `with-midi` | 即装即播 MIDI：完整内置 MuseScore General HQ，无需另外寻找音色库 |
 
-Android 0.1.5：[无内置音色库 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.5/Just-A-Player-0.1.5-Android-universal-without-midi.apk) · [含 HQ 音色库 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.5/Just-A-Player-0.1.5-Android-universal-with-midi.apk)。两者包名和签名相同，可相互覆盖升级；此前的 `.debug` 调试包独立安装。
+Android 0.1.6：[无内置音色库 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.6/Just-A-Player-0.1.6-Android-universal-without-midi.apk) · [含 HQ 音色库 APK](https://github.com/B5-Software/just-a-player/releases/download/v0.1.6/Just-A-Player-0.1.6-Android-universal-with-midi.apk)。两者包名和签名相同，可相互覆盖升级；此前的 `.debug` 调试包独立安装。
 
 发布页附有 `SHA256SUMS.txt`。社区构建暂未使用商业代码签名证书或 Apple 公证。桌面壁纸与 Windows 系统媒体集成为 Windows 功能；其他平台可使用全屏、小窗、媒体键和原生音频输出。
 

@@ -1,3 +1,4 @@
+import { ui, useLocale, t } from '../i18n'
 import {
   LYRICS_FONTS,
   type LyricsPosition,
@@ -42,6 +43,7 @@ const POSITION_LABEL: Record<LyricsPosition, string> = {
 
 /** 歌词 HUD：显示、模式（2D/3D）、阴影、位置、姿态（旋转）、字体，以及歌词文件。 */
 export function LyricsPanel(): React.JSX.Element {
+  useLocale()
   const visible = useSettings((s) => s.lyricsVisible)
   const mode = useSettings((s) => s.lyricsMode)
   const shadow = useSettings((s) => s.lyricsShadow)
@@ -63,7 +65,7 @@ export function LyricsPanel(): React.JSX.Element {
   const effective = effectivePose(pose, position)
 
   return (
-    <div className="flex flex-col gap-6">
+    ui(<div className="flex flex-col gap-6">
       <SettingRow title="显示歌词">
         <Toggle checked={visible} onChange={(v) => update({ lyricsVisible: v })} label="显示歌词" />
       </SettingRow>
@@ -126,7 +128,7 @@ export function LyricsPanel(): React.JSX.Element {
           <SectionTitle>3D 姿态</SectionTitle>
           <div className="grid grid-cols-2 gap-2 p-1 -m-1">
             {POSE_OPTIONS.map((option) => (
-              <button
+              ui(<button
                 key={option.id}
                 type="button"
                 aria-pressed={pose === option.id}
@@ -138,18 +140,18 @@ export function LyricsPanel(): React.JSX.Element {
                 }`}
               >
                 {option.label}
-              </button>
+              </button>)
             ))}
           </div>
           <p className="text-xs leading-relaxed text-fg-muted">
             {pose === 'auto'
-              ? `跟随位置：当前为${POSE_LABEL[effective]}。居中不转，偏右俯视 Z 顺时针，偏左俯视 Z 逆时针，底部后仰。`
-              : `当前姿态：${POSE_LABEL[pose]}`}
+              ? `跟随位置：当前为${t(POSE_LABEL[effective])}。居中不转，偏右俯视 Z 顺时针，偏左俯视 Z 逆时针，底部后仰。`
+              : `当前姿态：${t(POSE_LABEL[pose])}`}
           </p>
           {pose === 'free' && (
             <div className="flex flex-col gap-3">
               {(['x', 'y', 'z'] as const).map((axis) => (
-                <div key={axis} className="flex flex-col gap-1">
+                ui(<div key={axis} className="flex flex-col gap-1">
                   <span className="text-xs text-fg-muted">
                     {axis.toUpperCase()} 轴 ·{' '}
                     {axis === 'x' ? '俯仰' : axis === 'y' ? '偏航' : '滚转'}
@@ -163,7 +165,7 @@ export function LyricsPanel(): React.JSX.Element {
                     format={(v) => `${v}°`}
                     onChange={(v) => update({ lyricsRotation: { ...rotation, [axis]: v } })}
                   />
-                </div>
+                </div>)
               ))}
             </div>
           )}
@@ -200,13 +202,14 @@ export function LyricsPanel(): React.JSX.Element {
         </p>
         <div className="grid grid-cols-2 gap-2 p-1">
           {[...LYRICS_FONTS, ...imported].map((f) => (
-            <button
+            ui(<button
               key={f.id}
               type="button"
               aria-pressed={font === f.id}
               onClick={() => update({ lyricsFont: f.id })}
               style={{ fontFamily: `"${f.family}", sans-serif` }}
               title={f.label}
+              translate={f.id.startsWith('user-') ? 'no' : undefined}
               className={`flex min-w-0 items-center gap-2 rounded-xl px-2.5 py-2 text-sm ring-1 transition-colors ${
                 font === f.id
                   ? 'bg-accent text-on-accent ring-accent'
@@ -215,7 +218,7 @@ export function LyricsPanel(): React.JSX.Element {
             >
               <TextAa size={14} className="shrink-0" />
               <span className="min-w-0 truncate whitespace-nowrap text-left">{f.label}</span>
-            </button>
+            </button>)
           ))}
         </div>
         <button
@@ -285,6 +288,6 @@ export function LyricsPanel(): React.JSX.Element {
           )}
         </div>
       </section>
-    </div>
+    </div>)
   )
 }

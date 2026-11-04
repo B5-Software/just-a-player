@@ -34,6 +34,9 @@ impl NativeSurface {
     }
     /// Input coordinates are normalized to the native view, independent of DPI.
     pub fn render(&mut self, input: &Value) -> Value {
+        if let Some(locale) = input["systemLocale"].as_str() {
+            self.player.settings["systemLocale"] = json!(locale);
+        }
         self.player.visible = input["visible"].as_bool().unwrap_or(true);
         self.player.mini = input["mini"].as_bool().unwrap_or(false);
         let width = input["width"].as_u64().unwrap_or(960).clamp(160, 2560) as usize;
@@ -54,6 +57,11 @@ impl NativeSurface {
             screen_rect: Some(Rect::from_min_size(Pos2::ZERO, logical)),
             time: Some(self.start.elapsed().as_secs_f64()),
             focused: true,
+            system_theme: match input["systemTheme"].as_str() {
+                Some("light") => Some(egui::Theme::Light),
+                Some("dark") => Some(egui::Theme::Dark),
+                _ => None,
+            },
             ..Default::default()
         };
         raw.viewports

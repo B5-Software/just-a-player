@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import {
   Children,
   isValidElement,
@@ -34,6 +35,7 @@ export function Select({
   id,
   ...attributes
 }: Props): React.JSX.Element {
+  useLocale()
   const options = Children.toArray(children).flatMap((child): Option[] => {
     if (
       !isValidElement<{
@@ -117,7 +119,7 @@ export function Select({
       ?.scrollIntoView({ block: 'nearest' })
   }, [open, active])
   return (
-    <>
+    ui(<>
       <button
         {...(attributes as React.ButtonHTMLAttributes<HTMLButtonElement>)}
         ref={button}
@@ -202,7 +204,7 @@ export function Select({
             }}
           >
             {options.map((option, index) => (
-              <div
+              ui(<div
                 key={`${option.value}-${index}`}
                 id={`${listId}-${index}`}
                 data-option-index={index}
@@ -217,11 +219,11 @@ export function Select({
               >
                 <span>{option.label}</span>
                 {current === option.value && <span aria-hidden>✓</span>}
-              </div>
+              </div>)
             ))}
           </div>,
           document.body
         )}
-    </>
+    </>)
   )
 }

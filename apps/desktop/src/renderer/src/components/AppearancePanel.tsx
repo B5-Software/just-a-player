@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import { chooseColor } from '../ui/dialog-store'
 import type { ThemeMode } from '@shared/theme'
 import { motion } from 'motion/react'
@@ -19,6 +20,7 @@ const MODE_OPTIONS: readonly SegmentOption<ThemeMode>[] = [
 
 /** 外观：主题、强调色（可自动取封面色），以及封面模糊背景与亮度。 */
 export function AppearancePanel(): React.JSX.Element {
+  useLocale()
   const mode = useTheme((s) => s.mode)
   const accent = useTheme((s) => s.accent)
   const setMode = useTheme((s) => s.setMode)
@@ -48,7 +50,7 @@ export function AppearancePanel(): React.JSX.Element {
   const isPreset = ACCENT_PRESETS.some((p) => p.hex === accent)
 
   return (
-    <div className="flex flex-col gap-6">
+    ui(<div className="flex flex-col gap-6">
       <section className="flex flex-col gap-2.5">
         <SectionTitle>主题</SectionTitle>
         <Segmented
@@ -99,7 +101,7 @@ export function AppearancePanel(): React.JSX.Element {
             {ACCENT_PRESETS.map((preset) => {
               const active = preset.hex === accent
               return (
-                <button
+                ui(<button
                   key={preset.hex}
                   type="button"
                   title={preset.name}
@@ -120,7 +122,7 @@ export function AppearancePanel(): React.JSX.Element {
                   {active && (
                     <Check size={12} weight="bold" className="text-white mix-blend-difference" />
                   )}
-                </button>
+                </button>)
               )
             })}
           </div>
@@ -240,6 +242,6 @@ export function AppearancePanel(): React.JSX.Element {
           </div>
         </div>
       </section>
-    </div>
+    </div>)
   )
 }

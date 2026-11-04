@@ -11,6 +11,7 @@ use jap_core::{
     QueryResponse, SampleFormat, StreamConfig, TrackInfo,
 };
 use jap_decode::AudioSource;
+use jap_decode::radio::{self, Connection as RadioConnection};
 use jap_output::{OutputBackend, SystemBackend, candidate_formats};
 use parking_lot::Mutex;
 
@@ -32,10 +33,17 @@ enum Msg {
 
 /// 播放引擎句柄。命令投递到引擎线程异步执行，事件通过 `EventSink` 回调。
 pub struct Engine {
-    tx: Sender<Msg>,
-    thread: Option<JoinHandle<()>>,
-    backend: Arc<dyn OutputBackend>,
-    tap: Arc<VizTap>,
+    driver: Driver,
+}
+
+enum Driver {
+    Remote(crate::remote::Client),
+    Local {
+        tx: Sender<Msg>,
+        thread: Option<JoinHandle<()>>,
+        backend: Arc<dyn OutputBackend>,
+        tap: Arc<VizTap>,
+    },
 }
 
 impl Engine {
@@ -53,23 +61,51 @@ impl Engine {
             .spawn(move || Core::new(core_backend, sink, core_tap).run(&rx))
             .expect("无法启动引擎线程");
         Self {
-            tx,
-            thread: Some(thread),
-            backend,
-            tap,
+            driver: Driver::Local {
+                tx,
+                thread: Some(thread),
+                backend,
+                tap,
+            },
+        }
+    }
+
+    pub fn connect(endpoint: &Path, sink: EventSink) -> Result<Self, String> {
+        Ok(Self {
+            driver: Driver::Remote(crate::remote::Client::connect(endpoint, sink)?),
+        })
+    }
+
+    pub fn shared(&self) -> Option<crate::remote::Client> {
+        match &self.driver {
+            Driver::Remote(remote) => Some(remote.clone()),
+            _ => None,
         }
     }
 
     /// 取一帧可视化分析数据（布局见 `jap-analysis`），没在播或画面未变时返回 `false`。
     pub fn viz_frame(&self, out: &mut Vec<f32>) -> bool {
-        self.tap.frame(out)
+        match &self.driver {
+            Driver::Remote(remote) => remote.frame(out),
+            Driver::Local { tap, .. } => tap.frame(out),
+        }
     }
     /// Suspend visual-only resampling, history copies and FFT. Audio is unchanged.
     pub fn set_visualization_enabled(&self, enabled: bool) {
-        self.tap.set_enabled(enabled);
+        match &self.driver {
+            Driver::Remote(remote) => remote.visual(enabled),
+            Driver::Local { tap, .. } => tap.set_enabled(enabled),
+        }
     }
 
     pub fn send(&self, command: Command) {
+        let tx = match &self.driver {
+            Driver::Remote(remote) => {
+                remote.command(command);
+                return;
+            }
+            Driver::Local { tx, .. } => tx,
+        };
         if let Command::SetMidi {
             soundfont,
             sample_rate,
@@ -78,34 +114,39 @@ impl Engine {
             jap_decode::midi::configure(soundfont, sample_rate);
             return;
         }
-        let _ = self.tx.send(Msg::Command(command));
+        let _ = tx.send(Msg::Command(command));
     }
 
     /// Connect a bounded, sample-addressed stream without a temporary audio file.
     pub fn play_live(&self, input: jap_decode::live::LiveInput) {
-        let _ = self.tx.send(Msg::Live(input));
+        if let Driver::Local { tx, .. } = &self.driver {
+            let _ = tx.send(Msg::Live(input));
+        }
     }
 
     pub fn query(&self, query: Query) -> QueryResponse {
+        let backend = match &self.driver {
+            Driver::Remote(remote) => return remote.query(query),
+            Driver::Local { backend, .. } => backend,
+        };
         match query {
-            Query::ListOutputDevices { api } => self
-                .backend
+            Query::ListOutputDevices { api } => backend
                 .list_devices(api)
                 .map_or_else(error_response, |devices| QueryResponse::Devices { devices }),
-            Query::ListDevices => self
-                .backend
+            Query::ListDevices => backend
                 .list_devices(OutputApi::platform_default())
                 .map_or_else(error_response, |devices| QueryResponse::Devices { devices }),
-            Query::ListAsioDevices => self
-                .backend
+            Query::ListAsioDevices => backend
                 .list_devices(OutputApi::Asio)
                 .map_or_else(error_response, |devices| QueryResponse::Devices { devices }),
-            Query::ProbeExclusive { device_id } => self
-                .backend
+            Query::ProbeExclusive { device_id } => backend
                 .probe_exclusive(device_id.as_deref())
                 .map_or_else(error_response, |formats| QueryResponse::ExclusiveFormats {
                     formats,
                 }),
+            Query::ProbeTrack { path } if radio::is_url(&path) => QueryResponse::Error {
+                message: "直播流的音频格式会在连接电台后显示".into(),
+            },
             Query::ProbeTrack { path } => match jap_decode::open(Path::new(&path)) {
                 Ok(source) => QueryResponse::Track {
                     track: source.info().clone(),
@@ -119,8 +160,7 @@ impl Engine {
             Query::EmbeddedLyrics { path } => QueryResponse::Lyrics {
                 text: jap_decode::read_lyrics(Path::new(&path)),
             },
-            Query::DeviceFormats { api, device_id } => self
-                .backend
+            Query::DeviceFormats { api, device_id } => backend
                 .probe_formats(api, device_id.as_deref())
                 .map_or_else(error_response, |formats| QueryResponse::ExclusiveFormats {
                     formats,
@@ -137,9 +177,11 @@ fn error_response(error: impl std::fmt::Display) -> QueryResponse {
 
 impl Drop for Engine {
     fn drop(&mut self) {
-        let _ = self.tx.send(Msg::Shutdown);
-        if let Some(t) = self.thread.take() {
-            let _ = t.join();
+        if let Driver::Local { tx, thread, .. } = &mut self.driver {
+            let _ = tx.send(Msg::Shutdown);
+            if let Some(t) = thread.take() {
+                let _ = t.join();
+            }
         }
     }
 }
@@ -175,6 +217,7 @@ struct Core {
     control_request: u64,
     pending_control: Option<u64>,
     live: Option<jap_decode::live::LiveInput>,
+    radio_connection: Option<RadioConnection>,
 }
 
 impl Core {
@@ -203,6 +246,7 @@ impl Core {
             control_request: 0,
             pending_control: None,
             live: None,
+            radio_connection: None,
         }
     }
 
@@ -283,6 +327,10 @@ impl Core {
     }
 
     fn play(&mut self, path: &str, start_ms: u64) {
+        if radio::is_url(path) {
+            self.play_radio(path);
+            return;
+        }
         let mut loaded = match Self::open_track(path) {
             Ok(l) => l,
             Err(e) => return self.error(e),
@@ -293,6 +341,7 @@ impl Core {
             tracing::warn!("起播位置跳转失败，从头播放: {e}");
         }
 
+        self.radio_connection = None;
         self.live = None;
 
         self.pending_next = None;
@@ -313,6 +362,7 @@ impl Core {
             Ok(source) => source,
             Err(error) => return self.error(error.to_string()),
         };
+        self.radio_connection = None;
         self.session = None;
         self.pending_next = None;
         self.queued_next_path = None;
@@ -328,6 +378,30 @@ impl Core {
         }
         self.drain_started = None;
         self.set_state(PlaybackState::Playing);
+    }
+
+    fn play_radio(&mut self, path: &str) {
+        let connection = match RadioConnection::start(path.to_owned()) {
+            Ok(connection) => connection,
+            Err(error) => return self.error(error.to_string()),
+        };
+        self.session = None;
+        if let Some(input) = self.live.take() {
+            input.close();
+        }
+        self.pending_control = None;
+        self.pending_next = None;
+        self.queued_next_path = None;
+        self.current_path = Some(path.to_owned());
+        self.last_position_ms = 0;
+        self.drain_started = None;
+        self.radio_connection = Some(connection);
+        self.set_state(PlaybackState::Playing);
+        self.emit_position();
+    }
+
+    fn is_radio(&self) -> bool {
+        self.current_path.as_deref().is_some_and(radio::is_url)
     }
 
     /// 能复用现有设备流就复用（无缝衔接），否则重建。
@@ -550,6 +624,9 @@ impl Core {
         let Some(session) = &self.session else { return };
         session.send(ProducerCmd::QueueNext(None));
         let Some(path) = path else { return };
+        if self.is_radio() || radio::is_url(&path) {
+            return;
+        }
 
         let mut loaded = match Self::open_track(&path) {
             Ok(l) => l,
@@ -584,7 +661,11 @@ impl Core {
         if self.state != PlaybackState::Playing {
             return;
         }
-        if let Some(session) = &self.session {
+        if self.is_radio() {
+            self.radio_connection = None;
+            self.session = None;
+            self.pending_control = None;
+        } else if let Some(session) = &self.session {
             session.shared.paused.store(true, Ordering::Release);
         }
         self.set_state(PlaybackState::Paused);
@@ -595,6 +676,10 @@ impl Core {
         if self.state != PlaybackState::Paused {
             return;
         }
+        if let Some(path) = self.current_path.clone().filter(|path| radio::is_url(path)) {
+            self.play_radio(&path);
+            return;
+        }
         if let Some(session) = &self.session {
             session.shared.paused.store(false, Ordering::Release);
         }
@@ -603,6 +688,7 @@ impl Core {
 
     fn stop(&mut self) {
         self.pending_control = None;
+        self.radio_connection = None;
         self.session = None;
         if let Some(input) = self.live.take() {
             input.close();
@@ -614,6 +700,9 @@ impl Core {
     }
 
     fn seek(&mut self, position_ms: u64) {
+        if self.is_radio() {
+            return;
+        }
         let Some(session) = &self.session else { return };
         let in_place = session.started()
             && !session.shared.finished.load(Ordering::Acquire)
@@ -636,6 +725,9 @@ impl Core {
 
     fn replay(&mut self, path: &str, position_ms: u64) {
         let was_paused = self.state == PlaybackState::Paused;
+        if was_paused && radio::is_url(path) {
+            return;
+        }
         let queued = self.queued_next_path.clone();
         if let Some(input) = self.live.clone() {
             self.play_live(input);
@@ -686,6 +778,22 @@ impl Core {
     }
 
     fn tick(&mut self) {
+        if let Some(result) = self
+            .radio_connection
+            .as_ref()
+            .and_then(RadioConnection::poll)
+        {
+            self.radio_connection = None;
+            let started = result.map_err(|e| e.to_string()).and_then(|source| {
+                let info = Arc::new(source.info().clone());
+                self.start_track(Loaded { source, info })
+            });
+            if let Err(error) = started {
+                self.error(error);
+                self.stop();
+            }
+        }
+        let is_radio = self.is_radio();
         let Some(session) = self.session.as_mut() else {
             return;
         };
@@ -755,11 +863,13 @@ impl Core {
         for msg in producer_errors {
             self.error(msg);
         }
-        if new_underruns > 0 {
+        if new_underruns > 0 && !is_radio {
             tracing::warn!("设备缓冲欠载 {new_underruns} 次");
         }
         if self.pending_recovery && self.last_recovery.elapsed() > Duration::from_secs(2)
-            || self.underrun_count >= 3 && self.last_recovery.elapsed() > Duration::from_secs(8)
+            || !is_radio
+                && self.underrun_count >= 3
+                && self.last_recovery.elapsed() > Duration::from_secs(8)
         {
             self.reset_buffer(true);
             return;
@@ -811,7 +921,9 @@ impl Core {
             self.last_position_ms = duration_ms;
             self.emit_position();
         }
-        self.emit(Event::QueueEnded);
+        if !is_radio {
+            self.emit(Event::QueueEnded);
+        }
         self.stop();
     }
 }

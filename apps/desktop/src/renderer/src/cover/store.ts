@@ -3,6 +3,7 @@ import { engine } from '../engine/client'
 import { useSettings } from '../settings/store'
 import { renderBackdrop } from './backdrop'
 import { extractPalette, type CoverPalette } from './palette'
+import { radioUrl } from '@shared/audio'
 
 export interface CoverArt {
   url: string
@@ -63,6 +64,7 @@ export function clearCoverCache(): void {
 
 async function fetchCover(path: string): Promise<{ mime: string; data: Uint8Array } | null> {
   if (path.startsWith('external://')) return external.get(path) ?? null
+  if (radioUrl(path)) return null
   const embedded = await engine.cover(path)
   if (embedded) return embedded
   if (!useSettings.getState().sidecarCover) return null

@@ -1,8 +1,10 @@
+import { ui, useLocale } from '../i18n'
 import { useQuality } from '../audio/quality-store'
 import { usePlayer } from '../engine/store'
 import { Toggle } from '../ui/controls'
 
 export function QualityPanel(): React.JSX.Element {
+  useLocale()
   const report = useQuality((s) => s.report)
   const pending = useQuality((s) => s.pending)
   const error = useQuality((s) => s.error)
@@ -24,7 +26,7 @@ export function QualityPanel(): React.JSX.Element {
       ]
     : []
   return (
-    <div className="flex flex-col gap-4">
+    ui(<div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs text-fg-muted">
           <Toggle
@@ -75,15 +77,15 @@ export function QualityPanel(): React.JSX.Element {
           </p>
           <dl className="grid grid-cols-2 gap-2">
             {metrics.map(([label, value]) => (
-              <div key={label} className="rounded-xl bg-hover p-3">
+              ui(<div key={label} className="rounded-xl bg-hover p-3">
                 <dt className="text-[11px] text-fg-muted">{label}</dt>
                 <dd className="mt-1 font-mono text-sm">{value}</dd>
-              </div>
+              </div>)
             ))}
           </dl>
           <div className="flex flex-col gap-3">
             {report.findings.map((finding) => (
-              <article
+              ui(<article
                 key={finding.title}
                 className={`rounded-xl border p-3 ${finding.severity === 'warning' ? 'border-fidelity-transformed/40' : 'border-line'}`}
               >
@@ -94,7 +96,7 @@ export function QualityPanel(): React.JSX.Element {
                   </span>
                 </div>
                 <p className="mt-2 text-xs leading-relaxed text-fg-muted">{finding.detail}</p>
-              </article>
+              </article>)
             ))}
           </div>
           <p className="text-[11px] leading-relaxed text-fg-muted">
@@ -103,6 +105,6 @@ export function QualityPanel(): React.JSX.Element {
           </p>
         </>
       )}
-    </div>
+    </div>)
   )
 }

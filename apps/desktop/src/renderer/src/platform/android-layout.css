@@ -27,7 +27,6 @@
   html[data-platform='android'] [data-panel-root] { top: 76px !important; max-width: calc(100vw - 32px) !important; max-height: calc(100dvh - 94px) !important; padding: 20px; }
   html[data-platform='android'] [data-onboarding] { top: 78px; width: 300px; max-height: calc(100dvh - 98px); overflow-y: auto; }
   html[data-platform='android'] .app-dialog { max-height: calc(100dvh - 24px); padding: 20px; }
-  html[data-platform='android'] .file-browser-body { height: clamp(120px, calc(100dvh - 210px), 360px); }
 }
 @media (orientation: landscape) and (max-width: 1000px) {
   html[data-platform='android'] [data-scene-caption] > div > :last-child { display: none; }

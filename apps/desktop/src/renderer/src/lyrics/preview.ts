@@ -3,3 +3,5 @@ export const PREVIEW_LYRICS = `[00:00.00]让音乐在这里流动
 [00:10.00]按住这行测试歌词拖动
 [00:15.00]松开鼠标即可放下
 [00:20.00]位置与旋转会自动保存`
+import { t } from '../i18n'
+export const previewLyrics = (): string => t(PREVIEW_LYRICS)

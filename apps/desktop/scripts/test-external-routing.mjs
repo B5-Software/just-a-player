@@ -25,4 +25,24 @@ try{
  covers.onSnapshot(source);await new Promise(r=>setTimeout(r,0));assert.equal(calls,1);assert.equal(covers.snapshot().cover,null)
  clock+=2000;covers.onSnapshot(source);await new Promise(r=>setTimeout(r,0));assert.equal(calls,2);assert.equal(covers.snapshot().cover.mime,'image/jpeg')
 }finally{globalThis.fetch=fetch;Date.now=now;await covers.disconnect()}
-console.log('Live routing: exact seek trim, stale generations, continuity, CDN JPEG and retry passed.')
+const nextOpened=[],commands=[]
+const next=new ExternalPlayer({send:json=>commands.push(JSON.parse(json)),closeLive(){},openLive:json=>nextOpened.push(JSON.parse(json)),pushLive(){}},'unused',()=>{})
+next.state={phase:'routing',snapshot:{...snapshot,positionMs:59000},audioPackets:0,nullBytes:'0',cover:null}
+next.lastNativeState='playing';next.stream='test:3:flac:';next.nextFrame=12000000
+next.onAudio({...packet,stream:4,pts:'0'},Buffer.from([8]))
+assert.equal(nextOpened.length,0,'next decoder read-ahead must wait for matching metadata')
+assert.equal(next.pendingAudio.length,1)
+next.onSnapshot({...snapshot,track:{...snapshot.track,id:'next',title:'Next'},positionMs:200})
+assert.equal(nextOpened.length,1)
+assert.equal(nextOpened[0].track.title,'Next')
+assert.equal(nextOpened[0].startFrame,0,'natural advancement keeps the first packet')
+assert.equal(commands.filter(c=>c.type==='seek'||c.type==='play').length,0,'no competing local seek/play during natural next')
+next.engineEvent({type:'error',message:'An unrelated library probe failed'})
+assert.equal(next.snapshot().phase,'routing')
+next.onSnapshot({...snapshot,track:{...snapshot.track,id:'next',title:'Next'},state:'stopped',positionMs:60000})
+assert.equal(next.capturePaused,false,'between-track stopped state must keep capture armed')
+const transient=new ExternalPlayer(engine,'unused',()=>{})
+transient.state={phase:'ready',snapshot,audioPackets:0,nullBytes:'0',cover:null};transient.virtual={}
+let attempts=0;transient.rpc=async()=>{if(++attempts<=2)throw Error('Temporary timeout');return{buffers:0,discardedBytes:'0'}};transient.command=async()=>{}
+await transient.poll();await transient.poll();assert.equal(transient.snapshot().phase,'ready');await transient.poll();assert.equal(transient.pollFailures,0)
+console.log('Live routing passed: exact seek, stale generations, natural next/read-ahead, transient retry, unrelated probe errors, JPEG and cover retry.')

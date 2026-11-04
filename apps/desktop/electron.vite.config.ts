@@ -14,6 +14,7 @@ export default defineConfig({
         entry: {
           index: resolve('src/main/index.ts'),
           'engine-host': resolve('src/utility/engine-host.ts'),
+          'audio-service': resolve('src/utility/audio-service.ts'),
           'external-service': resolve('src/utility/external-service.ts')
         }
       }

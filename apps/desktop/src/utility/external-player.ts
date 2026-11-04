@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { existsSync, copyFileSync, mkdirSync, readFileSync } from 'node:fs'
+import { existsSync, copyFileSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -38,9 +38,16 @@ export class ExternalPlayer {
   private audio: Script | null = null
   private virtual: Script | null = null
   private previousDevice: ExternalDevice | null = null
-  private changedDevice = false
+  private fallbackDevice = false
   private timer: ReturnType<typeof setInterval> | null = null
   private polling = false
+  private pollFailures = 0
+  private lastSnapshotAt = 0
+  private lastAudioAt = 0
+  private transitionAt = 0
+  private resumeCapture: Promise<void> | null = null
+  private recovering = false
+  private lastForce = false
   private closing = false
   private disconnecting: Promise<void> | null = null
   private stream = ''
@@ -78,7 +85,8 @@ export class ExternalPlayer {
       this.engineStopped = event.state === 'stopped'
       if (this.engineStopped) for (const done of [...this.stopWaiters]) done()
     }
-    if (event.type === 'error' && this.routing && !this.closing) void this.fail(event.message)
+    // A failed library probe/analysis is unrelated to this live transport.
+    if (event.type === 'error' && this.routing && !this.closing && /输出设备中断|output device|live input|实时流.*(?:错误|失败)/i.test(event.message)) void this.fail(event.message)
     if (event.type === 'bufferReset' && event.automatic && this.routing && !this.closing && !this.capturePaused && Date.now() - this.lastSeekAt > 1500)
       void this.action('seek', this.audiblePositionMs).catch(error => this.fail(String(error)))
   }
@@ -102,14 +110,18 @@ export class ExternalPlayer {
     })
   }
   private update(patch: Partial<ExternalPlayerState>): void {
+    const previous = this.state
     this.state = { ...this.state, ...patch }
-    this.publish({ ...this.state, cover: 'cover' in patch ? this.state.cover : undefined })
+    const snapshot = this.state.snapshot
+    this.publish({ ...this.state,
+      snapshot: snapshot && snapshot.queue === previous.snapshot?.queue ? {...snapshot,queue:undefined} : snapshot,
+      cover: 'cover' in patch ? this.state.cover : undefined })
   }
 
   async action(action: ExternalAction, positionMs?: number, force = false): Promise<ExternalPlayerState> {
     const control = ['pause','resume','seek','next','previous'].includes(action) ? ++this.controlSequence : this.controlSequence
-    if (action === 'connect') await this.connect(force)
-    else if (action === 'disconnect') await this.disconnect()
+    if (action === 'connect') { this.recovering = false; await this.connect(force) }
+    else if (action === 'disconnect') { this.recovering = false; await this.disconnect() }
     else if (action === 'route') {
       await this.command('devices')
       const findDevice = (): ExternalDevice | undefined => this.state.snapshot?.devices?.totalDevices.flatMap(g => g.devices).find(d => d.name === NULL_NAME && d.type === 'DirectSound')
@@ -117,7 +129,6 @@ export class ExternalPlayer {
       while (!findDevice() && this.connected && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100))
       const device = findDevice()
       if (!device) throw new Error('网易云尚未枚举到虚拟输出，请稍后重试')
-      this.changedDevice = true
       await this.stopRust()
       await this.command('device', { device })
       const switchedBy = Date.now() + 4000
@@ -146,15 +157,34 @@ export class ExternalPlayer {
       if (action === 'seek') {
         this.prepareSeek(positionMs ?? 0)
       }
-      await this.command(action, action === 'seek' ? { positionMs } : {})
+      await this.command(action, action === 'seek' || action === 'playIndex' ? { positionMs } : {})
     }
     return this.state
   }
   private prepareSeek(position: number): void {
+    this.transitionAt = 0
     this.lastSeekAt = Date.now()
     this.seekTargetMs = Math.max(0, position); this.seekStreamFloor = this.lastSourceStream
     this.pendingAudio = []
     this.engine.send(JSON.stringify({ type: 'stop' })); this.engine.closeLive(); this.stream = ''
+  }
+
+  private bufferAudio(packet: AudioPacket, data: Buffer, at: number): void {
+    // Keep next-track read-ahead across the slower CEF metadata poll. This is a
+    // bounded handoff buffer, not a saved copy of the song.
+    this.pendingAudio = this.pendingAudio.filter(p => Date.now() - p.at < 5000)
+    const bytes = this.pendingAudio.reduce((sum, p) => sum + p.data.byteLength, 0)
+    if (this.pendingAudio.length < 96 && bytes + data.byteLength <= 16 * 1024 * 1024)
+      this.pendingAudio.push({ packet, data, at })
+  }
+
+  private enableCapture(position: number): void {
+    if (this.resumeCapture) return
+    this.resumeCapture = this.rpc(this.audio, 'enable', true).then(() => {
+      this.capturePaused = false
+      return this.action('seek', position).then(() => {})
+    }).catch(error => { if (!this.closing) this.update({ message: String(error) }) })
+      .finally(() => { this.resumeCapture = null })
   }
 
   private async command(action: string, extra: Record<string, unknown> = {}): Promise<void> {
@@ -173,6 +203,7 @@ export class ExternalPlayer {
     if (process.platform !== 'win32') throw new Error('此客户端适配器目前支持 Windows 网易云音乐 3.1.41 x64')
     if (!existsSync(this.dllPath)) throw new Error('缺少原生虚拟输出模块，请重新构建或安装播放器')
     this.closing = false
+    this.lastForce = force
     this.update({ ...EMPTY(), phase: 'connecting', message: '正在连接网易云音乐…' })
     try {
       const frida = await import('frida')
@@ -193,7 +224,7 @@ export class ExternalPlayer {
       this.sessions.push(mainSession)
       const rendererSession = await frida.attach(renderer.ProcessId)
       this.sessions.push(rendererSession)
-      for (const s of this.sessions) s.detached.connect(() => { if (!this.closing && this.sessions.includes(s)) void this.fail('网易云进程连接已中断') })
+      for (const s of this.sessions) s.detached.connect(() => { if (!this.closing && this.sessions.includes(s)) void this.recoverConnection() })
       this.virtual = await mainSession.createScript(virtualAgent.replace('__DLL_PATH__', JSON.stringify(shadow)))
       this.audio = await mainSession.createScript(audioAgent.replace('__FORCE__', String(force)))
       this.renderer = await rendererSession.createScript(rendererAgent.replace('__FORCE__', String(force)))
@@ -203,7 +234,10 @@ export class ExternalPlayer {
           if (message.type === 'error') { void this.fail(message.description); return }
           if (message.type !== 'send') return
           const payload = message.payload as Record<string, unknown>
-          if (payload.event === 'error') void this.fail(String(payload.message))
+          if (payload.event === 'error') {
+            if (script === this.renderer) this.update({ message: String(payload.message) })
+            else void this.fail(String(payload.message))
+          }
           else if (payload.event === 'snapshot') this.onSnapshot(payload.value as ExternalSnapshot)
           else if (payload.event === 'audio' && data) this.onAudio(payload as unknown as AudioPacket, data)
           else if (payload.event === 'unsupported' && this.routing) void this.fail(`当前客户端流编码 ${String(payload.codec)} 尚未验证，已停止接管`)
@@ -218,7 +252,7 @@ export class ExternalPlayer {
       this.timer = setInterval(() => { void this.poll() }, 500)
       await this.rpc(this.audio, 'enable', true)
     } catch (error) {
-      await this.disconnect()
+      await this.disconnect(false)
       this.update({ phase: 'error', message: String(error) })
       throw error
     }
@@ -231,6 +265,15 @@ export class ExternalPlayer {
       const stats = await this.rpc(this.virtual, 'snapshot') as { creations: number; buffers: number; discardedBytes: string }
       this.update({ nullBytes: stats.discardedBytes })
       await this.command('devices')
+      this.pollFailures = 0
+      if (this.routing && this.state.snapshot?.state === 'playing') {
+        if (this.capturePaused) this.enableCapture(this.state.snapshot.positionMs)
+        // A missed start packet must not strand the next song forever. Ask the
+        // source to regenerate from the current audible position, without
+        // detaching the hooks or switching physical output devices.
+        if (Date.now() - this.lastAudioAt > 8000 && Date.now() - this.lastSeekAt > 8000)
+          await this.action('seek', this.state.snapshot.positionMs)
+      }
       if (stats.buffers > 0 && this.state.snapshot?.devices?.currentDevice.name === NULL_NAME && !this.routing) {
         this.stream = ''; this.engine.send(JSON.stringify({ type: 'stop' }))
         this.update({ phase: 'routing', message: '客户端输出已进入黑洞，正在接收音频…' })
@@ -240,24 +283,61 @@ export class ExternalPlayer {
         this.engine.send(JSON.stringify({ type: 'stop' })); this.engine.closeLive(); this.stream = ''
         this.update({ phase: 'ready', message: '客户端已切回其他设备，Rust 路由已停止' })
       }
-    } catch (error) { await this.fail(String(error)) }
+    } catch (error) {
+      if (!this.closing) {
+        this.pollFailures++
+        this.update({ message: `连接暂时繁忙，正在重试（${this.pollFailures}）` })
+        if (this.pollFailures >= 4 && Date.now() - this.lastSnapshotAt > 20000) await this.fail(String(error))
+      }
+    }
     finally { this.polling = false }
   }
 
   private onSnapshot(value: ExternalSnapshot): void {
     if (!value.found) return
+    if (value.queue === undefined && this.state.snapshot?.queue) value = {...value,queue:this.state.snapshot.queue}
     if (this.closing) { this.state = { ...this.state, snapshot: value }; return }
     for (const id of value.acks) {
       this.lastAck = Math.max(this.lastAck, id)
       const pending = this.awaiting.get(id)
       if (pending) { clearTimeout(pending.timer); pending.resolve(); this.awaiting.delete(id) }
     }
-    if (!this.previousDevice && value.devices?.currentDevice.name !== NULL_NAME) this.previousDevice = value.devices?.currentDevice ?? null
-    const oldId = this.state.snapshot?.track.id
+    if (!this.previousDevice && value.devices) {
+      const backup = join(tmpdir(), 'just-a-player-netease-output.json')
+      const current = value.devices.currentDevice
+      if (current.name !== NULL_NAME) {
+        this.previousDevice = current
+        try { writeFileSync(backup, JSON.stringify(current), {mode:0o600}) } catch { /* Best-effort crash recovery. */ }
+      } else {
+        // The previous host may have crashed while the client retained its
+        // black-hole selection. Recover the last verified real device first.
+        const devices = value.devices.totalDevices.flatMap(group => group.devices).filter(device => device.name !== NULL_NAME)
+        let saved: ExternalDevice | null = null
+        try { if (statSync(backup).size < 16384) saved = JSON.parse(readFileSync(backup,'utf8')) } catch {}
+        this.previousDevice = devices.find(device => saved && device.type === saved.type && device.name === saved.name && device.deviceId === saved.deviceId) ?? null
+        if (!this.previousDevice) {
+          this.previousDevice = devices.find(device => device.type === 'DirectSound') ?? devices.find(device => device.type === 'Wasapi' && device.id === 0) ?? null
+          this.fallbackDevice = this.previousDevice !== null
+        }
+      }
+    }
+    this.lastSnapshotAt = Date.now()
+    const previous = this.state.snapshot
+    const oldId = previous?.track.id
     this.update({ snapshot: value })
-    if (oldId && oldId !== value.track.id && this.routing) {
+    const repeated = previous && previous.track.durationMs > 0 && previous.positionMs > previous.track.durationMs - 2500 && value.positionMs < 1000
+    if (oldId && (oldId !== value.track.id || repeated) && this.routing) {
+      const activeGeneration = Number(this.stream.split(':')[1]) || 0
+      this.engine.closeLive(); this.stream = ''; this.nextFrame = 0
+      this.seekTargetMs = 0; this.seekStreamFloor = activeGeneration
+      this.transitionAt = Date.now(); this.lastSeekAt = Date.now()
+      this.clockKey = ''; this.previousRawPts = null
+      // Natural EOF is owned by NetEase. Do not issue another next/seek from
+      // our local queue. Start with buffered packets from its next decoder.
+    }
+    else if (previous && oldId === value.track.id && this.routing && !this.capturePaused && this.seekTargetMs === null && previous.positionMs - value.positionMs > 1500) {
       this.prepareSeek(value.positionMs)
-      if (value.state === 'playing') void this.command('seek', {positionMs:value.positionMs}).catch(error => this.fail(String(error)))
+      void this.command('seek',{positionMs:value.positionMs}).catch(error => this.update({message:String(error)}))
     }
     if (this.routing && value.state !== this.lastNativeState) {
       if (value.state === 'paused') {
@@ -266,17 +346,12 @@ export class ExternalPlayer {
         this.engine.send(JSON.stringify({ type: 'pause' }))
         void this.rpc(this.audio, 'enable', false).catch(error => this.fail(String(error)))
       } else if (value.state === 'playing' && this.capturePaused) {
-        const control = this.controlSequence
-        this.prepareSeek(value.positionMs)
-        void this.rpc(this.audio, 'enable', true).then(async () => {
-          this.capturePaused = false
-          if (control === this.controlSequence) await this.action('seek', value.positionMs)
-        }).catch(error => this.fail(String(error)))
+        this.enableCapture(value.positionMs)
       } else if (value.state === 'playing') this.engine.send(JSON.stringify({ type: 'resume' }))
       else {
-        this.capturePaused = true; this.pendingAudio = []
-        this.engine.send(JSON.stringify({ type: 'stop' })); this.stream = ''
-        void this.rpc(this.audio, 'enable', false).catch(error => this.fail(String(error)))
+        // A stopped snapshot also occurs between songs while NetEase loads the
+        // next resource. Keep capture armed, including its early read-ahead.
+        this.engine.closeLive(); this.stream = ''
       }
     }
     this.lastNativeState = value.state
@@ -289,7 +364,7 @@ export class ExternalPlayer {
     if (!this.coverLoading && (changedCover || (!this.state.cover && Date.now() >= this.coverRetryAt)) && (value.track.coverUrl || value.track.localPath))
       void this.loadCover(value.track.coverUrl, value.track.localPath)
     const pending = this.pendingAudio.splice(0)
-    for (const p of pending) if (Date.now() - p.at < 1500) this.onAudio(p.packet, p.data, p.at)
+    for (const p of pending) if (Date.now() - p.at < 5000) this.onAudio(p.packet, p.data, p.at)
   }
 
   private onAudio(p: AudioPacket, data: Buffer, receivedAt = Date.now()): void {
@@ -306,11 +381,16 @@ export class ExternalPlayer {
       this.clockKey = key; this.previousRawPts = raw
     } else pts = Number(p.pts)
     if (!Number.isSafeInteger(pts) || pts < 0) { void this.fail('客户端提供了不可验证的时间戳'); return }
+    if (s.state === 'stopped' && !this.stream) { this.bufferAudio(p, data, receivedAt); return }
+    if (this.stream && key !== this.stream) {
+      if (p.stream > Number(this.stream.split(':')[1])) this.bufferAudio(p, data, receivedAt)
+      return
+    }
     let trimStartFrames = 0
     if (this.seekTargetMs !== null) {
       const target = Math.round(this.seekTargetMs * p.sampleRate / 1000)
       const seekAcknowledged = Math.abs(s.positionMs - this.seekTargetMs) <= 1100
-      if (p.stream <= this.seekStreamFloor && !(seekAcknowledged && pts !== this.nextFrame)) return
+      if (p.stream <= this.seekStreamFloor && !(seekAcknowledged && pts !== this.nextFrame && !this.transitionAt)) return
       if (pts + p.frames <= target) return
       // A decoder can finish old read-ahead after a seek. Only the packet
       // containing the requested sample may establish the new timeline.
@@ -325,10 +405,11 @@ export class ExternalPlayer {
       return
     }
     if (pts * 1000 / p.sampleRate + 2000 < s.positionMs) {
-      if (this.pendingAudio.length < 16) this.pendingAudio.push({ packet: p, data, at: receivedAt })
+      this.bufferAudio(p, data, receivedAt)
       return
     }
     this.seekTargetMs = null
+    this.transitionAt = 0
     try {
       if (key !== this.stream || pts !== this.nextFrame) {
         const path = `external://netease/${encodeURIComponent(s.track.id)}`
@@ -341,6 +422,7 @@ export class ExternalPlayer {
         this.update({ path, message: p.encoding === 'flac' ? '原始 FLAC → Rust；客户端最终输出进入黑洞' : `${p.codec.toUpperCase()} 原生解码 PCM → Rust；客户端最终输出进入黑洞` })
       }
       this.engine.pushLive(pts, p.frames, data)
+      this.lastAudioAt = Date.now()
       this.nextFrame = pts + p.frames
       this.state = { ...this.state, audioPackets: this.state.audioPackets + 1 }
       if (s.state === 'paused') this.engine.send(JSON.stringify({ type: 'pause' }))
@@ -388,7 +470,31 @@ export class ExternalPlayer {
     this.update({ phase: 'error', message })
   }
 
-  async disconnect(): Promise<void> {
+  private async recoverConnection(): Promise<void> {
+    if (this.recovering || this.closing) return
+    const route = this.ownsTransport, playing = this.state.snapshot?.state === 'playing', force = this.lastForce
+    this.recovering = true
+    await this.disconnect(false)
+    for (let attempt = 1; attempt <= 3 && this.recovering; attempt++) {
+      this.update({ phase: 'connecting', message: `正在恢复网易云连接（${attempt}/3）…` })
+      await new Promise(resolve => setTimeout(resolve, attempt * 1000))
+      if (!this.recovering) return
+      // connect() treats a connecting phase as an existing attempt.
+      this.state.phase = 'disconnected'
+      try {
+        await this.connect(force)
+        if (!this.recovering) return
+        if (route) { await this.action('route'); if (playing) await this.action('resume') }
+        this.recovering = false
+        return
+      } catch { /* A restarting renderer may not be ready yet. */ }
+    }
+    if (this.recovering) this.update({ phase: 'error', message: '网易云连接未恢复，请确认客户端仍在运行后重试。' })
+    this.recovering = false
+  }
+
+  async disconnect(cancelRecovery = true): Promise<void> {
+    if (cancelRecovery) this.recovering = false
     if (this.disconnecting) return this.disconnecting
     const closing = this.closeConnection()
     this.disconnecting = closing
@@ -416,7 +522,7 @@ export class ExternalPlayer {
     } else this.engine.closeLive()
     let restoreFailed = false, restored = ''
     try {
-      if (released && this.renderer && this.previousDevice && (this.changedDevice || this.state.snapshot?.devices?.currentDevice.name === NULL_NAME)) {
+      if (released && this.renderer && this.previousDevice && this.state.snapshot?.devices?.currentDevice.name === NULL_NAME) {
         await this.rpc(this.renderer, 'command', { action: 'device', device: this.previousDevice })
         const deadline = Date.now() + 3500
         let confirmed = false
@@ -434,10 +540,12 @@ export class ExternalPlayer {
     for (const script of [...this.scripts].reverse()) { try { await this.rpc(script, 'stop'); await script.unload() } catch {} }
     for (const session of this.sessions) { try { await session.detach() } catch {} }
     this.scripts = []; this.sessions = []; this.renderer = this.audio = this.virtual = null
-    this.previousDevice = null; this.changedDevice = false; this.stream = ''; this.nextFrame = 0; this.coverUrl = ''; this.lastNativeState = ''
+    const fallback = this.fallbackDevice
+    this.previousDevice = null; this.fallbackDevice = false; this.stream = ''; this.nextFrame = 0; this.coverUrl = ''; this.lastNativeState = ''
     this.capturePaused = false
+    this.pollFailures = 0; this.lastSnapshotAt = 0; this.lastAudioAt = 0; this.transitionAt = 0; this.resumeCapture = null
     this.audiblePositionMs = 0; this.lastSeekAt = 0
     this.clockKey = ''; this.previousRawPts = null; this.lastSourceStream = 0; this.seekTargetMs = null; this.seekStreamFloor = 0
-    this.update({ ...EMPTY(), ...(restoreFailed ? { phase: 'error', message: '连接已关闭；未确认客户端输出恢复，请在网易云中检查输出设备。' } : { message: restored ? `已断开，客户端输出已恢复到 ${restored}` : '' }) }); this.closing = false
+    this.update({ ...EMPTY(), ...(restoreFailed ? { phase: 'error', message: '连接已关闭；未确认客户端输出恢复，请在网易云中检查输出设备。' } : { message: restored ? `已断开，客户端输出已恢复到 ${restored}${fallback ? '（原设备记录不可用，使用系统默认）' : ''}` : '' }) }); this.closing = false
   }
 }

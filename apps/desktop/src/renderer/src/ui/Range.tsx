@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import { useEffect, useRef, useState, type CSSProperties, type HTMLAttributes } from 'react'
 interface Props extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange' | 'onInput'> {
   min?: number
@@ -25,6 +26,7 @@ export function Range({
   style,
   ...attributes
 }: Props): React.JSX.Element {
+  useLocale()
   const number = Number(value),
     span = Math.max(0, max - min)
   const fraction = span ? Math.max(0, Math.min(1, (number - min) / span)) : 0
@@ -72,7 +74,7 @@ export function Range({
     }
   }, [])
   return (
-    <div
+    ui(<div
       {...attributes}
       ref={elementRef}
       data-range
@@ -205,6 +207,6 @@ export function Range({
         aria-hidden
         style={vertical ? { bottom: `${fraction * 100}%` } : { left: `${fraction * 100}%` }}
       />
-    </div>
+    </div>)
   )
 }

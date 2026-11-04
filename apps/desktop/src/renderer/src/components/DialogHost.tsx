@@ -1,10 +1,12 @@
+import { ui, useLocale } from '../i18n'
 import { Range } from '../ui/Range'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'motion/react'
-import { Folder, X, ArrowLeft, MagnifyingGlass, Check } from '../icons'
+import { Folder, X, ArrowLeft, MagnifyingGlass, Check, Radio, CaretRight } from '../icons'
 import { useDialogs, type AppDialog } from '../ui/dialog-store'
-import type { BrowserListing, FileDialogRequest } from '@shared/dialogs'
+import { matchesFileType, validSaveName, WINDOWS_COMPUTER, type BrowserListing, type FileDialogRequest } from '@shared/dialogs'
+import { radioUrl } from '@shared/audio'
 
 const action = 'rounded-2xl px-5 py-2.5 text-sm font-medium'
 function Modal({
@@ -18,12 +20,16 @@ function Modal({
   children: ReactNode
   wide?: boolean
 }): React.JSX.Element {
+  useLocale()
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null
     const root = document.getElementById('root')
     if (root) root.inert = true
-    ref.current?.querySelector<HTMLElement>('[data-autofocus],button,input')?.focus()
+    const first =
+      ref.current?.querySelector<HTMLElement>('[data-autofocus]') ??
+      ref.current?.querySelector<HTMLElement>('button,input')
+    first?.focus()
     const key = (e: KeyboardEvent): void => {
       if (e.key === 'Escape' && !document.activeElement?.matches('[role="listbox"]')) {
         e.preventDefault()
@@ -55,7 +61,7 @@ function Modal({
     }
   }, [close])
   return createPortal(
-    <div
+    ui(<div
       data-panel-portal
       data-app-dialog
       className="app-dialog-backdrop"
@@ -68,15 +74,15 @@ function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`glass panel-surface app-dialog ${wide ? 'app-dialog-wide' : ''}`}
+        className={`glass panel-surface app-dialog ${wide ? 'app-dialog-wide app-dialog-file' : ''}`}
         initial={{ opacity: 0, scale: 0.97, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.2 }}
       >
         <div className="app-dialog-orbit" aria-hidden />
-        <header className="relative flex items-start justify-between gap-4">
+        <header className="app-dialog-header relative flex items-start justify-between gap-4">
           <div>
-            <p className="mb-2 text-[10px] font-semibold tracking-[0.24em] text-accent-text">
+            <p className="app-dialog-brand mb-2 text-[10px] font-semibold tracking-[0.24em] text-accent-text">
               JUST A PLAYER
             </p>
             <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
@@ -92,7 +98,7 @@ function Modal({
         </header>
         {children}
       </motion.div>
-    </div>,
+    </div>),
     document.body
   )
 }
@@ -103,6 +109,7 @@ function FileBrowser({
   request: FileDialogRequest
   close: () => void
 }): React.JSX.Element {
+  useLocale()
   const [listing, setListing] = useState<BrowserListing | null>(null)
   const [address, setAddress] = useState(request.defaultPath ?? '')
   const [query, setQuery] = useState(''),
@@ -112,6 +119,7 @@ function FileBrowser({
     [error, setError] = useState(''),
     [overwrite, setOverwrite] = useState(false)
   const generation = useRef(0)
+  const [searchOpen, setSearchOpen] = useState(false)
   const navigate = async (path?: string): Promise<void> => {
     const token = ++generation.current
     setBusy(true)
@@ -122,7 +130,10 @@ function FileBrowser({
       const result = await window.jap.browseFiles(path)
       if (token === generation.current) {
         setListing(result)
-        setAddress(result.path)
+        setAddress(result.virtual ? '此电脑' : result.path)
+        setQuery('')
+        if (result.selectedPath && request.mode === 'open' && matchesFileType(result.selectedPath, request.extensions))
+          setSelected([result.selectedPath])
         setError(result.error ?? '')
       }
     } catch (e) {
@@ -141,32 +152,38 @@ function FileBrowser({
       generation.current++
     }
   }, [request.id])
+  useEffect(() => window.jap.onFilesChanged?.(() => {
+    void navigate(listing?.path)
+  }), [listing?.path, request.id])
   const extensions = request.extensions.filter((e) => e !== '*')
   const entries =
     listing?.entries.filter(
       (e) =>
         e.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()) &&
         (e.directory ||
-          (request.mode !== 'folder' &&
-            (request.extensions.includes('*') ||
-              !extensions.length ||
-              extensions.includes(e.name.split('.').at(-1)?.toLowerCase() ?? ''))))
+          (request.mode !== 'folder' && matchesFileType(e.name, request.extensions)))
     ) ?? []
   const submit = async (): Promise<void> => {
-    if (!listing) return
+    if (!listing || listing.virtual || listing.error) return
     let paths = selected
     if (request.mode === 'save') {
-      if (!filename.trim() || /[\\/<>:"|?*\x00-\x1f]/.test(filename)) {
+      if (!validSaveName(filename.trim(), window.jap.platform === 'win32')) {
         setError('请填写有效的文件名称')
         return
       }
       let name = filename.trim()
       if (extensions[0] && !name.includes('.')) name += '.' + extensions[0]
-      if (!overwrite && listing.entries.some((e) => e.name.toLowerCase() === name.toLowerCase())) {
+      const existing = listing.entries.find((e) => window.jap.platform === 'win32'
+        ? e.name.toLowerCase() === name.toLowerCase() : e.name === name)
+      if (existing?.directory) {
+        setError('此名称已被文件夹使用')
+        return
+      }
+      if (!overwrite && existing) {
         setOverwrite(true)
         return
       }
-      paths = [listing.path.replace(/[\\/]$/, '') + '/' + name]
+      paths = [listing.path.replace(/[\\/]$/, '') + (window.jap.platform === 'win32' ? '\\' : '/') + name]
     } else if (request.mode === 'folder' && !paths.length) paths = [listing.path]
     if (!paths.length) return
     setBusy(true)
@@ -180,17 +197,8 @@ function FileBrowser({
     }
   }
   return (
-    <Modal title={request.title} close={close} wide>
-      {window.jap.requestMusicPermission && (
-        <button
-          type="button"
-          className="mt-4 rounded-xl bg-accent/12 px-4 py-2 text-xs text-accent-text"
-          onClick={() => void window.jap.requestMusicPermission!()}
-        >
-          授权读取手机音乐
-        </button>
-      )}
-      <div className="mt-5 flex gap-2">
+    ui(<Modal title={request.title} close={close} wide>
+      <div className="file-browser-toolbar mt-5 flex gap-2">
         <button
           type="button"
           aria-label="上一级文件夹"
@@ -204,7 +212,7 @@ function FileBrowser({
           className="flex min-w-0 flex-1"
           onSubmit={(e) => {
             e.preventDefault()
-            void navigate(address)
+            void navigate(address.trim() === '此电脑' ? WINDOWS_COMPUTER : address)
           }}
         >
           <input
@@ -213,12 +221,19 @@ function FileBrowser({
             onChange={(e) => setAddress(e.target.value)}
             className="min-w-0 flex-1 rounded-xl bg-hover px-3 py-2 text-xs"
           />
+          <button type="submit" aria-label="转到路径" className="file-browser-go grid w-10 shrink-0 place-items-center rounded-r-xl bg-hover">
+            <CaretRight size={18} />
+          </button>
         </form>
+        <button type="button" aria-label="搜索文件" aria-expanded={searchOpen} onClick={() => setSearchOpen((open) => !open)}
+          className="file-browser-search-toggle grid size-10 shrink-0 place-items-center rounded-xl bg-hover">
+          <MagnifyingGlass size={18} />
+        </button>
       </div>
-      <div className="file-browser-body mt-3 grid min-h-0 grid-cols-[136px_minmax(0,1fr)] gap-4">
+      <div className="file-browser-body mt-3 grid min-h-0 grid-cols-[136px_minmax(0,1fr)] gap-4" data-search-open={searchOpen}>
         <nav aria-label="文件位置" className="flex flex-col gap-1 overflow-y-auto">
           {listing?.roots.map((root) => (
-            <button
+            ui(<button
               type="button"
               key={root.path}
               onClick={() => void navigate(root.path)}
@@ -226,11 +241,15 @@ function FileBrowser({
             >
               <Folder size={16} className="shrink-0" />
               <span className="truncate">{root.name}</span>
-            </button>
+            </button>)
           ))}
+          {listing?.musicPermissionNeeded && window.jap.requestMusicPermission && (
+            <button type="button" className="rounded-xl bg-accent/12 p-2.5 text-xs text-accent-text"
+              onClick={() => void window.jap.requestMusicPermission!()}>授权读取音乐</button>
+          )}
         </nav>
         <div className="flex min-h-0 min-w-0 flex-col rounded-2xl bg-hover p-2">
-          <label className="mb-2 flex items-center gap-2 rounded-xl px-2 text-fg-muted">
+          <label className="file-browser-search mb-2 flex items-center gap-2 rounded-xl px-2 text-fg-muted">
             <MagnifyingGlass size={15} />
             <input
               aria-label="搜索当前文件夹"
@@ -252,7 +271,7 @@ function FileBrowser({
               </p>
             ) : (
               entries.map((entry) => (
-                <button
+                ui(<button
                   type="button"
                   role="option"
                   aria-selected={selected.includes(entry.path)}
@@ -262,7 +281,8 @@ function FileBrowser({
                   }}
                   onClick={() => {
                     setOverwrite(false)
-                    if (entry.directory && request.mode !== 'folder') {
+                    setError(listing?.error ?? '')
+                    if (entry.directory && (request.mode !== 'folder' || listing?.virtual)) {
                       void navigate(entry.path)
                       return
                     }
@@ -287,8 +307,8 @@ function FileBrowser({
                       </span>
                     )}
                   </span>
-                  <span className="min-w-0 flex-1 break-all">{entry.name}</span>
-                  {entry.directory && request.mode === 'folder' && (
+                   <span translate="no" className="min-w-0 flex-1 break-all">{entry.name}</span>
+                  {entry.directory && request.mode === 'folder' && !listing?.virtual && (
                     <span
                       role="button"
                       tabIndex={0}
@@ -298,14 +318,18 @@ function FileBrowser({
                         void navigate(entry.path)
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') void navigate(entry.path)
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          void navigate(entry.path)
+                        }
                       }}
                     >
                       ›
                     </span>
                   )}
                   {selected.includes(entry.path) && <Check size={16} />}
-                </button>
+                </button>)
               ))
             )}
             {!busy && !entries.length && (
@@ -317,7 +341,7 @@ function FileBrowser({
         </div>
       </div>
       {request.mode === 'save' && (
-        <label className="mt-4 flex items-center gap-3 text-xs text-fg-muted">
+        <label className="file-browser-filename mt-4 flex items-center gap-3 text-xs text-fg-muted">
           文件名称
           <input
             aria-label="保存文件名"
@@ -325,17 +349,18 @@ function FileBrowser({
             onChange={(e) => {
               setFilename(e.target.value)
               setOverwrite(false)
+              setError(listing?.error ?? '')
             }}
             className="min-w-0 flex-1 rounded-xl bg-hover px-3 py-2.5 text-sm text-fg"
           />
         </label>
       )}
       {(error || overwrite) && (
-        <p role="status" className="mt-3 rounded-xl bg-accent/10 p-3 text-xs text-accent-text">
+        <p role="status" className="file-browser-message mt-3 rounded-xl bg-accent/10 p-3 text-xs text-accent-text">
           {error || '此文件已存在。确认替换后将覆盖其内容。'}
         </p>
       )}
-      <footer className="mt-5 flex items-center justify-between gap-3">
+      <footer className="file-browser-footer mt-5 flex items-center justify-between gap-3">
         <p className="min-w-0 truncate text-xs text-fg-subtle">
           {selected.length
             ? `已选择 ${selected.length} 项`
@@ -351,7 +376,7 @@ function FileBrowser({
           </button>
           <button
             type="button"
-            disabled={busy || (request.mode === 'open' && !selected.length)}
+            disabled={busy || !!listing?.virtual || !!listing?.error || (request.mode === 'open' && !selected.length)}
             onClick={() => void submit()}
             className={`${action} bg-accent text-on-accent disabled:opacity-35`}
           >
@@ -365,7 +390,7 @@ function FileBrowser({
           </button>
         </div>
       </footer>
-    </Modal>
+    </Modal>)
   )
 }
 function ColorDialog({
@@ -375,6 +400,7 @@ function ColorDialog({
   item: Extract<AppDialog, { kind: 'color' }>
   close: () => void
 }): React.JSX.Element {
+  useLocale()
   const [color, setColor] = useState(item.initial)
   const rgb = /^#[a-f\d]{6}$/i.test(color)
     ? [1, 3, 5].map((p) => parseInt(color.slice(p, p + 2), 16))
@@ -382,7 +408,7 @@ function ColorDialog({
   const channel = (i: number, value: number): void =>
     setColor('#' + rgb.map((c, j) => (i === j ? value : c).toString(16).padStart(2, '0')).join(''))
   return (
-    <Modal title={item.title} close={close}>
+    ui(<Modal title={item.title} close={close}>
       <div
         className="my-6 h-32 rounded-3xl"
         style={{
@@ -391,7 +417,7 @@ function ColorDialog({
         }}
       />
       {['红', '绿', '蓝'].map((label, i) => (
-        <label key={label} className="mb-4 flex items-center gap-4 text-xs text-fg-muted">
+        ui(<label key={label} className="mb-4 flex items-center gap-4 text-xs text-fg-muted">
           <span>{label}</span>
           <Range
             aria-label={`${label}色通道`}
@@ -402,7 +428,7 @@ function ColorDialog({
             className="min-w-0 flex-1"
           />
           <span className="w-8 text-right font-mono">{rgb[i]}</span>
-        </label>
+        </label>)
       ))}
       <input
         aria-label="自定义颜色值"
@@ -426,10 +452,81 @@ function ColorDialog({
           使用这束颜色
         </button>
       </footer>
-    </Modal>
+    </Modal>)
   )
 }
+function RadioDialog({
+  item,
+  close,
+}: {
+  item: Extract<AppDialog, { kind: 'radio' }>
+  close: () => void
+}): React.JSX.Element {
+  useLocale()
+  const [address, setAddress] = useState('')
+  const [title, setTitle] = useState('')
+  const url = radioUrl(address.trim())
+  const input =
+    'w-full rounded-xl bg-hover px-3 py-2.5 text-sm text-fg outline-none ring-1 ring-line focus:ring-accent'
+  return (
+    ui(<Modal title="添加在线电台" close={close}>
+      <form
+        className="relative mt-5 grid gap-3"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (!url) return
+          item.done({ path: url.href, title: title.trim() || url.hostname })
+          useDialogs.getState().remove(item.id)
+        }}
+      >
+        <label className="grid gap-1.5 text-xs text-fg-muted">
+          电台流地址
+          <input
+            data-autofocus
+            type="text"
+            inputMode="url"
+            autoCapitalize="off"
+            spellCheck={false}
+            maxLength={4096}
+            className={input}
+            value={address}
+            placeholder="https://…"
+            onChange={(event) => setAddress(event.target.value)}
+          />
+        </label>
+        <label className="grid gap-1.5 text-xs text-fg-muted">
+          收藏名称（可选）
+          <input
+            type="text"
+            maxLength={160}
+            className={input}
+            value={title}
+            placeholder="例如：夜间爵士"
+            onChange={(event) => setTitle(event.target.value)}
+          />
+        </label>
+        <p className="text-xs leading-5 text-fg-muted">
+          支持 HTTP、HTTPS 直连音频，以及包含直连地址的 M3U 或 PLS 播放列表。
+        </p>
+        <footer className="mt-2 flex justify-end gap-2">
+          <button type="button" className={`${action} bg-hover text-fg-muted`} onClick={close}>
+            取消
+          </button>
+          <button
+            type="submit"
+            disabled={!url}
+            className={`${action} inline-flex items-center gap-2 bg-accent text-on-accent disabled:opacity-35`}
+          >
+            <Radio size={16} /> 保存并播放
+          </button>
+        </footer>
+      </form>
+    </Modal>)
+  )
+}
+
 export function DialogHost(): React.JSX.Element | null {
+  useLocale()
   const item = useDialogs((s) => s.queue[0])
   const closeRef = useRef<() => void>(() => {})
   closeRef.current = () => {
@@ -442,10 +539,11 @@ export function DialogHost(): React.JSX.Element | null {
   const close = useRef(() => closeRef.current()).current
   if (!item) return null
   if (item.kind === 'file')
-    return <FileBrowser key={item.id} request={item.request} close={close} />
-  if (item.kind === 'color') return <ColorDialog key={item.id} item={item} close={close} />
+    return ui(<FileBrowser key={item.id} request={item.request} close={close} />)
+  if (item.kind === 'color') return ui(<ColorDialog key={item.id} item={item} close={close} />)
+  if (item.kind === 'radio') return ui(<RadioDialog key={item.id} item={item} close={close} />)
   return (
-    <Modal key={item.id} title={item.title} close={close}>
+    ui(<Modal key={item.id} title={item.title} close={close}>
       <div className="my-6 rounded-2xl bg-accent/8 p-5 text-sm leading-7 text-fg-muted">
         {item.message}
       </div>
@@ -469,6 +567,6 @@ export function DialogHost(): React.JSX.Element | null {
           {item.confirm}
         </button>
       </footer>
-    </Modal>
+    </Modal>)
   )
 }

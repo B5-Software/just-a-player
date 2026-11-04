@@ -113,6 +113,11 @@ export const usePlayer = create<PlayerStore>((set, get) => ({
   },
 
   togglePause: () => {
+    const external = engine.externalTransportState()
+    if (external) {
+      void engine.external(external === 'playing' ? 'pause' : 'resume').catch(error => set({error:String(error)}))
+      return
+    }
     const { state, track } = get()
     if (state === 'playing') engine.send({ type: 'pause' })
     else if (state === 'paused') engine.send({ type: 'resume' })
@@ -188,10 +193,12 @@ engine.onEvent((event) => {
   }
 })
 
-engine.onConnect(() => {
+engine.onConnect((active) => {
   usePlayer.setState({ connected: true })
   if (window.jap.surface !== 'main') return
-  engine.send({ type: 'setVolume', gain: usePlayer.getState().volume })
-  engine.send({ type: 'setOutput', config: usePlayer.getState().output })
+  if (!active) {
+    engine.send({ type: 'setVolume', gain: usePlayer.getState().volume })
+    engine.send({ type: 'setOutput', config: usePlayer.getState().output })
+  }
   void usePlayer.getState().refreshDevices()
 })

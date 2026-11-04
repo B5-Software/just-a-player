@@ -11,8 +11,8 @@ android {
         applicationId 'org.b5_software.justaplayer'
         minSdk 28
         targetSdk 35
-        versionCode 105
-        versionName '0.1.5'
+        versionCode 106
+        versionName '0.1.6'
         ndk { abiFilters(*supportedAbis) }
     }
     signingConfigs {

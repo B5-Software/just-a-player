@@ -1,5 +1,6 @@
+import { ui, useLocale } from '../i18n'
 import { Select } from '../ui/Select'
-import { confirmAction } from '../ui/dialog-store'
+import { chooseRadio, confirmAction } from '../ui/dialog-store'
 import { useMemo, useRef, useState } from 'react'
 import { formatTime } from '../lib/format'
 import {
@@ -13,6 +14,7 @@ import {
   PencilSimple,
   Play,
   Plus,
+  Radio,
   Shuffle,
   SlidersHorizontal,
   Trash,
@@ -32,6 +34,9 @@ import {
 } from '../library/store'
 import { usePlayer } from '../engine/store'
 import { scanMusicFolders } from '../library/scanner'
+import { radioUrl } from '@shared/audio'
+import { useExternal } from '../external/store'
+import { ExternalQueue } from './ExternalQueue'
 
 const SORT_OPTIONS: readonly { value: string; label: string }[] = [
   { value: 'title:asc', label: '标题 A→Z' },
@@ -55,6 +60,18 @@ const tool =
 
 /** 播放列表：多个列表、递归添加、搜索、排序、多选、拖拽排序，以及导入导出。 */
 export function PlaylistPanel(): React.JSX.Element {
+  useLocale()
+  const connected = useExternal(s => s.phase === 'routing' || s.phase === 'ready')
+  const [local, setLocal] = useState(false)
+  return ui(<div className="min-h-0">
+    {connected && !local ? <ExternalQueue onLocal={() => setLocal(true)}/> : <>
+      {connected && <button className="mb-4 rounded-xl bg-accent/10 px-3 py-2 text-xs text-accent-text" onClick={() => setLocal(false)}>网易云播放队列</button>}
+      <LocalPlaylistPanel/>
+    </>}
+  </div>)
+}
+function LocalPlaylistPanel(): React.JSX.Element {
+  useLocale()
   const lists = useLibrary((s) => s.lists)
   const activeId = useLibrary((s) => s.activeListId)
   const active = useMemo(() => lists.find((l) => l.id === activeId) ?? lists[0]!, [lists, activeId])
@@ -111,6 +128,22 @@ export function PlaylistPanel(): React.JSX.Element {
   const onAddFolders = async (): Promise<void> => {
     const paths = await window.jap.openFolders()
     if (paths.length) flash(`已添加 ${await addAudioPaths(paths)} 首`)
+  }
+  const onAddRadio = async (): Promise<void> => {
+    const station = await chooseRadio()
+    if (!station) return
+    const library = useLibrary.getState()
+    if (!library.lists.some((list) => list.id === active.id)) return
+    const [added] = library.addPaths(active.id, [station.path], {
+      title: station.title,
+      album: '在线电台',
+      metaLoaded: true,
+    })
+    const id = added ?? useLibrary.getState().lists
+      .find((list) => list.id === active.id)?.items
+      .find((item) => radioUrl(item.path)?.href === station.path)?.id
+    if (!id) return
+    playItem(active.id, id)
   }
 
   const onImport = async (): Promise<void> => {
@@ -209,11 +242,11 @@ export function PlaylistPanel(): React.JSX.Element {
   const otherLists = lists.filter((l) => l.id !== active.id)
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
+    ui(<div className="flex h-full min-h-0 flex-col gap-3">
       <div className="flex items-center gap-1.5">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-0.5">
           {lists.map((list) => (
-            <button
+            ui(<button
               key={list.id}
               type="button"
               onClick={() => useLibrary.getState().setActive(list.id)}
@@ -227,9 +260,9 @@ export function PlaylistPanel(): React.JSX.Element {
                   : 'bg-hover text-fg-muted hover:text-fg'
               }`}
             >
-              {list.name}
+              <span translate="no">{list.name}</span>
               <span className="ml-1.5 opacity-70">{list.items.length}</span>
-            </button>
+            </button>)
           ))}
         </div>
         <button
@@ -260,7 +293,7 @@ export function PlaylistPanel(): React.JSX.Element {
             className="min-w-0 flex-1 rounded-lg bg-hover px-2.5 py-1 text-sm text-fg outline-none ring-1 ring-accent"
           />
         ) : (
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{active.name}</span>
+          <span translate="no" className="min-w-0 flex-1 truncate text-sm font-semibold">{active.name}</span>
         )}
         <button
           type="button"
@@ -334,6 +367,10 @@ export function PlaylistPanel(): React.JSX.Element {
           <FolderSimple size={13} />
           添加文件夹
         </button>
+        <button type="button" className={tool} onClick={() => void onAddRadio()}>
+          <Radio size={14} />
+          在线电台
+        </button>
         <button type="button" className={tool} onClick={() => void onImport()}>
           <UploadSimple size={13} />
           导入
@@ -351,14 +388,14 @@ export function PlaylistPanel(): React.JSX.Element {
           {exportOpen && (
             <div className="glass absolute left-0 top-full z-10 mt-1 flex w-52 flex-col gap-0.5 rounded-xl p-1.5">
               {EXPORT_OPTIONS.map((option) => (
-                <button
+                ui(<button
                   key={option.value}
                   type="button"
                   onClick={() => void onExport(option.value)}
                   className="rounded-lg px-2.5 py-1.5 text-left text-xs text-fg hover:bg-hover"
                 >
                   {option.label}
-                </button>
+                </button>)
               ))}
             </div>
           )}
@@ -382,9 +419,9 @@ export function PlaylistPanel(): React.JSX.Element {
                 排序
               </option>
               {SORT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value} className="bg-surface text-fg">
+                ui(<option key={o.value} value={o.value} className="bg-surface text-fg">
                   {o.label}
-                </option>
+                </option>)
               ))}
             </Select>
           </label>
@@ -445,7 +482,7 @@ export function PlaylistPanel(): React.JSX.Element {
           const isSelected = selectedSet.has(item.id)
           const isPlaying = item.id === playingId
           return (
-            <li
+            ui(<li
               key={item.id}
               data-track-id={item.id}
               draggable={canReorder}
@@ -559,11 +596,12 @@ export function PlaylistPanel(): React.JSX.Element {
               </button>
               <div className="min-w-0 flex-1">
                 <div
+                  translate="no"
                   className={`truncate ${isPlaying ? 'font-semibold text-accent-text' : 'font-medium'}`}
                 >
                   {displayTitle(item)}
                 </div>
-                <div className="truncate text-xs text-fg-muted">
+                <div translate={item.missing ? undefined : 'no'} className="truncate text-xs text-fg-muted">
                   {item.missing
                     ? '文件已不存在'
                     : [item.artist, item.album].filter(Boolean).join(' · ') || item.path}
@@ -577,7 +615,7 @@ export function PlaylistPanel(): React.JSX.Element {
                 {item.bits ? ` / ${item.bits}b` : ''}
               </span>
               <span className="shrink-0 font-mono text-xs text-fg-subtle">
-                {item.durationMs ? formatTime(item.durationMs) : ''}
+                {radioUrl(item.path) ? '直播' : item.durationMs ? formatTime(item.durationMs) : ''}
               </span>
               <button
                 type="button"
@@ -590,7 +628,7 @@ export function PlaylistPanel(): React.JSX.Element {
               >
                 <X size={12} />
               </button>
-            </li>
+            </li>)
           )
         })}
       </ul>
@@ -614,9 +652,9 @@ export function PlaylistPanel(): React.JSX.Element {
                   复制到…
                 </option>
                 {otherLists.map((l) => (
-                  <option key={l.id} value={l.id} className="bg-surface text-fg">
-                    {l.name}
-                  </option>
+                  ui(<option key={l.id} value={l.id} className="bg-surface text-fg">
+                    <span translate="no">{l.name}</span>
+                  </option>)
                 ))}
               </Select>
               <Select
@@ -629,9 +667,9 @@ export function PlaylistPanel(): React.JSX.Element {
                   移到…
                 </option>
                 {otherLists.map((l) => (
-                  <option key={l.id} value={l.id} className="bg-surface text-fg">
-                    {l.name}
-                  </option>
+                  ui(<option key={l.id} value={l.id} className="bg-surface text-fg">
+                    <span translate="no">{l.name}</span>
+                  </option>)
                 ))}
               </Select>
             </>
@@ -660,6 +698,6 @@ export function PlaylistPanel(): React.JSX.Element {
         </span>
         {status && <span className="truncate text-accent-text">{status}</span>}
       </div>
-    </div>
+    </div>)
   )
 }

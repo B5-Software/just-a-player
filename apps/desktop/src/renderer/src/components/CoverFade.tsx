@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import { AnimatePresence, motion } from 'motion/react'
 /** Track changes crossfade; first mount has no entrance animation. */
 export function CoverFade({
@@ -7,8 +8,9 @@ export function CoverFade({
   src: string
   className?: string
 }): React.JSX.Element {
+  useLocale()
   return (
-    <AnimatePresence initial={false}>
+    ui(<AnimatePresence initial={false}>
       <motion.img
         key={src}
         src={src}
@@ -19,6 +21,6 @@ export function CoverFade({
         transition={{ duration: 0.8, ease: 'easeInOut' }}
         className={`absolute inset-0 size-full object-cover ${className}`}
       />
-    </AnimatePresence>
+    </AnimatePresence>)
   )
 }

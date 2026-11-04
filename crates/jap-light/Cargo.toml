@@ -17,6 +17,8 @@ serde_json.workspace = true
 parking_lot.workspace = true
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 base64 = "0.22"
+sys-locale = "0.3.2"
+regex = "1"
 
 [lints]
 workspace = true

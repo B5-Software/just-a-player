@@ -69,6 +69,33 @@ pub fn viz_layout() -> VizLayout {
     }
 }
 
+#[napi]
+pub fn logical_drives() -> Vec<String> {
+    #[cfg(windows)]
+    {
+        use windows::Win32::Storage::FileSystem::GetLogicalDrives;
+        let drives = unsafe { GetLogicalDrives() };
+        (0..26)
+            .filter(|index| drives & (1 << index) != 0)
+            .map(|index| format!("{}:\\", char::from(b'A' + index)))
+            .collect()
+    }
+    #[cfg(not(windows))]
+    Vec::new()
+}
+
+/// Finish only the UI process after its quit handlers and audio handoff have
+/// completed. Windows can otherwise wait for a detached Electron Node host in
+/// its process teardown. The host and native window have independent lifetimes.
+#[napi]
+pub fn finish_ui_handoff() {
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::System::Threading::{GetCurrentProcess, TerminateProcess};
+        let _ = TerminateProcess(GetCurrentProcess(), 0);
+    }
+}
+
 /// 文件内嵌的封面图；没有封面或无法解析时返回 `null`。
 #[napi(object)]
 pub struct CoverImage {
@@ -86,6 +113,10 @@ pub fn read_cover_image(path: String) -> Option<CoverImage> {
 
 #[napi]
 impl JapEngine {
+    #[napi]
+    pub fn set_visualization_enabled(&self, enabled: bool) {
+        self.inner.set_visualization_enabled(enabled);
+    }
     /// `on_event` 会在 Node 主线程收到 JSON 序列化后的引擎事件。
     #[napi(constructor)]
     pub fn new(

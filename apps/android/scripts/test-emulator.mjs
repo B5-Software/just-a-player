@@ -109,7 +109,7 @@ try {
   assert.ok(await c.evaluate('innerWidth>innerHeight'), 'Android must start in landscape')
   report.checks.push('Forced landscape')
   await c.evaluate(
-    `__jap.useUi.getState().setOnboardingOpen(false);__jap.useSettings.getState().update({onboardingComplete:true,autoScan:false});`
+    `__jap.useUi.getState().setOnboardingOpen(false);__jap.useSettings.getState().update({language:'zh-CN',onboardingComplete:true,autoScan:false});`
   )
   await c.evaluate(
     `window.__dialogs=0;window.alert=window.confirm=window.prompt=()=>{window.__dialogs++;throw Error('Native browser dialog forbidden')};`

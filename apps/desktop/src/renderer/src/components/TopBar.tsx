@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import {
   ArrowsIn,
   ArrowsOut,
@@ -25,8 +26,9 @@ const iconButton =
 
 /** 左上角的品牌标志：三根不等高的声波条，颜色跟随强调色。 */
 function Logo(): React.JSX.Element {
+  useLocale()
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden>
+    ui(<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden>
       <defs>
         <linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="rgb(var(--accent))" />
@@ -39,11 +41,12 @@ function Logo(): React.JSX.Element {
         <rect x="10.8" y="6.6" width="2.4" height="10.8" rx="1.2" />
         <rect x="15.4" y="9" width="2.4" height="6.6" rx="1.2" />
       </g>
-    </svg>
+    </svg>)
   )
 }
 
 function SceneSwitcher(): React.JSX.Element {
+  useLocale()
   const SCENES = useSceneRegistry((s) => s.scenes)
   const sceneId = useViz((s) => s.sceneId)
   const auto = useViz((s) => s.auto)
@@ -51,7 +54,7 @@ function SceneSwitcher(): React.JSX.Element {
   const scene = SCENES.find((s) => s.id === sceneId) ?? SCENES[0]!
 
   return (
-    <div className="flex items-center gap-3">
+    ui(<div className="flex items-center gap-3">
       <button type="button" aria-label="上一个场景" className={iconButton} onClick={() => step(-1)}>
         <CaretLeft size={16} weight="bold" />
       </button>
@@ -68,7 +71,7 @@ function SceneSwitcher(): React.JSX.Element {
       </button>
       <div className="ml-1 hidden items-center gap-1.5 2xl:flex">
         {SCENES.map((s) => (
-          <button
+          ui(<button
             key={s.id}
             type="button"
             aria-label={s.name}
@@ -77,7 +80,7 @@ function SceneSwitcher(): React.JSX.Element {
             className={`h-1.5 rounded-full transition-all ${
               s.id === sceneId ? 'w-6 bg-white' : 'w-1.5 bg-white/35 hover:bg-white/60'
             }`}
-          />
+          />)
         ))}
       </div>
       <button
@@ -90,7 +93,7 @@ function SceneSwitcher(): React.JSX.Element {
       >
         <Shuffle size={16} weight={auto ? 'bold' : 'regular'} />
       </button>
-    </div>
+    </div>)
   )
 }
 
@@ -109,6 +112,7 @@ const TOOLS: { id: PanelId; label: string; icon: typeof Waveform }[] = [
 
 /** 右上角的图标工具栏：默认只显示图标，点开才出现对应面板。 */
 function Toolbar(): React.JSX.Element {
+  useLocale()
   const queued = useVideoQueue(
     (s) => s.jobs.filter((j) => j.state === 'waiting' || j.state === 'rendering').length
   )
@@ -117,12 +121,12 @@ function Toolbar(): React.JSX.Element {
   const fullscreen = useViz((s) => s.fullscreen)
 
   return (
-    <div className="no-drag glass flex items-center gap-1 rounded-2xl p-1.5">
+    ui(<div className="no-drag glass flex items-center gap-1 rounded-2xl p-1.5">
       {TOOLS.map((tool) => {
         const active = panel === tool.id
         const Icon = tool.icon
         return (
-          <button
+          ui(<button
             key={tool.id}
             type="button"
             data-toolbar
@@ -144,7 +148,7 @@ function Toolbar(): React.JSX.Element {
                 {queued}
               </span>
             )}
-          </button>
+          </button>)
         )
       })}
       <span className="mx-1 h-5 w-px bg-line" aria-hidden />
@@ -158,15 +162,16 @@ function Toolbar(): React.JSX.Element {
       >
         {fullscreen ? <ArrowsIn size={18} weight="bold" /> : <ArrowsOut size={18} weight="bold" />}
       </button>
-    </div>
+    </div>)
   )
 }
 
 /** 顶部悬浮层：左边是品牌与场景，右边是工具栏；右侧留出系统窗口按钮的位置。 */
 export function TopBar({ visible }: { visible: boolean }): React.JSX.Element {
+  useLocale()
   const fullscreen = useViz((s) => s.fullscreen)
   return (
-    <>
+    ui(<>
       <header
         data-player-topbar
         className={`drag-region absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 px-4 pb-2 pt-3 ${window.jap.platform === 'darwin' && !fullscreen ? 'pl-28 pr-4' : 'pr-44'} transition-opacity duration-300 ${
@@ -198,6 +203,6 @@ export function TopBar({ visible }: { visible: boolean }): React.JSX.Element {
           <ArrowsIn size={16} />
         </button>
       )}
-    </>
+    </>)
   )
 }

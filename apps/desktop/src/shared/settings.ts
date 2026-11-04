@@ -47,6 +47,7 @@ export interface LyricsRotation {
 }
 
 export interface AppSettings {
+  language: 'system' | 'zh-CN' | 'en'
   androidUiScale: number
   legacyVisuals: boolean
   enabledLegacyVisuals: string[]
@@ -107,6 +108,7 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  language: 'system',
   androidUiScale: 1,
   legacyVisuals: false,
   enabledLegacyVisuals: [],
@@ -193,6 +195,7 @@ export function applySettingsPatch(base: AppSettings, patch: unknown): AppSettin
   if (typeof patch !== 'object' || patch === null) return base
   const input = patch as Record<string, unknown>
   const next: AppSettings = { ...base }
+  if (['system', 'zh-CN', 'en'].includes(String(input['language']))) next.language = input['language'] as AppSettings['language']
   for (const key of ['onboardingComplete', 'vizCustomOffset', 'hdrEnabled'] as const)
     if (isBoolean(input[key])) next[key] = input[key]
   if (

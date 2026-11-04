@@ -66,6 +66,7 @@ final class AppBridge {
     try {
       return new JSONObject()
           .put("surface", exporting ? "export" : "main")
+          .put("systemLocale", activity.getResources().getConfiguration().getLocales().get(0).toLanguageTag())
           .put("settings", new JSONObject(prefs.getString("settings", "{}")))
           .put("fonts", new JSONArray(prefs.getString("fonts", "[]")))
           .put("version", BuildConfig.VERSION_NAME)
@@ -518,6 +519,9 @@ final class AppBridge {
         .put("parent", nullable(f.getParent()))
         .put("roots", roots)
         .put("entries", entries)
+        .put("musicPermissionNeeded", activity.checkSelfPermission(
+            Build.VERSION.SDK_INT >= 33 ? android.Manifest.permission.READ_MEDIA_AUDIO
+                : android.Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
         .put("error", list == null ? "尚无此目录的读取权限，可在文件卡片中授权读取音乐，或使用应用音乐目录。" : JSONObject.NULL);
   }
 

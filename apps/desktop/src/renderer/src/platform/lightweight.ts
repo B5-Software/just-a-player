@@ -5,6 +5,9 @@ import { persistLibraryNow } from '../library'
 import { useLibrary, type SavedLibrary } from '../library/store'
 import { engine } from '../engine/client'
 import { onTrackChanged } from '../library/playback'
+import { useTheme } from '../theme/store'
+import { useSettings } from '../settings/store'
+import { useCover } from '../cover/store'
 let handoffReady: Promise<unknown> = Promise.resolve()
 async function libraryReady(): Promise<void> {
   if (useLibrary.getState().loaded) return
@@ -29,6 +32,8 @@ export async function enterLightweight(): Promise<void> {
   useLibrary.getState().rememberPosition(livePositionMs())
   const libraryJson = await persistLibraryNow()
   const player = usePlayer.getState()
+  const { themeMode, accent, autoAccent } = useSettings.getState()
+  const cover = useCover.getState()
   await window.jap.openLightweight({
     libraryJson,
     track: player.track,
@@ -38,6 +43,13 @@ export async function enterLightweight(): Promise<void> {
     output: player.output,
     dsp: useDsp.getState().config,
     externalForce: localStorage.getItem('jap.external.force') === '1',
+    appearance: {
+      themeMode,
+      accent,
+      autoAccent,
+      resolved: useTheme.getState().resolved,
+      activeAccent: autoAccent && cover.path === player.track?.path ? cover.palette?.primary : undefined,
+    },
   })
 }
 export function initLightweightHandoff(): void {
@@ -48,6 +60,13 @@ export function initLightweightHandoff(): void {
       await libraryReady()
       if (handoff.libraryJson)
         useLibrary.getState().hydrate(JSON.parse(handoff.libraryJson) as SavedLibrary)
+      if (handoff.sharedAudio) {
+        usePlayer.setState({ volume: handoff.volume, output: handoff.output })
+        useDsp.setState({ config: handoff.dsp })
+        const track = usePlayer.getState().track
+        if (track) onTrackChanged(track)
+        return
+      }
       usePlayer.getState().setVolume(handoff.volume)
       usePlayer.getState().setOutput(handoff.output)
       useDsp.getState().update(handoff.dsp)

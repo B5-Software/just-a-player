@@ -1,14 +1,11 @@
+use crate::i18n::{tr, tr_text};
 use crate::model::{METER_NAMES, METERS, Player, now_id, title};
-use egui::{self, Color32 as C, FontId, RichText, Sense, Stroke, Vec2, pos2, vec2};
+use crate::theme::{self, colors};
+use egui::{self, FontId, RichText, Sense, Stroke, Vec2, pos2, vec2};
 use jap_core::{Command, OutputApi, PlaybackState, Query};
 use serde_json::json;
 use std::{path::PathBuf, sync::Arc};
-pub const ACCENT: C = C::from_rgb(181, 161, 244);
-const INK: C = C::from_rgb(236, 232, 245);
-const MUTED: C = C::from_rgb(155, 149, 172);
-const PANEL: C = C::from_rgb(34, 31, 45);
 pub fn setup(ctx: &egui::Context) {
-    ctx.set_theme(egui::ThemePreference::Dark);
     let mut fonts = egui::FontDefinitions::empty();
     for (name, bytes) in [
         (
@@ -32,36 +29,18 @@ pub fn setup(ctx: &egui::Context) {
             .push(name.into());
     }
     ctx.set_fonts(fonts);
-    let mut style = (*ctx.global_style()).clone();
-    style.visuals = egui::Visuals::dark();
-    style.visuals.panel_fill = C::from_rgb(19, 18, 26);
-    style.visuals.window_fill = PANEL;
-    style.visuals.window_corner_radius = egui::CornerRadius::same(20);
-    style.visuals.selection.bg_fill = ACCENT.gamma_multiply(0.3);
-    style.visuals.widgets.active.bg_fill = ACCENT.gamma_multiply(0.5);
-    style.visuals.widgets.active.weak_bg_fill = ACCENT.gamma_multiply(0.5);
-    style.visuals.widgets.inactive.bg_fill = C::from_rgb(46, 41, 61);
-    style.visuals.widgets.inactive.weak_bg_fill = C::from_rgb(46, 41, 61);
-    style.visuals.widgets.hovered.bg_fill = C::from_rgb(66, 55, 86);
-    style.visuals.widgets.hovered.weak_bg_fill = C::from_rgb(66, 55, 86);
-    style.visuals.widgets.inactive.corner_radius = egui::CornerRadius::same(12);
-    style.visuals.override_text_color = Some(INK);
-    style.spacing.item_spacing = vec2(12., 10.);
-    style.spacing.button_padding = vec2(16., 10.);
-    style.animation_time = 0.;
-    style
-        .text_styles
-        .insert(egui::TextStyle::Body, FontId::proportional(16.));
-    style
-        .text_styles
-        .insert(egui::TextStyle::Button, FontId::proportional(16.));
-    style
-        .text_styles
-        .insert(egui::TextStyle::Small, FontId::proportional(12.));
-    ctx.set_style_of(egui::Theme::Dark, style);
 }
 fn remember(p: &mut Player, id: &str, r: &egui::Response) {
-    if r.has_focus() && ["search", "import-path", "list-name"].contains(&id) {
+    if r.has_focus()
+        && [
+            "search",
+            "import-path",
+            "list-name",
+            "radio-address",
+            "radio-name",
+        ]
+        .contains(&id)
+    {
         p.focused_text = id.into();
     }
     let r = r.rect;
@@ -69,11 +48,62 @@ fn remember(p: &mut Player, id: &str, r: &egui::Response) {
         .insert(id.into(), json!([r.min.x, r.min.y, r.width(), r.height()]));
 }
 fn button(ui: &mut egui::Ui, p: &mut Player, id: &str, label: &str) -> bool {
-    let r = ui.button(label);
+    if matches!(
+        id,
+        "play" | "previous" | "next" | "settings" | "import" | "reset" | "radio"
+    ) {
+        let width = if p.mini {
+            36.
+        } else if id == "play" {
+            54.
+        } else {
+            40.
+        };
+        return icon_button(ui, p, id, label, width);
+    }
+    let r = ui.button(tr(label));
     remember(p, id, &r);
     r.clicked()
 }
+pub fn icon_button(ui: &mut egui::Ui, p: &mut Player, id: &str, label: &str, width: f32) -> bool {
+    let palette = colors(ui);
+    let primary = id == "play";
+    let height = if p.mini { 26. } else { 38. };
+    let mut button = egui::Button::new("").corner_radius(if primary { 19 } else { 12 });
+    if primary {
+        button = button.fill(palette.accent);
+    }
+    let response = ui
+        .add_sized([width, height], button)
+        .on_hover_text(tr(label));
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
+    });
+    remember(p, id, &response);
+    crate::icons::draw(
+        id,
+        label,
+        ui.painter(),
+        response.rect.center(),
+        if primary {
+            palette.on_accent
+        } else {
+            palette.ink
+        },
+    );
+    if response.has_focus() {
+        ui.painter().rect_stroke(
+            response.rect.expand(1.),
+            12,
+            Stroke::new(1.5_f32, palette.accent_text),
+            egui::StrokeKind::Outside,
+        );
+    }
+    response.clicked()
+}
 fn switch(ui: &mut egui::Ui, p: &mut Player, id: &str, label: &str, on: bool) -> bool {
+    let label = tr(label);
+    let palette = colors(ui);
     let (r, response) = ui.allocate_exact_size(vec2(ui.available_width(), 38.), Sense::click());
     remember(p, id, &response);
     let painter = ui.painter();
@@ -82,15 +112,11 @@ fn switch(ui: &mut egui::Ui, p: &mut Player, id: &str, label: &str, on: bool) ->
         egui::Align2::LEFT_CENTER,
         label,
         FontId::proportional(15.),
-        INK,
+        palette.ink,
     );
     let track =
         egui::Rect::from_min_size(pos2(r.right() - 50., r.center().y - 12.), vec2(48., 24.));
-    painter.rect_filled(
-        track,
-        12.,
-        if on { ACCENT } else { C::from_rgb(67, 62, 78) },
-    );
+    painter.rect_filled(track, 12., if on { palette.accent } else { palette.line });
     painter.circle_filled(
         pos2(
             if on {
@@ -101,24 +127,25 @@ fn switch(ui: &mut egui::Ui, p: &mut Player, id: &str, label: &str, on: bool) ->
             track.center().y,
         ),
         9.,
-        if on { C::from_rgb(35, 28, 52) } else { INK },
+        if on { palette.on_accent } else { palette.ink },
     );
     response.clicked()
 }
 fn drag_slider(ui: &mut egui::Ui, p: &mut Player, id: &str, value: f32, width: f32) -> Option<f32> {
+    let palette = colors(ui);
     let (r, response) = ui.allocate_exact_size(vec2(width.max(32.), 32.), Sense::drag());
     remember(p, id, &response);
     let y = r.center().y;
     let x = r.left() + value.clamp(0., 1.) * r.width();
     ui.painter().line_segment(
         [pos2(r.left(), y), pos2(r.right(), y)],
-        Stroke::new(5.0_f32, C::from_rgb(58, 52, 73)),
+        Stroke::new(5.0_f32, palette.line),
     );
     ui.painter().line_segment(
         [pos2(r.left(), y), pos2(x, y)],
-        Stroke::new(5.0_f32, ACCENT),
+        Stroke::new(5.0_f32, palette.accent),
     );
-    ui.painter().circle_filled(pos2(x, y), 6., ACCENT);
+    ui.painter().circle_filled(pos2(x, y), 6., palette.accent);
     let deliberate = response.dragged()
         && ui.input(|i| {
             i.pointer
@@ -178,35 +205,40 @@ fn scalar(
 fn clock(ms: u64) -> String {
     format!("{}:{:02}", ms / 60000, (ms / 1000) % 60)
 }
-fn frame() -> egui::Frame {
+fn frame(ui: &egui::Ui) -> egui::Frame {
+    let palette = colors(ui);
     egui::Frame::new()
-        .fill(PANEL)
+        .fill(palette.panel)
+        .stroke(Stroke::new(1_f32, palette.line))
         .corner_radius(20)
         .inner_margin(18)
 }
 pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
+    crate::i18n::configure(&p.settings);
     p.viewport = [
         ui.ctx().content_rect().width(),
         ui.ctx().content_rect().height(),
     ];
     p.controls.clear();
     p.tick(ui.ctx());
+    theme::apply(ui, p);
+    let palette = colors(ui);
     if p.mini {
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(PANEL).inner_margin(8))
+            .frame(egui::Frame::new().fill(palette.panel).inner_margin(8))
             .show_inside(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 3.;
                 ui.label(
                     RichText::new("JUST A PLAYER")
                         .size(11.)
-                        .color(ACCENT)
+                        .color(palette.accent_text)
                         .strong(),
                 );
                 let name = p
                     .current
                     .as_ref()
                     .map(|t| title(&json!(t)))
-                    .unwrap_or_else(|| "选择一首音乐".into());
+                    .unwrap_or_else(|| tr("选择一首音乐").into());
                 ui.add(egui::Label::new(RichText::new(name).size(13.)).truncate());
                 ui.horizontal(|ui| {
                     ui.style_mut()
@@ -214,23 +246,18 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
                         .insert(egui::TextStyle::Button, FontId::proportional(12.));
                     ui.spacing_mut().button_padding = vec2(4., 3.);
                     ui.spacing_mut().item_spacing.x = 4.;
-                    let compact = |ui: &mut egui::Ui, p: &mut Player, id: &str, text: &str| {
-                        let r = ui.button(RichText::new(text).size(11.));
-                        remember(p, id, &r);
-                        r.clicked()
-                    };
-                    if compact(ui, p, "previous", "上一首") {
+                    if button(ui, p, "previous", tr("上一首")) {
                         p.neighbour(-1, false);
                     }
-                    let label = if p.state == PlaybackState::Playing {
-                        "暂停"
+                    let label = if p.transport_playing() {
+                        tr("暂停")
                     } else {
-                        "播放"
+                        tr("播放")
                     };
-                    if compact(ui, p, "play", label) {
+                    if button(ui, p, "play", label) {
                         p.toggle();
                     }
-                    if compact(ui, p, "next", "下一首") {
+                    if button(ui, p, "next", tr("下一首")) {
                         p.neighbour(1, false);
                     }
                 });
@@ -244,7 +271,7 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
     egui::CentralPanel::default()
         .frame(
             egui::Frame::new()
-                .fill(C::from_rgb(19, 18, 26))
+                .fill(palette.canvas)
                 .inner_margin(if small { 10 } else { 22 }),
         )
         .show_inside(ui, |ui| {
@@ -258,23 +285,35 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
                     );
                     if !small {
                         ui.label(
-                            RichText::new("NATIVE · 让音乐成为主角")
+                            RichText::new(tr("NATIVE · 让音乐成为主角"))
                                 .size(11.)
-                                .color(MUTED),
+                                .color(palette.muted),
                         );
                     }
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if p.can_return && button(ui, p, "full", "完整模式") {
+                    if p.can_return && button(ui, p, "full", tr("完整模式")) {
                         let handoff = p.handoff();
                         p.actions
                             .push(json!({"type":"returnFull","handoff":handoff}));
                     }
-                    if !small && button(ui, p, "settings", "设置") {
+                    if !small && button(ui, p, "settings", tr("设置")) {
                         p.dialog = "settings".into();
                     }
-                    if !small && button(ui, p, "import", "导入音乐") {
+                    if !small && button(ui, p, "import", tr("导入音乐")) {
                         p.dialog = "import".into();
+                    }
+                    if !small && button(ui, p, "radio", tr("在线电台")) {
+                        p.dialog = "radio".into();
+                    }
+                    let playlist_label = if p.prefs["playlistCollapsed"] == true {
+                        tr("展开列表")
+                    } else {
+                        tr("收起列表")
+                    };
+                    if !small && button(ui, p, "playlist-toggle", playlist_label) {
+                        p.prefs["playlistCollapsed"] = json!(p.prefs["playlistCollapsed"] != true);
+                        p.persist();
                     }
                 });
             });
@@ -287,15 +326,31 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
                     vec2(ui.available_width(), body_height),
                     egui::Layout::left_to_right(egui::Align::Min),
                     |ui| {
-                        if !small && ui.available_width() > 700. {
+                        if !small
+                            && ui.available_width() > 700.
+                            && p.prefs["playlistCollapsed"] != true
+                        {
                             let side = (ui.available_width() * 0.28).clamp(220., 330.);
                             ui.allocate_ui_with_layout(
                                 vec2(side, body_height),
                                 egui::Layout::top_down(egui::Align::Min),
                                 |ui| {
-                                    frame().show(ui, |ui| {
+                                    frame(ui).show(ui, |ui| {
                                         ui.set_width((side - 36.).max(180.));
                                         ui.set_height((body_height - 36.).max(20.));
+                                        let external = matches!(
+                                            p.external_state["phase"].as_str(),
+                                            Some("routing" | "ready")
+                                        );
+                                        if external && p.prefs["externalLocalQueue"] != true {
+                                            external_queue(ui, p, body_height);
+                                            return;
+                                        }
+                                        if external
+                                            && button(ui, p, "external-queue", tr("网易云播放队列"))
+                                        {
+                                            p.prefs["externalLocalQueue"] = json!(false);
+                                        }
                                         let lists: Vec<_> = p.library["lists"]
                                             .as_array()
                                             .into_iter()
@@ -308,7 +363,7 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
                                                 lists
                                                     .get(current)
                                                     .and_then(|l| l["name"].as_str())
-                                                    .unwrap_or("默认列表"),
+                                                    .unwrap_or(tr("默认列表")),
                                             )
                                             .width(ui.available_width() - 50.)
                                             .show_ui(ui, |ui| {
@@ -316,7 +371,9 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
                                                     if ui
                                                         .selectable_label(
                                                             list["id"] == p.library["activeListId"],
-                                                            list["name"].as_str().unwrap_or("列表"),
+                                                            list["name"]
+                                                                .as_str()
+                                                                .unwrap_or(tr("列表")),
                                                         )
                                                         .clicked()
                                                     {
@@ -326,12 +383,12 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
                                                     }
                                                 }
                                             });
-                                        if button(ui, p, "new-list", "＋ 新建列表") {
+                                        if button(ui, p, "new-list", tr("＋ 新建列表")) {
                                             p.dialog = "new-list".into();
                                         }
                                         let r = ui.add(
                                             egui::TextEdit::singleline(&mut p.search)
-                                                .hint_text("搜索歌曲、歌手…")
+                                                .hint_text(tr("搜索歌曲、歌手…"))
                                                 .desired_width(ui.available_width()),
                                         );
                                         remember(p, "search", &r);
@@ -370,9 +427,9 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
                                                         egui::Button::new(
                                                             RichText::new(text).color(
                                                                 if is_current {
-                                                                    ACCENT
+                                                                    palette.accent
                                                                 } else {
-                                                                    INK
+                                                                    palette.ink
                                                                 },
                                                             ),
                                                         )
@@ -385,9 +442,12 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
                                                 }
                                             });
                                         ui.label(
-                                            RichText::new(format!("{} 首歌曲", items.len()))
-                                                .size(11.)
-                                                .color(MUTED),
+                                            RichText::new(tr_text(format!(
+                                                "{} 首歌曲",
+                                                items.len()
+                                            )))
+                                            .size(11.)
+                                            .color(palette.muted),
                                         );
                                     });
                                 },
@@ -422,51 +482,65 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
                     },
                 );
                 ui.add_space(10.);
-                frame().show(ui, |ui| {
+                frame(ui).show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.horizontal(|ui| {
-                        if button(ui, p, "previous", "上一首") {
+                        if button(ui, p, "previous", tr("上一首")) {
                             p.neighbour(-1, false);
                         }
-                        let label = if p.state == PlaybackState::Playing {
-                            "暂停"
+                        let label = if p.transport_playing() {
+                            tr("暂停")
                         } else {
-                            "播放"
+                            tr("播放")
                         };
-                        let r = ui.add(
-                            egui::Button::new(RichText::new(label).color(C::from_rgb(30, 24, 44)))
-                                .fill(ACCENT)
-                                .min_size(vec2(74., 38.)),
-                        );
-                        remember(p, "play", &r);
-                        if r.clicked() {
+                        if button(ui, p, "play", label) {
                             p.toggle();
                         }
-                        if button(ui, p, "next", "下一首") {
+                        if button(ui, p, "next", tr("下一首")) {
                             p.neighbour(1, false);
                         }
                         if !small {
                             ui.add_space(10.);
-                            ui.label(RichText::new(clock(p.position)).size(12.).color(MUTED));
-                            let duration =
-                                p.current.as_ref().and_then(|t| t.duration_ms).unwrap_or(0);
-                            let width = (ui.available_width() - 230.).max(90.);
-                            if let Some(v) = drag_slider(
-                                ui,
-                                p,
-                                "seek",
-                                if duration > 0 {
-                                    p.position as f32 / duration as f32
-                                } else {
-                                    0.
-                                },
-                                width,
-                            ) {
-                                p.command(Command::Seek {
-                                    position_ms: (v * duration as f32) as u64,
-                                });
+                            let radio = p
+                                .current
+                                .as_ref()
+                                .is_some_and(|track| jap_decode::radio::is_url(&track.path));
+                            if radio {
+                                ui.label(
+                                    RichText::new(tr("●  在线电台 · 直播流"))
+                                        .size(13.)
+                                        .color(palette.accent_text),
+                                );
+                            } else {
+                                ui.label(
+                                    RichText::new(clock(p.position))
+                                        .size(12.)
+                                        .color(palette.muted),
+                                );
+                                let duration =
+                                    p.current.as_ref().and_then(|t| t.duration_ms).unwrap_or(0);
+                                let width = (ui.available_width() - 230.).max(90.);
+                                if let Some(v) = drag_slider(
+                                    ui,
+                                    p,
+                                    "seek",
+                                    if duration > 0 {
+                                        p.position as f32 / duration as f32
+                                    } else {
+                                        0.
+                                    },
+                                    width,
+                                ) {
+                                    p.command(Command::Seek {
+                                        position_ms: (v * duration as f32) as u64,
+                                    });
+                                }
+                                ui.label(
+                                    RichText::new(clock(duration))
+                                        .size(12.)
+                                        .color(palette.muted),
+                                );
                             }
-                            ui.label(RichText::new(clock(duration)).size(12.).color(MUTED));
                             if let Some(v) = drag_slider(ui, p, "volume", p.volume, 78.) {
                                 p.volume = v;
                                 p.command(Command::SetVolume { gain: v });
@@ -474,7 +548,7 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
                             ui.label(
                                 RichText::new(format!("{}%", (p.volume * 100.).round())).size(12.),
                             );
-                            if button(ui, p, "reset", "重置") {
+                            if button(ui, p, "reset", tr("重置")) {
                                 p.command(Command::ResetBuffer);
                             }
                         }
@@ -486,15 +560,15 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
         dialog(ui.ctx(), p);
     }
     if let Some(error) = p.error.clone() {
-        egui::Window::new("播放提示")
+        egui::Window::new(tr("播放提示"))
             .id(egui::Id::new("native-error"))
             .collapsible(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO)
             .default_width(480.)
             .show(ui.ctx(), |ui| {
-                ui.label(error);
-                if button(ui, p, "dismiss-error", "知道了") {
+                ui.label(tr_text(error));
+                if button(ui, p, "dismiss-error", tr("知道了")) {
                     p.error = None;
                 }
             });
@@ -509,7 +583,90 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
     ui.ctx()
         .request_repaint_after(std::time::Duration::from_millis(delay));
 }
+
+fn external_queue(ui: &mut egui::Ui, p: &mut Player, height: f32) {
+    let snapshot = p.external_state["snapshot"].clone();
+    let queue = &snapshot["queue"];
+    ui.label(RichText::new(queue["name"].as_str().unwrap_or(tr("网易云播放队列"))).strong());
+    if button(ui, p, "local-queue", tr("本地播放列表")) {
+        p.prefs["externalLocalQueue"] = json!(true);
+    }
+    let modes = [
+        ("off", tr("顺序播放"), "repeatOff"),
+        ("all", tr("列表循环"), "repeatAll"),
+        ("one", tr("单曲循环"), "repeatOne"),
+        ("shuffle", tr("随机播放"), "shuffleOn"),
+    ];
+    let mode = snapshot["mode"].as_str().unwrap_or("all");
+    egui::ComboBox::from_id_salt("external-mode")
+        .selected_text(
+            modes
+                .iter()
+                .find(|m| m.0 == mode)
+                .map(|m| m.1)
+                .unwrap_or(tr("客户端模式")),
+        )
+        .show_ui(ui, |ui| {
+            for (id, label, action) in modes {
+                if ui.selectable_label(id == mode, label).clicked() {
+                    p.external_request(action);
+                }
+            }
+        });
+    ui.add(
+        egui::TextEdit::singleline(&mut p.search)
+            .hint_text(tr("搜索歌曲、歌手…"))
+            .desired_width(ui.available_width()),
+    );
+    let items: Vec<_> = queue["items"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .filter(|(_, item)| {
+            format!(
+                "{} {}",
+                item["title"].as_str().unwrap_or(""),
+                item["artist"].as_str().unwrap_or("")
+            )
+            .to_lowercase()
+            .contains(&p.search.to_lowercase())
+        })
+        .collect();
+    egui::ScrollArea::vertical()
+        .id_salt("external-playlist")
+        .max_height((height - 220.).max(70.))
+        .show_rows(ui, 46., items.len(), |ui, rows| {
+            for row in rows {
+                let (index, item) = items[row];
+                let response = ui.add_sized(
+                    [ui.available_width(), 46.],
+                    egui::Button::new(format!(
+                        "{:02}  {}",
+                        index + 1,
+                        item["title"].as_str().unwrap_or("")
+                    ))
+                    .selected(item["id"] == snapshot["track"]["id"]),
+                );
+                remember(p, &format!("external-track-{index}"), &response);
+                if response.clicked()
+                    && let Some(connection) = &p.external_connection
+                    && let Err(error) = connection.request("playIndex", Some(index as u64), false)
+                {
+                    p.error = Some(error);
+                }
+            }
+        });
+    ui.label(
+        RichText::new(tr_text(format!(
+            "{} 首歌曲",
+            queue["total"].as_u64().unwrap_or(0)
+        )))
+        .small(),
+    );
+}
 fn now_playing(ui: &mut egui::Ui, p: &mut Player, mini: bool) {
+    let palette = colors(ui);
     let track = p
         .current
         .as_ref()
@@ -539,13 +696,17 @@ fn now_playing(ui: &mut egui::Ui, p: &mut Player, mini: bool) {
         ui.add_space(12.);
         ui.vertical(|ui| {
             if !mini {
-                ui.label(RichText::new("YOUR MUSIC, SIMPLY.").color(ACCENT).size(11.));
+                ui.label(
+                    RichText::new("YOUR MUSIC, SIMPLY.")
+                        .color(palette.accent_text)
+                        .size(11.),
+                );
                 ui.add_space(8.);
             }
             let name = if track.is_null() {
                 p.library["lists"][p.active()]["name"]
                     .as_str()
-                    .unwrap_or("默认列表")
+                    .unwrap_or(tr("默认列表"))
                     .to_owned()
             } else {
                 title(&track)
@@ -560,35 +721,37 @@ fn now_playing(ui: &mut egui::Ui, p: &mut Player, mini: bool) {
             );
             ui.label(
                 RichText::new(track["artist"].as_str().unwrap_or(if track.is_null() {
-                    "选择音乐，开始聆听"
+                    tr("选择音乐，开始聆听")
                 } else {
-                    "本地音乐"
+                    track["album"].as_str().unwrap_or(tr("本地音乐"))
                 }))
-                .color(MUTED),
+                .color(palette.muted),
             );
             if !mini {
                 ui.add_space(8.);
                 if let Some(t) = &p.current {
                     ui.label(
                         RichText::new(format!(
-                            "{} · {:.1} kHz · {} bit",
+                            "{} · {:.1} kHz{}",
                             t.codec,
                             t.format.sample_rate as f64 / 1000.,
-                            t.format.bits.unwrap_or(0)
+                            t.format
+                                .bits
+                                .map_or_else(String::new, |bits| format!(" · {bits} bit"))
                         ))
                         .size(12.)
-                        .color(MUTED),
+                        .color(palette.muted),
                     );
                 }
                 if let Some(signal) = &p.signal {
                     ui.label(
                         RichText::new(match signal.verdict {
-                            jap_core::Verdict::BitPerfect => "Bit-Perfect · 位精确",
-                            jap_core::Verdict::SystemMixed => "系统混音 · 非 Bit-Perfect",
-                            _ => "已处理 · 非 Bit-Perfect",
+                            jap_core::Verdict::BitPerfect => tr("Bit-Perfect · 位精确"),
+                            jap_core::Verdict::SystemMixed => tr("系统混音 · 非 Bit-Perfect"),
+                            _ => tr("已处理 · 非 Bit-Perfect"),
                         })
                         .size(12.)
-                        .color(ACCENT),
+                        .color(palette.accent_text),
                     );
                 }
             }
@@ -596,8 +759,13 @@ fn now_playing(ui: &mut egui::Ui, p: &mut Player, mini: bool) {
     });
 }
 fn lyric_view(ui: &mut egui::Ui, p: &Player) {
+    let palette = colors(ui);
     if p.lyrics.is_empty() {
-        ui.label(RichText::new("静下来，听一首。").size(24.).color(MUTED));
+        ui.label(
+            RichText::new(tr("静下来，听一首。"))
+                .size(24.)
+                .color(palette.muted),
+        );
         return;
     }
     let index = p
@@ -613,7 +781,7 @@ fn lyric_view(ui: &mut egui::Ui, p: &Player) {
                 0.,
                 egui::TextFormat {
                     font_id: FontId::proportional(27. * size),
-                    color: INK,
+                    color: palette.ink,
                     ..Default::default()
                 },
             );
@@ -624,7 +792,11 @@ fn lyric_view(ui: &mut egui::Ui, p: &Player) {
                     0.,
                     egui::TextFormat {
                         font_id: FontId::proportional(27. * size),
-                        color: if *at <= p.position { ACCENT } else { MUTED },
+                        color: if *at <= p.position {
+                            palette.accent_text
+                        } else {
+                            palette.muted
+                        },
                         ..Default::default()
                     },
                 );
@@ -633,27 +805,36 @@ fn lyric_view(ui: &mut egui::Ui, p: &Player) {
         ui.label(job);
     }
     if let Some(next) = p.lyrics.get(index + 1) {
-        ui.label(RichText::new(&next.text).size(19. * size).color(MUTED));
+        ui.label(
+            RichText::new(&next.text)
+                .size(19. * size)
+                .color(palette.muted),
+        );
     }
 }
 pub fn vu_position(rms: f32) -> f32 {
     ((20. * rms.abs().max(1e-8).log10() + 48.) / 48.).clamp(0., 1.)
 }
 fn meter(ui: &mut egui::Ui, p: &Player, index: usize) {
-    frame().show(ui, |ui| {
+    let palette = colors(ui);
+    frame(ui).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        ui.label(RichText::new(METER_NAMES[index]).size(12.).color(MUTED));
+        ui.label(
+            RichText::new(METER_NAMES[index])
+                .size(12.)
+                .color(palette.muted),
+        );
         let (r, _) = ui.allocate_exact_size(
             vec2(ui.available_width(), if index == 2 { 84. } else { 110. }),
             Sense::hover(),
         );
         let painter = ui.painter_at(r);
-        painter.rect_filled(r, 8., C::from_rgb(26, 23, 36));
+        painter.rect_filled(r, 8., palette.canvas);
         for i in 1..4 {
             let y = r.top() + r.height() * i as f32 / 4.;
             painter.line_segment(
                 [pos2(r.left(), y), pos2(r.right(), y)],
-                Stroke::new(1.0_f32, C::from_rgb(45, 39, 57)),
+                Stroke::new(1.0_f32, palette.line),
             );
         }
         match index {
@@ -667,7 +848,7 @@ fn meter(ui: &mut egui::Ui, p: &Player, index: usize) {
                             pos2(x + r.width() / 64. - 2., r.bottom()),
                         ),
                         1.,
-                        ACCENT,
+                        palette.accent,
                     );
                 }
             }
@@ -680,7 +861,10 @@ fn meter(ui: &mut egui::Ui, p: &Player, index: usize) {
                         )
                     })
                     .collect();
-                painter.add(egui::Shape::line(points, Stroke::new(1.5_f32, ACCENT)));
+                painter.add(egui::Shape::line(
+                    points,
+                    Stroke::new(1.5_f32, palette.accent),
+                ));
             }
             2 => {
                 for ch in 0..2 {
@@ -689,13 +873,13 @@ fn meter(ui: &mut egui::Ui, p: &Player, index: usize) {
                     painter.rect_filled(
                         egui::Rect::from_min_size(pos2(r.left(), y), vec2(r.width() * level, 16.)),
                         4.,
-                        ACCENT,
+                        palette.accent,
                     );
                     for tick in [-30., -20., -10., 0., 6., 12., 18.] {
                         let x = r.left() + (tick + 30.) / 48. * r.width();
                         painter.line_segment(
                             [pos2(x, y), pos2(x, y + 18.)],
-                            Stroke::new(1.0_f32, C::from_white_alpha(60)),
+                            Stroke::new(1.0_f32, palette.line),
                         );
                     }
                     let db = 20. * p.meter_levels[ch].abs().max(1e-8).log10();
@@ -709,15 +893,15 @@ fn meter(ui: &mut egui::Ui, p: &Player, index: usize) {
                             db.max(-99.)
                         ),
                         FontId::monospace(10.),
-                        INK,
+                        palette.ink,
                     );
                 }
                 painter.text(
                     r.right_bottom(),
                     egui::Align2::RIGHT_BOTTOM,
-                    "音源 RMS · 0 VU = −18 dBFS · 300 ms",
+                    tr("音源 RMS · 0 VU = −18 dBFS · 300 ms"),
                     FontId::proportional(10.),
-                    MUTED,
+                    palette.muted,
                 );
             }
             3 => {
@@ -725,11 +909,7 @@ fn meter(ui: &mut egui::Ui, p: &Player, index: usize) {
                 for (y, row) in p.history.iter().enumerate() {
                     for b in 0..48 {
                         let v = row[b * 128 / 48].clamp(0., 1.);
-                        let color = C::from_rgb(
-                            (35. + v * 146.) as u8,
-                            (25. + v * 118.) as u8,
-                            (55. + v * 189.) as u8,
-                        );
+                        let color = theme::mix(palette.canvas, palette.accent, v);
                         painter.rect_filled(
                             egui::Rect::from_min_size(
                                 pos2(
@@ -754,7 +934,7 @@ fn meter(ui: &mut egui::Ui, p: &Player, index: usize) {
                             r.center().y - (l + right) * r.height() * 0.4,
                         ),
                         1.,
-                        ACCENT,
+                        palette.accent,
                     );
                 }
             }
@@ -765,14 +945,15 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
     let mut open = true;
     let kind = p.dialog.clone();
     let heading = match kind.as_str() {
-        "settings" => "原生轻量模式",
-        "external" => "外部播放器 · 网易云音乐",
-        "output" => "音频输出",
-        "eq" => "DSP 与均衡器",
-        "import" => "导入音乐",
-        "new-list" => "新建列表",
-        "quality" => "音源分析",
-        _ => "设置",
+        "settings" => tr("原生轻量模式"),
+        "external" => tr("外部播放器 · 网易云音乐"),
+        "output" => tr("音频输出"),
+        "eq" => tr("DSP 与均衡器"),
+        "import" => tr("导入音乐"),
+        "radio" => tr("添加在线电台"),
+        "new-list" => tr("新建列表"),
+        "quality" => tr("音源分析"),
+        _ => tr("设置"),
     };
     egui::Window::new(heading)
         .id(egui::Id::new("native-modal"))
@@ -783,7 +964,8 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
         .default_width(500.)
         .max_height((ctx.content_rect().height() - 60.).max(180.))
         .show(ctx, |ui| {
-            if button(ui, p, "modal-close", "完成") {
+            let palette = colors(ui);
+            if button(ui, p, "modal-close", tr("完成")) {
                 p.dialog.clear();
                 p.persist();
             }
@@ -792,8 +974,35 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                 .max_height((ctx.content_rect().height() - 180.).max(100.))
                 .show(ui, |ui| {
                     match kind.as_str() {
+                        "radio" => {
+                            ui.label(RichText::new(tr("电台流地址")).color(palette.accent_text).strong());
+                            let address = ui.add(egui::TextEdit::singleline(&mut p.radio_address)
+                                .char_limit(4096).hint_text("https://…").desired_width(ui.available_width()));
+                            remember(p, "radio-address", &address);
+                            ui.label(tr("收藏名称（可选）"));
+                            let name = ui.add(egui::TextEdit::singleline(&mut p.radio_name)
+                                .char_limit(160).hint_text(tr("例如：夜间爵士")).desired_width(ui.available_width()));
+                            remember(p, "radio-name", &name);
+                            ui.label(RichText::new(tr("HTTP / HTTPS 直连音频，以及包含直连地址的 M3U 或 PLS 列表。"))
+                                .size(12.).color(palette.muted));
+                            let valid = jap_decode::radio::parse_url(p.radio_address.trim()).is_some();
+                            let save = ui.add_enabled(valid, egui::Button::new(RichText::new(tr("保存并播放")).color(palette.on_accent)).fill(palette.accent));
+                            remember(p, "radio-save", &save);
+                            if save.clicked() && p.add_radio() { p.dialog.clear(); }
+                        }
                         "settings" => {
-                            ui.label(RichText::new("Rust 绘制 · 无浏览器运行时").color(ACCENT));
+                            let mut language = p.settings["language"].as_str().unwrap_or("system").to_owned();
+                            egui::ComboBox::from_label(tr("语言"))
+                                .selected_text(match language.as_str() { "zh-CN" => "简体中文", "en" => "English", _ => tr("跟随系统") })
+                                .show_ui(ui, |ui| {
+                                    for (id, label) in [("system",tr("跟随系统")),("zh-CN","简体中文"),("en","English")] {
+                                        if ui.selectable_value(&mut language,id.to_owned(),label).changed() {
+                                            p.settings["language"] = json!(language);
+                                            p.actions.push(json!({"type":"settings","settings":p.settings}));
+                                        }
+                                    }
+                                });
+                            ui.label(RichText::new(tr("Rust 绘制 · 无浏览器运行时")).color(palette.accent_text));
                             ui.add_space(8.);
                             for (i, id) in METERS.iter().enumerate() {
                                 if switch(
@@ -807,14 +1016,14 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                                 }
                             }
                             ui.label(
-                                RichText::new("仪表默认关闭；暂停、隐藏与最小化时停止绘制。")
+                                RichText::new(tr("仪表默认关闭；暂停、隐藏与最小化时停止绘制。"))
                                     .size(12.)
-                                    .color(MUTED),
+                                    .color(palette.muted),
                             );
                             if !["android", "ohos"].contains(&p.platform.as_str()) {
                                 for (key, label) in [
-                                    ("backgroundPlayback", "后台继续播放"),
-                                    ("closeToTray", "关闭窗口后收起到托盘"),
+                                    ("backgroundPlayback", tr("后台继续播放")),
+                                    ("closeToTray", tr("关闭窗口后收起到托盘")),
                                 ] {
                                     let native_preference = key == "closeToTray";
                                     let enabled = if native_preference {
@@ -835,22 +1044,22 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                                     }
                                 }
                             }
-                            if button(ui, p, "output", "输出设备、DSD 与格式表") {
+                            if button(ui, p, "output", tr("输出设备、DSD 与格式表")) {
                                 p.dialog = "output".into();
                                 p.query(Query::ListOutputDevices { api: p.output.api });
                             }
                             if button(ui, p, "eq", "DSP / EQ") {
                                 p.dialog = "eq".into();
                             }
-                            if p.platform=="win32" && button(ui,p,"external-player","连接网易云音乐") {
+                            if p.platform=="win32" && button(ui,p,"external-player",tr("连接网易云音乐")) {
                                 p.dialog="external".into();
                             }
-                            if button(ui, p, "quality", "音源质量分析") {
+                            if button(ui, p, "quality", tr("音源质量分析")) {
                                 p.dialog = "quality".into();
                             }
                             let size = p.prefs["lyricsSize"].as_f64().unwrap_or(100.) as f32;
                             if let Some(size) =
-                                scalar(ui, p, "lyrics-size", "歌词字号 %", size, 60., 180.)
+                                scalar(ui, p, "lyrics-size", tr("歌词字号 %"), size, 60., 180.)
                             {
                                 p.prefs["lyricsSize"] = json!(size);
                                 p.persist();
@@ -859,7 +1068,7 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                                 ui,
                                 p,
                                 "awake",
-                                "播放时保持屏幕常亮",
+                                tr("播放时保持屏幕常亮"),
                                 p.settings["keepScreenAwake"] == true,
                             ) {
                                 p.settings["keepScreenAwake"] =
@@ -869,61 +1078,61 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                             }
                         }
                         "external" => {
-                            ui.label(RichText::new("原生 HiFi 通路").color(ACCENT).strong());
-                            ui.label("客户端输出进入专用黑洞，原始音频交给此窗口的 Rust 引擎。歌词、封面与系统控制同步。");
+                            ui.label(RichText::new(tr("原生 HiFi 通路")).color(palette.accent_text).strong());
+                            ui.label(tr("客户端输出进入专用黑洞，原始音频交给此窗口的 Rust 引擎。歌词、封面与系统控制同步。"));
                             let phase=p.external_state["phase"].as_str().unwrap_or("disconnected").to_owned();
                             let connected=matches!(phase.as_str(),"ready"|"routing");
                             ui.add_enabled_ui(phase!="connecting" && p.external_connection.is_some(),|ui| {
-                                if switch(ui,p,"external-connect","连接网易云音乐",connected) {
+                                if switch(ui,p,"external-connect",tr("连接网易云音乐"),connected) {
                                     p.external_request(if connected {"disconnect"}else{"connect"});
                                 }
                             });
                             ui.add_enabled_ui(!connected&&phase!="connecting",|ui| {
-                                if switch(ui,p,"external-force","强制接管",p.prefs["externalForce"]==true) {
+                                if switch(ui,p,"external-force",tr("强制接管"),p.prefs["externalForce"]==true) {
                                     p.prefs["externalForce"]=json!(p.prefs["externalForce"]!=true);p.persist();
                                 }
                             });
-                            if phase=="ready" && button(ui,p,"external-route","切换客户端到黑洞设备") {p.external_request("route");}
-                            if p.external_connection.is_none() {ui.label("需要安装包中的连接组件；开发时请从完整版进入原生模式。");}
-                            if let Some(message)=p.external_state["message"].as_str() {ui.label(RichText::new(message).size(12.).color(ACCENT));}
+                            if phase=="ready" && button(ui,p,"external-route",tr("切换客户端到黑洞设备")) {p.external_request("route");}
+                            if p.external_connection.is_none() {ui.label(tr("需要安装包中的连接组件；开发时请从完整版进入原生模式。"));}
+                            if let Some(message)=p.external_state["message"].as_str() {ui.label(RichText::new(message).size(12.).color(palette.accent_text));}
                             if connected {
                                 let packets=p.external_state["audioPackets"].as_u64().unwrap_or(0);
                                 let bytes=p.external_state["nullBytes"].as_str().and_then(|s|s.parse::<u64>().ok()).unwrap_or(0);
-                                ui.label(format!("音频包 {packets}    黑洞 {:.1} MiB",bytes as f64/1048576.));
-                                ui.label(RichText::new("仅连接时启动无界面适配进程；界面绘制、DSP、解码和硬件输出仍由 Rust 执行。").size(12.).color(MUTED));
+                                ui.label(tr_text(format!("音频包 {packets}    黑洞 {:.1} MiB",bytes as f64/1048576.)));
+                                ui.label(RichText::new(tr("仅连接时启动无界面适配进程；界面绘制、DSP、解码和硬件输出仍由 Rust 执行。")).size(12.).color(palette.muted));
                             }
                         }
                         "output" => {
                             let apis: Vec<(OutputApi, &str)> = match p.platform.as_str() {
                                 "win32" => vec![
-                                    (OutputApi::WasapiShared, "WASAPI 共享"),
-                                    (OutputApi::WasapiExclusive, "WASAPI 独占"),
+                                    (OutputApi::WasapiShared, tr("WASAPI 共享")),
+                                    (OutputApi::WasapiExclusive, tr("WASAPI 独占")),
                                     (OutputApi::Asio, "ASIO"),
                                 ],
                                 "darwin" => vec![
                                     (OutputApi::CoreAudio, "CoreAudio"),
-                                    (OutputApi::CoreAudioExclusive, "CoreAudio 独占"),
+                                    (OutputApi::CoreAudioExclusive, tr("CoreAudio 独占")),
                                 ],
                                 "linux" => vec![
-                                    (OutputApi::AlsaShared, "ALSA 共享"),
-                                    (OutputApi::AlsaExclusive, "ALSA 独占"),
+                                    (OutputApi::AlsaShared, tr("ALSA 共享")),
+                                    (OutputApi::AlsaExclusive, tr("ALSA 独占")),
                                 ],
                                 "ohos" => vec![
                                     (OutputApi::OhosShared, "OHAudio"),
-                                    (OutputApi::UsbExclusive, "USB 独占"),
+                                    (OutputApi::UsbExclusive, tr("USB 独占")),
                                 ],
                                 _ => vec![
                                     (OutputApi::AndroidShared, "AAudio"),
-                                    (OutputApi::UsbExclusive, "USB 独占"),
+                                    (OutputApi::UsbExclusive, tr("USB 独占")),
                                 ],
                             };
                             let old = p.output.clone();
-                            egui::ComboBox::from_label("音频接口")
+                            egui::ComboBox::from_label(tr("音频接口"))
                                 .selected_text(
                                     apis.iter()
                                         .find(|(a, _)| *a == p.output.api)
                                         .map(|(_, s)| *s)
-                                        .unwrap_or("默认"),
+                                        .unwrap_or(tr("默认")),
                                 )
                                 .show_ui(ui, |ui| {
                                     for (api, name) in apis {
@@ -937,16 +1146,16 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                                         }
                                     }
                                 });
-                            egui::ComboBox::from_label("设备")
+                            egui::ComboBox::from_label(tr("设备"))
                                 .selected_text(
                                     p.devices
                                         .iter()
                                         .find(|d| Some(&d.id) == p.output.device_id.as_ref())
                                         .map(|d| d.name.as_str())
-                                        .unwrap_or("系统默认"),
+                                        .unwrap_or(tr("系统默认")),
                                 )
                                 .show_ui(ui, |ui| {
-                                    ui.selectable_value(&mut p.output.device_id, None, "系统默认");
+                                    ui.selectable_value(&mut p.output.device_id, None, tr("系统默认"));
                                     for d in &p.devices {
                                         ui.selectable_value(
                                             &mut p.output.device_id,
@@ -955,13 +1164,13 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                                         );
                                     }
                                 });
-                            egui::ComboBox::from_label("DSD 输出")
+                            egui::ComboBox::from_label(tr("DSD 输出"))
                                 .selected_text(format!("{:?}", p.output.dsd_mode))
                                 .show_ui(ui, |ui| {
                                     for (mode, name) in [
                                         (jap_core::device::DsdMode::Pcm, "DSD → PCM"),
                                         (jap_core::device::DsdMode::Dop, "DoP"),
-                                        (jap_core::device::DsdMode::Native, "原生 DSD"),
+                                        (jap_core::device::DsdMode::Native, tr("原生 DSD")),
                                     ] {
                                         ui.selectable_value(&mut p.output.dsd_mode, mode, name);
                                     }
@@ -970,7 +1179,7 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                                 ui,
                                 p,
                                 "buffer",
-                                "缓冲 ms",
+                                tr("缓冲 ms"),
                                 p.output.buffer_ms as f32,
                                 10.,
                                 500.,
@@ -983,10 +1192,10 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                                 });
                                 p.persist();
                             }
-                            if p.mobile() && button(ui, p, "usb", "连接 USB DAC") {
+                            if p.mobile() && button(ui, p, "usb", tr("连接 USB DAC")) {
                                 p.actions.push(json!({"type":"usb"}));
                             }
-                            if button(ui, p, "probe-formats", "检测设备格式") {
+                            if button(ui, p, "probe-formats", tr("检测设备格式")) {
                                 p.query(Query::DeviceFormats {
                                     api: p.output.api,
                                     device_id: p.output.device_id.clone(),
@@ -994,9 +1203,9 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                             }
                             // A fixed header outside the scrollable body never overlaps rows.
                             ui.horizontal(|ui| {
-                                ui.add_sized([145., 28.], egui::Label::new("采样率"));
-                                ui.add_sized([150., 28.], egui::Label::new("位深 / 编码"));
-                                ui.label("声道");
+                                ui.add_sized([145., 28.], egui::Label::new(tr("采样率")));
+                                ui.add_sized([150., 28.], egui::Label::new(tr("位深 / 编码")));
+                                ui.label(tr("声道"));
                             });
                             egui::ScrollArea::vertical()
                                 .id_salt("format-body")
@@ -1024,17 +1233,17 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                                     ui.label(
                                         RichText::new(format!("{} · {}", n.title, n.detail))
                                             .size(12.)
-                                            .color(MUTED),
+                                            .color(palette.muted),
                                     );
                                 }
                             }
                         }
                         "eq" => {
                             if p.current.as_ref().is_some_and(|t|t.format.is_dsd()) && p.output.dsd_mode!=jap_core::device::DsdMode::Pcm && p.state!=PlaybackState::Stopped {
-                                ui.label("DSD 直通绕过 DSP；请先切换为 DSD → PCM。");
+                                ui.label(tr("DSD 直通绕过 DSP；请先切换为 DSD → PCM。"));
                                 ui.disable();
                             }
-                            if switch(ui, p, "dsp-enabled", "开启 DSP", p.dsp.enabled) {
+                            if switch(ui, p, "dsp-enabled", tr("开启 DSP"), p.dsp.enabled) {
                                 p.dsp.enabled = !p.dsp.enabled;
                                 p.command(Command::SetDsp {
                                     config: p.dsp.clone(),
@@ -1045,7 +1254,7 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                                 ui,
                                 p,
                                 "preamp",
-                                "前级 dB",
+                                tr("前级 dB"),
                                 p.dsp.preamp_db as f32,
                                 -24.,
                                 12.,
@@ -1088,8 +1297,11 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                             }
                         }
                         "import" => {
-                            ui.label("导入文件或目录。光盘镜像按原生轨道表拆分。");
-                            if p.mobile() && button(ui, p, "native-picker", "从文件管理器选择")
+                            ui.label(tr("导入文件或目录。光盘镜像按原生轨道表拆分。"));
+                            if button(ui, p, "import-radio", tr("添加在线电台")) {
+                                p.dialog = "radio".into();
+                            }
+                            if p.mobile() && button(ui, p, "native-picker", tr("从文件管理器选择"))
                             {
                                 p.actions.push(json!({"type":"importPicker"}));
                             }
@@ -1104,16 +1316,16 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                             let response = ui.add(
                                 egui::TextEdit::singleline(&mut p.import_path)
                                     .desired_width(460.)
-                                    .hint_text("音乐路径"),
+                                    .hint_text(tr("音乐路径")),
                             );
                             remember(p, "import-path", &response);
                             ui.horizontal(|ui| {
-                                if button(ui, p, "parent-folder", "上一级")
+                                if button(ui, p, "parent-folder", tr("上一级"))
                                     && let Some(parent) = PathBuf::from(&p.import_path).parent()
                                 {
                                     p.import_path = parent.to_string_lossy().into();
                                 }
-                                if button(ui, p, "import-current", "导入此路径") {
+                                if button(ui, p, "import-current", tr("导入此路径")) {
                                     p.import(vec![p.import_path.clone()]);
                                     p.dialog.clear();
                                 }
@@ -1150,7 +1362,7 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                         "new-list" => {
                             let r = ui.text_edit_singleline(&mut p.new_name);
                             remember(p, "list-name", &r);
-                            if button(ui, p, "create-list", "创建") && !p.new_name.trim().is_empty()
+                            if button(ui, p, "create-list", tr("创建")) && !p.new_name.trim().is_empty()
                             {
                                 let id = now_id();
                                 let name = p.new_name.trim().to_owned();
@@ -1165,17 +1377,17 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                             }
                         }
                         "quality" => {
-                            if p.current.is_some() && button(ui, p, "analyze", "开始分析") {
+                            if p.current.is_some() && button(ui, p, "analyze", tr("开始分析")) {
                                 p.command(Command::AnalyzeQuality {
                                     path: p.current.as_ref().unwrap().path.clone(),
                                 });
                             }
                             if let Some(q) = &p.quality {
                                 ui.heading(format!("{} / 100", q.score.unwrap_or(0)));
-                                ui.label(&q.score_explanation);
+                                ui.label(tr_text(&q.score_explanation));
                                 for f in &q.findings {
-                                    ui.strong(&f.title);
-                                    ui.label(&f.detail);
+                                    ui.strong(tr_text(&f.title));
+                                    ui.label(tr_text(&f.detail));
                                 }
                             }
                         }

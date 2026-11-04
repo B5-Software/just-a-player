@@ -18,6 +18,7 @@ export type AppDialog =
       done: (value: string | null) => void
     }
   | { kind: 'file'; id: string; request: FileDialogRequest }
+  | { kind: 'radio'; id: string; done: (value: { path: string; title: string } | null) => void }
 export const useDialogs = create<{
   queue: AppDialog[]
   add: (dialog: AppDialog) => void
@@ -54,6 +55,11 @@ export function chooseColor(initial: string): Promise<string | null> {
       initial,
       done,
     })
+  )
+}
+export function chooseRadio(): Promise<{ path: string; title: string } | null> {
+  return new Promise((done) =>
+    useDialogs.getState().add({ kind: 'radio', id: crypto.randomUUID(), done })
   )
 }
 window.jap.onDialogRequest((request) =>

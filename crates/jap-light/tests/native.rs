@@ -103,6 +103,34 @@ fn native_surface_has_no_browser_assets_or_dependencies() {
 }
 
 #[test]
+fn native_theme_tracks_system_and_accent_without_moving_the_transport() {
+    let mut s = surface("appearance");
+    s.player.settings = json!({"themeMode":"system", "accent":"#20a878", "autoAccent":false});
+    let draw = |s: &mut NativeSurface, system_theme| {
+        s.render(&json!({"width":1200,"height":800,"systemTheme":system_theme,"events":[]}));
+    };
+    draw(&mut s, "light");
+    assert!(!s.ctx.global_style().visuals.dark_mode);
+    assert!(s.pixels[0][0] > 230);
+    let play = s.player.controls["play"].clone();
+    assert!(s.pixels.iter().any(|p| p[..3] == [32, 168, 120]));
+    draw(&mut s, "dark");
+    assert!(s.ctx.global_style().visuals.dark_mode);
+    assert!(s.pixels[0][0] < 25);
+    assert_eq!(play, s.player.controls["play"]);
+    s.player.settings["themeMode"] = json!("light");
+    s.player.settings["autoAccent"] = json!(true);
+    s.player.cover_accent = Some(egui::Color32::from_rgb(219, 69, 60));
+    draw(&mut s, "dark");
+    assert!(!s.ctx.global_style().visuals.dark_mode);
+    assert!(s.pixels.iter().any(|p| p[..3] == [219, 69, 60]));
+    click(&mut s, "radio");
+    assert_eq!(s.player.dialog, "radio");
+    assert!(s.player.controls.contains_key("radio-address"));
+    assert!(!s.player.add_radio());
+}
+
+#[test]
 fn clicking_a_native_dsp_preset_enables_the_processor_and_updates_all_gains() {
     let mut s = surface("preset");
     s.player.dialog = "eq".into();

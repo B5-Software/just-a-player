@@ -28,6 +28,7 @@ export interface CoverPayload {
 }
 
 export type HostToRenderer =
+  | { kind: 'hostReady'; active: boolean }
   | { kind: 'externalState'; state: ExternalPlayerState }
   | { kind: 'externalResult'; id: number; state?: ExternalPlayerState; error?: string }
   | { kind: 'offlineResult'; id: number; frame?: Float32Array; audioPath?: string; error?: string }

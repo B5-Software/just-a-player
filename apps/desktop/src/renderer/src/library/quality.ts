@@ -1,7 +1,7 @@
 import type { TrackInfo } from '@shared/protocol/TrackInfo'
-import { pathKey, isMidiPath, discTrack, isDiscImage } from '@shared/audio'
+import { pathKey, isMidiPath, discTrack, isDiscImage, radioUrl } from '@shared/audio'
 export function siblingKey(path: string): string {
-  if (discTrack(path) || isDiscImage(path)) return pathKey(path)
+  if (discTrack(path) || isDiscImage(path) || radioUrl(path)) return pathKey(path)
   return pathKey(path).replace(/\.[^/.]+$/, '') + (isMidiPath(path) ? ':midi' : ':audio')
 }
 export function importRank(track: TrackInfo): number {

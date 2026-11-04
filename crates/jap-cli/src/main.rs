@@ -45,7 +45,7 @@ enum Cmd {
     Hash {
         path: PathBuf,
     },
-    /// 播放文件
+    /// 播放文件或 HTTP / HTTPS 在线电台
     Play {
         path: PathBuf,
         /// 使用 WASAPI 独占模式（默认共享）

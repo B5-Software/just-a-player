@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import { Select } from '../ui/Select'
 import { useEffect, useState } from 'react'
 import { engine } from '../engine/client'
@@ -37,6 +38,7 @@ const BUFFER_CHOICES = [10, 20, 40, 80] as const
 
 /** 输出设置（浮层内容）。 */
 export function OutputPanel(): React.JSX.Element {
+  useLocale()
   const output = usePlayer((s) => s.output)
   const devices = usePlayer((s) => s.devices)
   const setOutput = usePlayer((s) => s.setOutput)
@@ -90,7 +92,7 @@ export function OutputPanel(): React.JSX.Element {
   )
 
   return (
-    <div className="flex flex-col gap-4">
+    ui(<div className="flex flex-col gap-4">
       <button
         type="button"
         onClick={() => usePlayer.getState().resetBuffer()}
@@ -187,10 +189,10 @@ export function OutputPanel(): React.JSX.Element {
                   : '系统默认设备'}
             </option>
             {devices.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
+              ui(<option key={d.id} value={d.id}>
+                <span translate="no">{d.name}</span>
                 {d.isDefault ? '（默认）' : ''}
-              </option>
+              </option>)
             ))}
           </Select>
         </div>
@@ -276,7 +278,7 @@ export function OutputPanel(): React.JSX.Element {
                   {[...new Set(formats.map((f) => f.sampleRate))]
                     .sort((a, b) => a - b)
                     .map((rate) => (
-                      <tr key={rate} className="border-t border-line">
+                      ui(<tr key={rate} className="border-t border-line">
                         <td className="p-2 tabular-nums">{rate / 1000} kHz</td>
                         <td className="p-2">
                           {[
@@ -308,7 +310,7 @@ export function OutputPanel(): React.JSX.Element {
                             ),
                           ].join(' / ')}
                         </td>
-                      </tr>
+                      </tr>)
                     ))}
                 </tbody>
               </table>
@@ -336,6 +338,6 @@ export function OutputPanel(): React.JSX.Element {
           />
         )}
       </div>
-    </div>
+    </div>)
   )
 }

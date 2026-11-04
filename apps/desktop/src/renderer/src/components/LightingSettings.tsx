@@ -1,8 +1,10 @@
+import { ui, useLocale } from '../i18n'
 import { useEffect, useState } from 'react'
 import type { LightingStatus } from '@shared/lighting'
 import { useSettings } from '../settings/store'
 import { SectionTitle, SettingRow, Slider, Toggle } from '../ui/controls'
 export function LightingSettings(): React.JSX.Element {
+  useLocale()
   const enabled = useSettings((s) => s.argbEnabled),
     brightness = useSettings((s) => s.argbBrightness),
     port = useSettings((s) => s.argbPort),
@@ -28,7 +30,7 @@ export function LightingSettings(): React.JSX.Element {
     }
   }, [enabled, port])
   return (
-    <section className="flex flex-col gap-3">
+    ui(<section className="flex flex-col gap-3">
       <SectionTitle>ARGB 灯光</SectionTitle>
       <SettingRow
         title="灯光跟随强调色"
@@ -77,7 +79,7 @@ export function LightingSettings(): React.JSX.Element {
             />
           </SettingRow>
           {status.devices.map((d) => (
-            <SettingRow key={d.key} title={d.name} hint={`${d.leds} 个灯珠`}>
+            ui(<SettingRow key={d.key} title={d.name} hint={`${d.leds} 个灯珠`}>
               <Toggle
                 label={`联动 ${d.name}`}
                 checked={selected.includes('*') || selected.includes(d.key)}
@@ -92,10 +94,10 @@ export function LightingSettings(): React.JSX.Element {
                   })
                 }
               />
-            </SettingRow>
+            </SettingRow>)
           ))}
         </>
       )}
-    </section>
+    </section>)
   )
 }

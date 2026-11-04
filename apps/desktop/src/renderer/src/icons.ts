@@ -30,6 +30,7 @@ export {
   Quotes,
   Repeat,
   RepeatOnce,
+  Radio,
   Shuffle,
   SkipBack,
   SkipForward,

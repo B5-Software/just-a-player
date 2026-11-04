@@ -7,7 +7,7 @@ use symphonia::core::codecs::audio::{AudioDecoder, AudioDecoderOptions};
 use symphonia::core::errors::Error as SymError;
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, TrackType};
-use symphonia::core::io::MediaSourceStream;
+use symphonia::core::io::{MediaSource, MediaSourceStream};
 use symphonia::core::meta::{MetadataOptions, StandardTag};
 use symphonia::core::units::{Time, TimeBase};
 
@@ -42,9 +42,6 @@ impl SymphoniaSource {
         } else {
             Box::new(File::open(path)?)
         };
-        let file_len = media.byte_len();
-        let mss = MediaSourceStream::new(media, Default::default());
-
         let mut hint = Hint::new();
         if let Some(ext) = path
             .extension()
@@ -53,16 +50,28 @@ impl SymphoniaSource {
         {
             hint.with_extension(ext);
         }
+        Self::from_media(&path.to_string_lossy(), media, &hint, is_ncm, ncm_meta)
+    }
+
+    pub(crate) fn from_media(
+        path: &str,
+        media: Box<dyn MediaSource>,
+        hint: &Hint,
+        is_ncm: bool,
+        ncm_meta: Option<serde_json::Value>,
+    ) -> Result<Self> {
+        let file_len = media.byte_len();
+        let mss = MediaSourceStream::new(media, Default::default());
 
         let mut format = symphonia::default::get_probe()
             .probe(
-                &hint,
+                hint,
                 mss,
                 FormatOptions::default(),
                 MetadataOptions::default(),
             )
             .map_err(|e| match e {
-                SymError::Unsupported(_) => DecodeError::Unsupported(path.display().to_string()),
+                SymError::Unsupported(_) => DecodeError::Unsupported(path.to_owned()),
                 other => DecodeError::from(other),
             })?;
 
@@ -91,7 +100,7 @@ impl SymphoniaSource {
             .sample_rate
             .ok_or_else(|| DecodeError::Unsupported("未知采样率".into()))?;
         let channels = params.channels.as_ref().map_or(0, |c| c.count());
-        if channels == 0 {
+        if rate == 0 || !(1..=32).contains(&channels) {
             return Err(DecodeError::Unsupported("未知声道布局".into()));
         }
 
@@ -137,7 +146,7 @@ impl SymphoniaSource {
         }
 
         let info = TrackInfo {
-            path: path.display().to_string(),
+            path: path.to_owned(),
             codec: if is_ncm {
                 format!("NCM / {}", display_codec(codec_short))
             } else {

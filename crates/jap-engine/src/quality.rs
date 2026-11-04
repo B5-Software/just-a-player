@@ -22,6 +22,9 @@ pub fn start(path: String, sink: EventSink, cancel: Arc<AtomicBool>) {
 }
 
 pub fn analyze(path: &str, cancel: &AtomicBool) -> Result<Option<QualityReport>, String> {
+    if jap_decode::radio::is_url(path) {
+        return Err("在线电台直播流无法进行整曲取样分析".into());
+    }
     let mut source = jap_decode::open(Path::new(path)).map_err(|e| e.to_string())?;
     let info = source.info().clone();
     let format = source.playback_format();

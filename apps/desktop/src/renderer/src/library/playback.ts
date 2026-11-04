@@ -1,11 +1,11 @@
 import type { TrackInfo } from '@shared/protocol/TrackInfo'
-import { pathKey } from '@shared/audio'
+import { pathKey, radioUrl } from '@shared/audio'
 import { loadCover } from '../cover/store'
 import { engine } from '../engine/client'
 import { livePositionMs } from '../engine/clock'
 import { usePlayer } from '../engine/store'
 import { loadLyrics } from '../lyrics/store'
-import { externalControl, useExternal } from '../external/store'
+import { externalControl, externalOwnsTransport } from '../external/store'
 import { activeListOf, useLibrary, type LibraryState, type Playback, type TrackItem } from './store'
 
 /** 超过这个位置再点“上一首”，只是回到曲首。 */
@@ -61,6 +61,7 @@ function startPlayback(
   item: TrackItem,
   startMs = 0
 ): void {
+  if (radioUrl(item.path)) startMs = 0
   useLibrary.getState().rememberPosition(livePositionMs())
   useLibrary.getState().setPlayback({ listId, order, index })
   useLibrary.getState().rememberPosition(startMs)
@@ -101,12 +102,17 @@ export function playNeighbour(dir: 1 | -1): boolean {
 /** 位置超过 3 秒时回到曲首，否则切到上一首。 */
 export function playPrevious(): void {
   if (externalControl('previous')) return
+  const path = usePlayer.getState().track?.path
+  if (path && radioUrl(path)) {
+    playNeighbour(-1)
+    return
+  }
   if (livePositionMs() > RESTART_MS || !playNeighbour(-1)) usePlayer.getState().seek(0)
 }
 
 /** 预载下一首，让引擎无缝衔接；只在下一首真的变化时才发送。 */
 export function queueUpcoming(): void {
-  if (useExternal.getState().phase === 'routing') return
+  if (externalOwnsTransport()) return
   const state = useLibrary.getState()
   const playback = state.playback
   const next = playback ? findNeighbour(state, playback, 1, true) : null
@@ -188,7 +194,7 @@ export function onTrackChanged(track: TrackInfo): void {
   }
   lastQueued = undefined
   state.applyMeta(track.path, {
-    title: track.title,
+    ...(!radioUrl(track.path) && { title: track.title }),
     artist: track.artist,
     album: track.album,
     durationMs: track.durationMs,
@@ -201,7 +207,7 @@ export function onTrackChanged(track: TrackInfo): void {
 
 /** 智能起播或暂停：若已在播放则暂停/恢复；若停止且未选曲目，自动从当前列表首曲（或已选项）起播。 */
 export function playDefaultOrResume(): void {
-  if (externalControl(usePlayer.getState().state === 'playing' ? 'pause' : 'resume')) return
+  if (externalControl('toggle')) return
   const player = usePlayer.getState()
   if (player.state === 'playing') {
     player.togglePause()

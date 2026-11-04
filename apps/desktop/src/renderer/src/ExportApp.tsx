@@ -1,3 +1,4 @@
+import { ui, useLocale } from './i18n'
 import { useEffect } from 'react'
 import { Visualizer } from './components/Visualizer'
 import { LyricsLayer } from './lyrics/LyricsLayer'
@@ -45,13 +46,14 @@ if (window.jap.surface === 'export') {
   })
 }
 export function ExportApp(): React.JSX.Element {
+  useLocale()
   useEffect(() => {
     window.jap.videoWorkerReady()
   }, [])
   return (
-    <div className="absolute inset-0" style={{ opacity: 0 }}>
+    ui(<div className="absolute inset-0" style={{ opacity: 0 }}>
       <Visualizer />
       <LyricsLayer />
-    </div>
+    </div>)
   )
 }

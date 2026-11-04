@@ -28,7 +28,7 @@ engine.onEvent((event) => {
     localStorage.setItem(KEY, JSON.stringify(event.config))
   }
 })
-engine.onConnect(() => { if (window.jap.surface === 'main') engine.send({ type: 'setDsp', config: useDsp.getState().config }) })
+engine.onConnect((active) => { if (window.jap.surface === 'main' && !active) engine.send({ type: 'setDsp', config: useDsp.getState().config }) })
 
 export const DSP_PRESETS: { name: string; patch: Partial<DspConfig> }[] = [
   { name: '平直', patch: { ...DEFAULT_DSP, enabled: true } },

@@ -37,6 +37,8 @@ jobs:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       CARGO_BUILD_JOBS: '2'
       JAP_CI_ALLOW_GPU_FALLBACK: ${{ matrix.target.platform == 'mac' && matrix.target.arch == 'x64' && '1' || '0' }}
+      # Existing UI fixtures use Chinese labels; i18n QA explicitly overrides this.
+      JAP_E2E_LOCALE: zh-CN
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -116,6 +118,9 @@ jobs:
       - name: Themed dialogs (Windows)
         if: runner.os == 'Windows'
         run: pnpm --filter desktop test:e2e:dialogs
+      - name: System language fallback and live language switching (Windows)
+        if: runner.os == 'Windows'
+        run: node apps/desktop/scripts/e2e-i18n.mjs
       - name: Visual plugins and isolated GPU video export (Windows)
         if: runner.os == 'Windows'
         run: |
@@ -307,6 +312,7 @@ jobs:
             node apps/android/scripts/test-hdr-gpu.mjs
             node apps/android/scripts/test-hifi.mjs
             node apps/android/scripts/test-layout.mjs
+            node apps/android/scripts/test-file-browser.mjs
             node apps/android/scripts/test-touch-midi.mjs
             node scripts/test-lightweight-mobile.mjs
             node apps/android/scripts/test-release.mjs
@@ -314,7 +320,8 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           mkdir -p apps/android/release
-          cp apps/android/app/build/outputs/apk/release/app-release.apk apps/android/release/Just-A-Player-0.1.5-Android-universal-${{ matrix.midi }}.apk
+          VERSION=$(node -p "require('./apps/android/package.json').version")
+          cp apps/android/app/build/outputs/apk/release/app-release.apk apps/android/release/Just-A-Player-${VERSION}-Android-universal-${{ matrix.midi }}.apk
           cp apps/android/build/codecs/ffmpeg.tar.xz apps/android/release/android-ffmpeg-9.0.2-source.tar.xz
           cp apps/android/build/codecs/x264.tar.gz apps/android/release/android-x264-c24e06c-source.tar.gz
       - uses: actions/upload-artifact@v4

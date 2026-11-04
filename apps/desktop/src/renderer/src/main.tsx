@@ -1,4 +1,5 @@
 import './platform/android'
+import { ui } from './i18n'
 import { DialogHost } from './components/DialogHost'
 import { useDialogs } from './ui/dialog-store'
 // 字体与主题模块必须最先导入：主题会在 React 渲染前给 <html> 设好深浅色与强调色
@@ -119,9 +120,9 @@ if (surface === 'main' && !navigator.userAgent.includes('Windows') && 'mediaSess
 }
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
+  ui(<StrictMode>
     {surface === 'wallpaper' ? (
-      <GraphicsBoundary fallback={() => <WallpaperFallback />}>
+      <GraphicsBoundary fallback={() => ui(<WallpaperFallback />)}>
         <WallpaperApp />
       </GraphicsBoundary>
     ) : surface === 'tray' ? (
@@ -132,7 +133,7 @@ createRoot(document.getElementById('root')!).render(
       <App />
     )}
     {surface === 'main' && <DialogHost />}
-  </StrictMode>
+  </StrictMode>)
 )
 
 // 端到端截图脚本通过 ?e2e=1 打开该钩子来驱动界面

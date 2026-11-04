@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import { useState } from 'react'
 import { SectionTitle, SettingRow, Toggle } from '../ui/controls'
 import { useExternal } from '../external/store'
@@ -5,6 +6,7 @@ import { engine } from '../engine/client'
 import { usePlayer } from '../engine/store'
 
 export function ExternalPlayerSettings(): React.JSX.Element | null {
+  useLocale()
   const state = useExternal()
   const [busy, setBusy] = useState(false)
   const [force, setForce] = useState(() => localStorage.getItem('jap.external.force') === '1')
@@ -17,7 +19,7 @@ export function ExternalPlayerSettings(): React.JSX.Element | null {
     finally { setBusy(false) }
   }
   return (
-    <section className="flex flex-col gap-4 rounded-2xl border border-line bg-hover/40 p-4">
+    ui(<section className="flex flex-col gap-4 rounded-2xl border border-line bg-hover/40 p-4">
       <SectionTitle>外部播放器 · 网易云音乐</SectionTitle>
       <SettingRow title="连接客户端" hint="添加专用黑洞设备；原始音频、歌词、封面和控制通过本机通路同步。">
         <Toggle label="连接网易云音乐" checked={connected || state.phase === 'connecting'} disabled={busy} onChange={on => { void run(on ? 'connect' : 'disconnect') }} />
@@ -37,6 +39,6 @@ export function ExternalPlayerSettings(): React.JSX.Element | null {
         </>
       )}
       {state.message && <p role="status" className="text-xs leading-relaxed text-accent-text">{state.message}</p>}
-    </section>
+    </section>)
   )
 }

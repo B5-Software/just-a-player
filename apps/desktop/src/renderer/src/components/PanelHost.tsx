@@ -1,5 +1,6 @@
+import { ui, useLocale } from '../i18n'
 import { AnimatePresence, motion } from 'motion/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import { X } from '../icons'
 import { useUi, type PanelId } from '../ui/store'
 import { AppearancePanel } from './AppearancePanel'
@@ -54,20 +55,21 @@ const SIZES: Record<PanelId, string> = {
 }
 
 const CONTENT: Record<PanelId, React.JSX.Element> = {
-  exports: <VideoQueuePanel />,
-  video: <VideoPanel />,
-  dsp: <DspPanel />,
-  quality: <QualityPanel />,
-  signal: <SignalPathPanel />,
-  output: <OutputPanel />,
-  playlist: <PlaylistPanel />,
-  lyrics: <LyricsPanel />,
-  appearance: <AppearancePanel />,
-  settings: <SettingsPanel />
+  exports: ui(<VideoQueuePanel />),
+  video: ui(<VideoPanel />),
+  dsp: ui(<DspPanel />),
+  quality: ui(<QualityPanel />),
+  signal: ui(<SignalPathPanel />),
+  output: ui(<OutputPanel />),
+  playlist: ui(<PlaylistPanel />),
+  lyrics: ui(<LyricsPanel />),
+  appearance: ui(<AppearancePanel />),
+  settings: ui(<SettingsPanel />)
 }
 
 /** 同一时间只显示一个面板；点击面板外或按 Esc 收起。尽可能让面板中心与触发按钮对齐。 */
 export function PanelHost(): React.JSX.Element {
+  useLocale()
   const panel = useUi((s) => s.panel)
   const close = useUi((s) => s.closePanel)
   const [layout, setLayout] = useState<{ left: number; top: number; originX: number }>({
@@ -76,7 +78,7 @@ export function PanelHost(): React.JSX.Element {
     originX: 50
   })
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!panel) return
 
     const updateLayout = (): void => {
@@ -142,7 +144,7 @@ export function PanelHost(): React.JSX.Element {
   }, [panel, close])
 
   return (
-    <AnimatePresence>
+    ui(<AnimatePresence>
       {panel && (
         <motion.div
           key={panel}
@@ -174,6 +176,6 @@ export function PanelHost(): React.JSX.Element {
           </div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>)
   )
 }

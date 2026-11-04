@@ -4,6 +4,7 @@ import type { Surface, WallpaperState, SystemMediaState } from '../shared/deskto
 import type { VideoRequest, VideoQueueItem } from '../shared/video'
 
 export interface JapBridge {
+  systemLocale?: string
   openLightweight(handoff: import('../shared/lightweight').LightweightHandoff): Promise<void>
   takeLightweightHandoff(): Promise<import('../shared/lightweight').LightweightHandoff | null>
   bundledMidi: boolean
@@ -34,6 +35,7 @@ export interface JapBridge {
   takeOpenFiles(): Promise<string[]>
   onOpenFiles(callback: () => void): () => void
   requestMusicPermission?(): Promise<void>
+  onFilesChanged?(listener: () => void): () => void
   connectUsb?(): Promise<string>
   onUsbChange?(callback: (connected: boolean) => void): () => void
   onDialogRequest(

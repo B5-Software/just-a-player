@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { QualityReport } from '@shared/protocol/QualityReport'
 import { engine } from '../engine/client'
 import { usePlayer } from '../engine/store'
+import { radioUrl } from '@shared/audio'
 
 interface QualityStore {
   report: QualityReport | null; pending: string | null; error: string | null; automatic: boolean
@@ -12,7 +13,7 @@ export const useQuality = create<QualityStore>((set) => ({
   analyze: () => {
     const path = usePlayer.getState().track?.path
     if (!path) return
-    if (path.startsWith('external://')) {
+    if (path.startsWith('external://') || radioUrl(path)) {
       set({ pending: null, report: null, error: '实时路由未保存整首音频，暂不进行多位置文件取样分析。' })
       return
     }
@@ -24,7 +25,7 @@ export const useQuality = create<QualityStore>((set) => ({
 engine.onEvent((event) => {
   if (event.type === 'trackChanged') {
     useQuality.setState({ report: null, error: null, pending: null })
-    if (useQuality.getState().automatic && !event.track.path.startsWith('external://')) useQuality.getState().analyze()
+    if (useQuality.getState().automatic && !event.track.path.startsWith('external://') && !radioUrl(event.track.path)) useQuality.getState().analyze()
   } else if (event.type === 'quality' && event.report.path === usePlayer.getState().track?.path) {
     useQuality.setState({ report: event.report, pending: null, error: null })
   } else if (event.type === 'qualityError' && event.path === useQuality.getState().pending) {

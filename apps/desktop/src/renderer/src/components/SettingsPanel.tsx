@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import { Select } from '../ui/Select'
 import { useSettings } from '../settings/store'
 import { SectionTitle, SettingRow, Toggle } from '../ui/controls'
@@ -14,6 +15,7 @@ import { ExternalPlayerSettings } from './ExternalPlayerSettings'
 
 /** 设置：控件自动隐藏，以及文件与播放列表相关的行为开关。 */
 export function SettingsPanel(): React.JSX.Element {
+  useLocale()
   const [openingLight, setOpeningLight] = useState(false)
   const autoHide = useSettings((s) => s.autoHideControls)
   const sidecarLyrics = useSettings((s) => s.sidecarLyrics)
@@ -24,6 +26,7 @@ export function SettingsPanel(): React.JSX.Element {
   const fps = useSettings((s) => s.renderFps)
   const scale = useSettings((s) => s.renderScale)
   const uiScale = useSettings((s) => s.androidUiScale)
+  const language = useSettings((s) => s.language)
   const effects = useSettings((s) => s.renderEffects)
   const background = useSettings((s) => s.backgroundPlayback)
   const awake = useSettings((s) => s.keepScreenAwake)
@@ -38,7 +41,12 @@ export function SettingsPanel(): React.JSX.Element {
     wallpaperDate = useSettings((s) => s.wallpaperDate)
 
   return (
-    <div className="flex flex-col gap-6">
+    ui(<div className="flex flex-col gap-6">
+      <SettingRow title="语言" hint="默认跟随系统；未适配的系统语言使用英文。">
+        <Select aria-label="语言" value={language} onChange={e => update({language:e.target.value as 'system' | 'zh-CN' | 'en'})} className="rounded-xl bg-hover p-2 text-sm">
+          <option value="system">跟随系统</option><option value="zh-CN">简体中文</option><option value="en">English</option>
+        </Select>
+      </SettingRow>
       <SettingRow
         title="轻量模式"
         hint="切换到 Rust / egui 原生界面，无浏览器运行时。封面、歌词和播放列表保留，专业仪表各自可选。"
@@ -114,9 +122,9 @@ export function SettingsPanel(): React.JSX.Element {
             className="rounded-lg bg-hover p-2 text-xs"
           >
             {[0, 24, 30, 60, 120].map((v) => (
-              <option key={v} value={v}>
+              ui(<option key={v} value={v}>
                 {v ? `${v} FPS` : '不限制'}
-              </option>
+              </option>)
             ))}
           </Select>
         </SettingRow>
@@ -128,9 +136,9 @@ export function SettingsPanel(): React.JSX.Element {
             className="rounded-lg bg-hover p-2 text-xs"
           >
             {[0.5, 0.75, 1, 1.5, 2].map((v) => (
-              <option key={v} value={v}>
+              ui(<option key={v} value={v}>
                 {v * 100}%
-              </option>
+              </option>)
             ))}
           </Select>
         </SettingRow>
@@ -200,14 +208,14 @@ export function SettingsPanel(): React.JSX.Element {
             ['壁纸显示日期', wallpaperDate, 'wallpaperDate'],
           ] as const
         ).map(([label, checked, key]) => (
-          <SettingRow key={key} title={label}>
+          ui(<SettingRow key={key} title={label}>
             <Toggle
               label={label}
               disabled={key.startsWith('wallpaper') && window.jap.platform !== 'win32'}
               checked={checked}
               onChange={(value) => update({ [key]: value })}
             />
-          </SettingRow>
+          </SettingRow>)
         ))}
         <SettingRow
           title="控件自动隐藏"
@@ -297,6 +305,6 @@ export function SettingsPanel(): React.JSX.Element {
       <p className="pt-2 text-center text-xs text-fg-subtle">
         Just A Player {window.jap.version} · B5-Software · GPL-3.0-or-later
       </p>
-    </div>
+    </div>)
   )
 }

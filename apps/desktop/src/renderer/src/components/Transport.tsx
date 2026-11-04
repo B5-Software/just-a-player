@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import { motion } from 'motion/react'
 import { usePlayer } from '../engine/store'
 import { FolderOpen, Pause, Play, SkipBack, SkipForward } from '../icons'
@@ -14,7 +15,10 @@ import { useExternal } from '../external/store'
 const round = 'grid place-items-center rounded-full transition-colors'
 
 export function Transport({ compact = false }: { compact?: boolean }): React.JSX.Element {
-  const state = usePlayer((s) => s.state)
+  useLocale()
+  const localState = usePlayer((s) => s.state)
+  const sourceState = useExternal(s => s.phase === 'routing' || s.snapshot?.devices?.currentDevice.name === 'Just A Player HiFi Bridge (Black Hole)' ? s.snapshot?.state : null)
+  const state = sourceState ?? localState
   const hasTrack = usePlayer((s) => s.track !== null)
   const external = useExternal((s) => s.phase === 'routing' || s.snapshot?.devices?.currentDevice.name === 'Just A Player HiFi Bridge (Black Hole)')
   const hasItems = useLibrary((s) => {
@@ -36,7 +40,7 @@ export function Transport({ compact = false }: { compact?: boolean }): React.JSX
   }
 
   return (
-    <div className={`flex items-center justify-center ${compact ? 'gap-1' : 'gap-5'}`}>
+    ui(<div className={`flex items-center justify-center ${compact ? 'gap-1' : 'gap-5'}`}>
       <button
         type="button"
         aria-label="打开文件"
@@ -87,6 +91,6 @@ export function Transport({ compact = false }: { compact?: boolean }): React.JSX
       </button>
 
       {!compact && <span className="size-10" aria-hidden />}
-    </div>
+    </div>)
   )
 }

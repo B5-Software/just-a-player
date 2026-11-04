@@ -1,3 +1,4 @@
+import { ui, useLocale } from './i18n'
 import { create } from 'zustand'
 import { useEffect, useRef, useState } from 'react'
 import { Visualizer, activeVizHost } from './components/Visualizer'
@@ -55,6 +56,7 @@ function Display({
   frozen: number | null
   register: (id: number, mirror: Mirror | null) => void
 }): React.JSX.Element {
+  useLocale()
   const sceneHost = useRef<HTMLDivElement>(null),
     lyricsHost = useRef<HTMLDivElement>(null)
   const lyricsMode = useSettings((s) => s.lyricsMode)
@@ -82,7 +84,7 @@ function Display({
     }
   }, [display.id, register])
   return (
-    <section
+    ui(<section
       data-wallpaper-display={display.id}
       className="absolute overflow-hidden"
       style={{
@@ -106,11 +108,12 @@ function Display({
         {lyricsMode === '2d' && <Lyrics2D frozenTime={frozen} />}
       </div>
       <ClockOverlay wallpaper />
-    </section>
+    </section>)
   )
 }
 
 export function WallpaperApp(): React.JSX.Element {
+  useLocale()
   const wall = useWallpaper()
   const [frozen, setFrozen] = useState<number | null>(null)
   const mirrors = useRef(new Map<number, Mirror>())
@@ -198,7 +201,7 @@ export function WallpaperApp(): React.JSX.Element {
     }
   }, [wall.token, wall.live, wall.layout])
   return (
-    <div className="absolute inset-0 overflow-hidden bg-[#18152c]">
+    ui(<div className="absolute inset-0 overflow-hidden bg-[#18152c]">
       {/* Render each scene/3D lyric once. Copy it to each physical screen. */}
       <div
         data-wallpaper-source
@@ -212,20 +215,21 @@ export function WallpaperApp(): React.JSX.Element {
         <LyricsLayer />
       </div>
       {layout.displays.map((display) => (
-        <Display
+        ui(<Display
           key={display.id}
           display={display}
           layout={layout}
           frozen={frozen}
           register={register}
-        />
+        />)
       ))}
-    </div>
+    </div>)
   )
 }
 
 /** Without a GPU, keep every monitor covered and acknowledge the normal hand-off. */
 export function WallpaperFallback(): React.JSX.Element {
+  useLocale()
   const wall = useWallpaper(),
     art = useCover((state) => state.art)
   const [frozen, setFrozen] = useState<number | null>(null)
@@ -258,9 +262,9 @@ export function WallpaperFallback(): React.JSX.Element {
     }
   }, [wall.token, wall.live, art])
   return (
-    <div data-wallpaper-fallback className="absolute inset-0 overflow-hidden bg-[#312b52]">
+    ui(<div data-wallpaper-fallback className="absolute inset-0 overflow-hidden bg-[#312b52]">
       {layout.displays.map((display) => (
-        <section
+        ui(<section
           key={display.id}
           data-wallpaper-display={display.id}
           className="absolute overflow-hidden"
@@ -282,8 +286,8 @@ export function WallpaperFallback(): React.JSX.Element {
             <Lyrics2D frozenTime={frozen} />
           </div>
           <ClockOverlay wallpaper />
-        </section>
+        </section>)
       ))}
-    </div>
+    </div>)
   )
 }

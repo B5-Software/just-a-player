@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import { useEffect, useMemo, useRef } from 'react'
 import { useSettings } from '../settings/store'
 import { deriveAccent, rgbToHex } from '../theme/color'
@@ -6,13 +7,14 @@ import { useUi } from '../ui/store'
 import { Lyrics2D } from './Lyrics2D'
 import { LyricsRenderer, type LyricsStyle } from './renderer'
 import { useLyrics } from './store'
-import { PREVIEW_LYRICS } from './preview'
+import { previewLyrics } from './preview'
 export let activeLyricsRenderer: LyricsRenderer | null = null
 
 /** 歌词叠在深色舞台上：当前行用强调色的亮色版本，其余行用浅色，保证可读。 */
 const INACTIVE_TEXT = '#d9deff'
 
 function Lyrics3D(): React.JSX.Element {
+  const locale = useLocale()
   const hostRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<LyricsRenderer | null>(null)
   const text = useLyrics((s) => s.text)
@@ -71,22 +73,23 @@ function Lyrics3D(): React.JSX.Element {
 
   useEffect(() => {
     rendererRef.current?.setPreview(preview)
-    rendererRef.current?.setText(preview ? PREVIEW_LYRICS : text)
-  }, [text, preview])
+    rendererRef.current?.setText(preview ? previewLyrics() : text)
+  }, [text, preview, locale])
 
   useEffect(() => {
     rendererRef.current?.setInteractive(adjusting)
   }, [adjusting])
 
-  return <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[2]" />
+  return ui(<div ref={hostRef} className="pointer-events-none absolute inset-0 z-[2]" />)
 }
 
 export function LyricsLayer(): React.JSX.Element | null {
+  useLocale()
   const visible = useSettings((s) => s.lyricsVisible)
   const mode = useSettings((s) => s.lyricsMode)
 
   if (!visible) return null
   // Wallpaper 2D text is composed in each monitor region; 3D is rendered once.
   if (mode === '2d' && window.jap.surface === 'wallpaper') return null
-  return mode === '2d' ? <Lyrics2D /> : <Lyrics3D />
+  return mode === '2d' ? ui(<Lyrics2D />) : ui(<Lyrics3D />)
 }

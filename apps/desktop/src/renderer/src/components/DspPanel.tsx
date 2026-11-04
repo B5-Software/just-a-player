@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import { Range } from '../ui/Range'
 import { Select } from '../ui/Select'
 import { useState } from 'react'
@@ -23,8 +24,9 @@ function Slider({
   unit?: string
   onChange: (v: number) => void
 }): React.JSX.Element {
+  useLocale()
   return (
-    <label className="flex flex-col gap-2 text-xs text-fg-muted">
+    ui(<label className="flex flex-col gap-2 text-xs text-fg-muted">
       <span className="flex justify-between">
         <span>{label}</span>
         <output className="font-mono text-fg">
@@ -41,7 +43,7 @@ function Slider({
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full accent-[rgb(var(--accent))]"
       />
-    </label>
+    </label>)
   )
 }
 
@@ -66,6 +68,7 @@ function response(gains: number[], rate: number): string {
 }
 
 export function DspPanel(): React.JSX.Element {
+  useLocale()
   const config = useDsp((s) => s.config)
   const update = useDsp((s) => s.update)
   const dsd = usePlayer(
@@ -97,7 +100,7 @@ export function DspPanel(): React.JSX.Element {
     })
   })?.name ?? ''
   return (
-    <div className="flex flex-col gap-5">
+    ui(<div className="flex flex-col gap-5">
       <div className="flex items-center justify-between rounded-2xl bg-hover p-3">
         <div>
           <p className="text-sm font-semibold">音频工作室</p>
@@ -131,7 +134,7 @@ export function DspPanel(): React.JSX.Element {
             选择预置
           </option>
           {presets.map((p) => (
-            <option key={p.name} value={p.name}>{p.name}</option>
+            ui(<option key={p.name} value={p.name}>{p.name}</option>)
           ))}
         </Select>
       </label>
@@ -144,7 +147,7 @@ export function DspPanel(): React.JSX.Element {
           className="w-full rounded-xl bg-black/15"
         >
           {[16, 48, 80].map((y) => (
-            <path key={y} d={`M0,${y}H460`} stroke="currentColor" className="text-fg-muted/15" />
+            ui(<path key={y} d={`M0,${y}H460`} stroke="currentColor" className="text-fg-muted/15" />)
           ))}
           <path
             d={response(config.eqDb, rate > 1e6 ? rate / 64 : rate)}
@@ -155,7 +158,7 @@ export function DspPanel(): React.JSX.Element {
         </svg>
         <div className="grid grid-cols-10 gap-2">
           {EQ_HZ.map((hz, i) => (
-            <label key={hz} className="flex flex-col items-center gap-2 text-[10px] text-fg-muted">
+            ui(<label key={hz} className="flex flex-col items-center gap-2 text-[10px] text-fg-muted">
               <output className="font-mono text-fg">{config.eqDb[i]!.toFixed(1)}</output>
               <Range
                 aria-label={`EQ ${hz} Hz`}
@@ -173,7 +176,7 @@ export function DspPanel(): React.JSX.Element {
                 }}
               />
               <span>{hz >= 1000 ? `${hz / 1000}k` : Math.round(hz)}</span>
-            </label>
+            </label>)
           ))}
         </div>
         <Slider
@@ -255,6 +258,6 @@ export function DspPanel(): React.JSX.Element {
       <p className="text-[11px] leading-relaxed text-fg-muted">
         启用后信号链标记为“已处理”。更改约在 0.5 秒缓冲后生效；提升频段时建议保留前级余量。
       </p>
-    </div>
+    </div>)
   )
 }

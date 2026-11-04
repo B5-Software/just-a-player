@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import type { ComponentType, ReactNode } from 'react'
 import { motion } from 'motion/react'
 import { useId } from 'react'
@@ -27,11 +28,12 @@ export function Segmented<T extends string>({
   className = '',
   ...rest
 }: SegmentedProps<T>): React.JSX.Element {
+  useLocale()
   const group = useId()
   const pad = size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm'
 
   return (
-    <div
+    ui(<div
       role="radiogroup"
       aria-label={rest['aria-label']}
       className={`relative inline-flex rounded-xl bg-hover p-1 ${className}`}
@@ -40,7 +42,7 @@ export function Segmented<T extends string>({
         const active = option.value === value
         const Icon = option.icon
         return (
-          <button
+          ui(<button
             key={option.value}
             type="button"
             role="radio"
@@ -60,9 +62,9 @@ export function Segmented<T extends string>({
             )}
             {Icon && <Icon size={size === 'sm' ? 14 : 16} weight={active ? 'fill' : 'regular'} />}
             {option.label}
-          </button>
+          </button>)
         )
       })}
-    </div>
+    </div>)
   )
 }

@@ -1,4 +1,6 @@
 import { registerDialogs, showOpenDialog, showSaveDialog } from './dialogs'
+import { ensureAudioService } from './audio-service'
+import { tMain } from './i18n'
 import { writeFileSync } from 'node:fs'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -45,7 +47,7 @@ import type { Surface } from '../shared/desktop'
 import { discoverAudioTools } from './tools'
 import { installFileOpening, attachFileOpening } from './file-opening'
 import { registerSoundfonts } from './soundfonts'
-import { openLightweight, wantsLightweight, takeLightweightHandoff } from './lightweight'
+import { openLightweight, wantsLightweight, takeLightweightHandoff, isHandingOff } from './lightweight'
 
 const isDev = !app.isPackaged
 process.env['JAP_VIRTUAL_OUTPUT_PATH'] ||= isDev
@@ -80,10 +82,11 @@ function updateAwake(): void {
   }
 }
 
-function startEngine(): UtilityProcess {
+function startEngine(shared = true): UtilityProcess {
   const child = utilityProcess.fork(join(__dirname, 'engine-host.js'), [], {
     serviceName: 'Just A Player Engine',
     stdio: 'pipe',
+    env: { ...process.env, JAP_AUDIO_ENDPOINT: shared ? process.env['JAP_AUDIO_ENDPOINT'] ?? '' : '' },
   })
   child.stdout?.on('data', (chunk: Buffer) => process.stdout.write(chunk))
   child.stderr?.on('data', (chunk: Buffer) => process.stderr.write(chunk))
@@ -112,7 +115,7 @@ async function disconnectExternalPlayer(host: UtilityProcess | null): Promise<vo
 
 /** 每次页面加载都建一条新的 MessagePort 直连引擎，引擎本身不受页面刷新影响。 */
 function attachEngine(win: BrowserWindow, surface: Surface = 'main'): void {
-  const host = surface === 'export' ? (exportEngine ??= startEngine()) : (engine ??= startEngine())
+  const host = surface === 'export' ? (exportEngine ??= startEngine(false)) : (engine ??= startEngine())
   const { port1, port2 } = new MessageChannelMain()
   host.postMessage({ type: 'attach', surface }, [port1])
   if (surface === 'export') host.postMessage({ type: 'visibility', visible: false })
@@ -147,8 +150,16 @@ function registerIpc(): void {
     if (!isTrustedSender(event)) throw new Error('Untrusted sender')
     if (hasActiveVideoExports()) throw new Error('视频仍在导出，请在队列完成或取消后切换轻量模式。')
     try {
-      await disconnectExternalPlayer(engine)
-      await openLightweight(handoff, () => { engine?.kill(); engine = null })
+      await openLightweight(handoff, async () => {
+        const proxy = engine
+        if (!proxy) return
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => { proxy.kill(); resolve() }, 2000)
+          proxy.once('exit', () => { clearTimeout(timer); resolve() })
+          proxy.postMessage({ type: 'detach' })
+        })
+        if (engine === proxy) engine = null
+      })
     } catch (error) {
       if (!engine) attachEngine(BrowserWindow.fromWebContents(event.sender)!)
       throw error
@@ -157,6 +168,9 @@ function registerIpc(): void {
   registerSoundfonts(isTrustedSender)
   ipcMain.on('app:version', (event) => {
     event.returnValue = app.getVersion()
+  })
+  ipcMain.on('app:locale', (event) => {
+    event.returnValue = process.env['JAP_E2E_LOCALE'] || app.getPreferredSystemLanguages()[0] || app.getLocale()
   })
   ipcMain.on('app:bundledMidi', (event) => {
     event.returnValue =
@@ -268,11 +282,10 @@ function registerIpc(): void {
     const result = await (getWindowMode() === 'mini'
       ? dialog.showOpenDialog.bind(dialog)
       : showOpenDialog)(win, {
-      title: '选择音频文件',
+      title: tMain('选择音频文件'),
       properties: ['openFile', 'multiSelections'],
       filters: [
-        { name: '音频文件', extensions: [...AUDIO_EXTENSIONS] },
-        { name: '所有文件', extensions: ['*'] },
+          { name: tMain('音频文件'), extensions: [...AUDIO_EXTENSIONS] },
       ],
     })
     return result.canceled ? [] : result.filePaths
@@ -510,6 +523,7 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   void app.whenReady().then(async () => {
+    await ensureAudioService()
     if (wantsLightweight()) {
       try { await openLightweight(); return } catch (error) { console.error('[lightweight]', error) }
     }
@@ -527,11 +541,15 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on('window-all-closed', () => app.quit())
   app.on('before-quit', (event) => {
-    if (engine && !quitCleanupDone) {
+    if (engine && !quitCleanupDone && !isHandingOff()) {
       event.preventDefault()
       if (!quitCleanupRunning) {
         quitCleanupRunning = true
-        void disconnectExternalPlayer(engine).finally(() => { quitCleanupDone = true; app.quit() })
+        void disconnectExternalPlayer(engine).finally(() => {
+          engine?.postMessage({ type: 'audioShutdown' })
+          quitCleanupDone = true
+          setTimeout(() => app.quit(), 50)
+        })
       }
       return
     }

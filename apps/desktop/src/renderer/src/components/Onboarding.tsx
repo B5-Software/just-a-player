@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
 import { useUi } from '../ui/store'
@@ -7,6 +8,7 @@ import { Slider } from '../ui/controls'
 import { X } from '../icons'
 
 export function Onboarding(): React.JSX.Element | null {
+  useLocale()
   const open = useUi((s) => s.onboardingOpen)
   const [step, setStep] = useState(0)
   const rotation = useSettings((s) => s.lyricsRotation)
@@ -27,7 +29,7 @@ export function Onboarding(): React.JSX.Element | null {
     useSettings.getState().update({ onboardingComplete: true })
   }
   return (
-    <motion.aside
+    ui(<motion.aside
       data-onboarding
       role="dialog"
       aria-label="舞台新手指导"
@@ -72,7 +74,7 @@ export function Onboarding(): React.JSX.Element | null {
       {step === 2 && (
         <div className="mt-4 space-y-3">
           {(['x', 'y', 'z'] as const).map((axis, i) => (
-            <label key={axis} className="block text-xs text-fg-muted">
+            ui(<label key={axis} className="block text-xs text-fg-muted">
               {['俯仰', '左右转向', '平面旋转'][i]}
               <Slider
                 label={`指导旋转 ${axis.toUpperCase()}`}
@@ -87,7 +89,7 @@ export function Onboarding(): React.JSX.Element | null {
                 }
                 format={(v) => `${v}°`}
               />
-            </label>
+            </label>)
           ))}
         </div>
       )}
@@ -110,6 +112,6 @@ export function Onboarding(): React.JSX.Element | null {
       <p className="mt-3 text-[10px] text-fg-subtle">
         默认 3D 歌词 · 音量 20% · 原生画质 · 不限帧率 · HDR 关闭
       </p>
-    </motion.aside>
+    </motion.aside>)
   )
 }

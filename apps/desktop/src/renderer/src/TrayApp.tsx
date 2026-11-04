@@ -1,3 +1,4 @@
+import { ui, useLocale } from './i18n'
 import { useEffect, useState } from 'react'
 import { useSettings } from './settings/store'
 import { Play, Pause, SkipBack, SkipForward, ArrowsOut, Monitor, X } from './icons'
@@ -31,6 +32,7 @@ if (window.jap.surface === 'tray') {
   paint()
 }
 export function TrayApp(): React.JSX.Element {
+  useLocale()
   const media = useTrayMedia()
   const wallpaper = useSettings((s) => s.wallpaperEnabled)
   const action = window.jap.trayAction
@@ -47,7 +49,7 @@ export function TrayApp(): React.JSX.Element {
     }
   }, [media.cover])
   return (
-    <div
+    ui(<div
       data-tray-menu
       role="dialog"
       aria-label="播放器托盘菜单"
@@ -73,8 +75,8 @@ export function TrayApp(): React.JSX.Element {
         </div>
         <div className="min-w-0">
           <p className="text-[10px] font-semibold tracking-[0.16em] text-fg-muted">JUST A PLAYER</p>
-          <p className="mt-1 truncate text-sm font-semibold">{media.title || '准备好了'}</p>
-          <p className="mt-0.5 truncate text-xs text-fg-muted">{media.artist}</p>
+          <p translate={media.title ? 'no' : undefined} className="mt-1 truncate text-sm font-semibold">{media.title || '准备好了'}</p>
+          <p translate="no" className="mt-0.5 truncate text-xs text-fg-muted">{media.artist}</p>
         </div>
       </div>
       <div className="mb-4 flex items-center justify-center gap-5">
@@ -89,7 +91,7 @@ export function TrayApp(): React.JSX.Element {
             ['next', '下一首', SkipForward]
           ] as const
         ).map(([key, label, Icon]) => (
-          <button
+          ui(<button
             key={key}
             type="button"
             aria-label={label}
@@ -97,7 +99,7 @@ export function TrayApp(): React.JSX.Element {
             className={`grid place-items-center rounded-full ${key === 'previous' || key === 'next' ? 'size-9 hover:bg-hover' : 'size-11 bg-accent text-on-accent'}`}
           >
             <Icon size={20} weight="fill" />
-          </button>
+          </button>)
         ))}
       </div>
       <div className="flex flex-col gap-1 border-t border-line pt-2">
@@ -110,7 +112,7 @@ export function TrayApp(): React.JSX.Element {
             ['quit', '退出播放器', X]
           ] as const
         ).map(([key, label, Icon]) => (
-          <button
+          ui(<button
             key={key}
             type="button"
             onClick={() => action(key)}
@@ -118,9 +120,9 @@ export function TrayApp(): React.JSX.Element {
           >
             <Icon size={16} />
             <span>{label}</span>
-          </button>
+          </button>)
         ))}
       </div>
-    </div>
+    </div>)
   )
 }

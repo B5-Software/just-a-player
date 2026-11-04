@@ -226,6 +226,7 @@ if (native) {
       return paths[0] ? rpc('importSoundfont', { path: paths[0] }) : null
     },
     platform: harmony ? 'ohos' : 'android',
+    systemLocale: snapshot.systemLocale ?? navigator.language,
     version: snapshot.version,
     surface: snapshot.surface ?? 'main',
     initialSettings: settings,
@@ -242,6 +243,7 @@ if (native) {
       return true
     },
     requestMusicPermission: () => rpc('permission'),
+    onFilesChanged: (listener) => on('filesChanged', listener),
     connectUsb: () => rpc('connectUsb'),
     onUsbChange: (fn) => on('usb', fn),
     openAudioFiles: () =>

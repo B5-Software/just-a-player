@@ -1,4 +1,5 @@
 import type { AudioFormat } from '@shared/protocol/AudioFormat'
+import { t } from '../i18n'
 
 export function formatTime(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000))
@@ -19,12 +20,12 @@ export function describeFormat(format: AudioFormat): string {
     return `DSD${format.sampleRate / (format.sampleRate % 44100 === 0 ? 44100 : 48000)} / ${(format.sampleRate / 1e6).toFixed(4)} MHz`
   }
   const depth =
-    format.bits === null ? '有损' : `${format.bits}-bit${format.float ? ' 浮点' : ''}`
+    format.bits === null ? t('有损') : `${format.bits}-bit${format.float ? t(' 浮点') : ''}`
   return `${depth} / ${formatRate(format.sampleRate)}`
 }
 
 export function channelLabel(channels: number): string {
-  if (channels === 1) return '单声道'
-  if (channels === 2) return '立体声'
-  return `${channels} 声道`
+  if (channels === 1) return t('单声道')
+  if (channels === 2) return t('立体声')
+  return t(`${channels} 声道`)
 }

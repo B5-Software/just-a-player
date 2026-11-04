@@ -57,6 +57,10 @@ try {
   })
   await page.evaluate(() => window.__jap.engine.external('connect', undefined, true))
   await wait(() => window.__jap.useExternal.getState().snapshot?.track.id)
+  const original = await page.evaluate(() => {
+    const s=window.__jap.useExternal.getState().snapshot
+    return {id:s.track.id,position:s.positionMs,mode:s.mode,index:s.queue?.items.findIndex(item=>item.id===s.track.id)??-1}
+  })
   await wait(() => window.__jap.useExternal.getState().snapshot?.devices?.totalDevices.some(g => g.devices.some(d => d.name === 'Just A Player HiFi Bridge (Black Hole)')))
   await page.evaluate(() => window.__jap.engine.external('route'))
   if (await page.evaluate(() => window.__jap.useExternal.getState().snapshot.state !== 'playing')) {
@@ -65,6 +69,9 @@ try {
   await wait(() => window.__jap.useExternal.getState().phase === 'routing' && window.__jap.useExternal.getState().audioPackets >= 8)
   await wait(() => window.__jap.usePlayer.getState().track?.path.startsWith('external://'))
   await wait(() => !!window.__jap.useCover.getState().art)
+  const coverUrl=await page.evaluate(()=>window.__jap.useCover.getState().art.url)
+  await page.waitForTimeout(1200)
+  assert.equal(await page.evaluate(()=>window.__jap.useCover.getState().art.url),coverUrl,'unchanged cover must not reload on status polls')
   const state = await page.evaluate(() => {
     const j = window.__jap, p = j.usePlayer.getState(), e = j.useExternal.getState()
     return { title: p.track.title, sourceTitle: e.snapshot.track.title, artist: p.track.artist, sourceArtist: e.snapshot.track.artist, cover: !!j.useCover.getState().art, lyrics: !!j.useLyrics.getState().text, device: e.snapshot.devices.currentDevice.name, packets: e.audioPackets, nullBytes: e.nullBytes }
@@ -100,6 +107,31 @@ try {
   await page.evaluate(() => window.__jap.usePlayer.getState().resetBuffer())
   await page.waitForFunction(b => window.__jap.usePlayer.getState().bufferResets > b.resets && window.__jap.useExternal.getState().audioPackets > b.packets, before)
   report.checks.resetBuffer = true
+  if(process.argv.includes('--queue')) {
+    for(const [action,mode] of [['repeatOne','one'],['shuffleOn','shuffle'],['repeatAll','all']]) {
+      await page.evaluate(action=>window.__jap.engine.external(action),action)
+      await page.waitForFunction(mode=>window.__jap.useExternal.getState().snapshot.mode===mode,mode)
+    }
+    report.checks.delegatedRepeatShuffle=true
+    const target=await page.evaluate(()=>{const s=window.__jap.useExternal.getState().snapshot;return s.queue.items.map((track,index)=>({track,index})).find(item=>item.track.id!==s.track.id)})
+    assert(target,'Client queue must include another track for this opt-in test')
+    await page.evaluate(()=>window.__jap.useUi.setState({panel:'playlist'}))
+    const queue=page.getByRole('list',{name:'网易云播放队列'})
+    await queue.getByRole('listitem').filter({hasText:target.track.title}).first().click()
+    await page.waitForFunction(id=>window.__jap.usePlayer.getState().track?.path===`external://netease/${encodeURIComponent(id)}`&&window.__jap.usePlayer.getState().state==='playing',target.track.id,{timeout:30000})
+    report.checks.clientQueueSelection=true
+    const duration=target.track.durationMs
+    assert(duration>5000)
+    await page.evaluate(ms=>window.__jap.engine.external('seek',ms),duration-1200)
+    await page.waitForFunction(id=>{const j=window.__jap,s=j.useExternal.getState();return s.snapshot.track.id!==id&&s.phase==='routing'&&j.usePlayer.getState().track?.path===`external://netease/${encodeURIComponent(s.snapshot.track.id)}`&&j.usePlayer.getState().state==='playing'&&j.usePlayer.getState().position.ms>100},target.track.id,{timeout:40000})
+    report.checks.naturalNextWithoutLocalConflict=true
+    if(original.index>=0){
+      await page.evaluate(index=>window.__jap.engine.external('playIndex',index),original.index)
+      await page.waitForFunction(id=>window.__jap.useExternal.getState().snapshot.track.id===id,original.id)
+    }
+    const restoreMode={off:'repeatOff',one:'repeatOne',shuffle:'shuffleOn',all:'repeatAll'}[original.mode]
+    if(restoreMode)await page.evaluate(action=>window.__jap.engine.external(action),restoreMode)
+  }
   await page.evaluate(() => window.__jap.engine.external('pause'))
   await page.evaluate(() => window.__jap.engine.external('disconnect'))
   const cleanup = await page.evaluate(() => window.__jap.useExternal.getState())

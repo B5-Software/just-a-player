@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('jap', {
   browseFiles: (path?: string) => ipcRenderer.invoke(IPC.dialogBrowse, path),
   dialogReply: (id: string, paths: string[]) => ipcRenderer.invoke(IPC.dialogReply, id, paths),
   platform: process.platform,
+  systemLocale: ipcRenderer.sendSync('app:locale') as string,
   version: ipcRenderer.sendSync('app:version') as string,
   gpuInfo: () => ipcRenderer.invoke(IPC.gpuInfo),
   restart: () => ipcRenderer.invoke(IPC.restart),

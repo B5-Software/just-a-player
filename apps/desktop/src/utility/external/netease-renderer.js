@@ -44,6 +44,15 @@ function collect(commands, finish, forceMode) {
         else if (action === 'resume') dispatch({ type: 'playing/resume', payload: { triggerScene: 'miniBar' } });
         else if (action === 'next' || action === 'previous') dispatch({ type: p.playingMode === 'playFm' ? (action === 'next' ? 'fmPlaying/playNext' : 'fmPlaying/playPre') : 'playingList/jump2Track', payload: { flag: action === 'next' ? 1 : -1, type: 'call', triggerScene: 'miniBar' } });
         else if (action === 'seek') dispatch({ type: 'playing/setPlayingPosition', payload: { duration: Math.max(0, Math.min(Number(p.resourceDuration) || 0, c.positionMs / 1000)) } });
+        else if (action === 'playIndex') {
+            const item = state.playingList?.curPlayingList?.[c.positionMs];
+            if (!item) throw new Error('这首歌曲已不在客户端队列中');
+            dispatch({ type: 'playing/playOneTrackInPlayingList', payload: { item, switchType: 'call', flag: 0, triggerScene: 'playingList' } });
+        }
+        else if (['repeatOff','repeatAll','repeatOne','shuffleOn','shuffleOff'].includes(action)) {
+            const playingMode = {repeatOff:'playOrder',repeatAll:'playCycle',repeatOne:'playOneCycle',shuffleOn:'playRandom',shuffleOff:'playCycle'}[action];
+            dispatch({type:'playing/switchPlayingMode',payload:{playingMode,triggerScene:'miniBar',HeartBeatFlage:false}});
+        }
         else if (action === 'devices') bridge.audio.getOutputDevices().then(v => { bridge.devices = v; }, e => { bridge.deviceError = String(e); });
         else if (action === 'device') bridge.audio.setOutputDevice({ type: c.device.type, device: { id: c.device.id, name: c.device.name, deviceId: c.device.deviceId } }).catch(e => { bridge.deviceError = String(e); });
         else throw new Error('未知播放器控制指令');
@@ -60,9 +69,18 @@ function collect(commands, finish, forceMode) {
         bridge.lyricId = id;
         dispatch({ type: 'async:lyric/fetchLyric', payload: { force: true } });
     }
+    const list = state.playingList?.curPlayingList || [];
+    const queueName = String(p.curPlaying?.text || '网易云播放队列').slice(0,160);
+    const queueChanged = bridge.queueSource !== list || bridge.queueUpdate !== state.playingList?.updateNumber || bridge.queueName !== queueName;
+    bridge.queueSource = list; bridge.queueUpdate = state.playingList?.updateNumber; bridge.queueName = queueName;
     const snapshot = {
         found: true, acks, track: { id, title: String(p.resourceName || ''), artist: (p.resourceArtists || []).map(x => x.name).join(' / '), album: String(track.album?.name || track.al?.name || ''), durationMs: Math.round((Number(p.resourceDuration) || 0) * 1000), coverUrl, localPath },
         state: p.playingState === 2 ? 'playing' : p.playingState === 1 ? 'paused' : 'stopped', positionMs: Math.round((Number(bridge.progress.getValue()) || 0) * 1000), speed: Number(p.playingSpeed) || 1,
+        mode: {playOrder:'off',playCycle:'all',playOneCycle:'one',playRandom:'shuffle',playFm:'fm',playAi:'ai'}[p.playingMode] || 'all',
+        queue: queueChanged ? { name: queueName, total: list.length, truncated: list.length > 2000, items: list.slice(0,2000).map(item => {
+            const t=item.track || item.localTrack || {};
+            return {id:String(item.resourceId||item.trackId||item.id||''),title:String(t.name||t.title||item.text||'').slice(0,160),artist:(t.artists||t.ar||[]).map(a=>a.name).join(' / ').slice(0,96),album:String(t.album?.name||t.al?.name||'').slice(0,96),durationMs:Number(t.duration||t.dt||0)};
+        }) } : undefined,
         lyrics: { trackId: String(l.resourceTrackId || ''), type: l.currentUsedLyric, offset: l.offset || 0, lines: l.lyricLines || [], translation: l.tlyricLines || [], romanization: l.romaLyricLines || [], yrc: l.yrcInfo?.yrc || '' },
         devices: bridge.devices, deviceError: bridge.deviceError
     };
@@ -262,8 +280,9 @@ if(!remembered.isNull()){candidates.push(remembered);discovery='rememberedContex
 setTimeout(discoverContexts,500);
 rpc.exports = {
     command(value) {
-        if (stopped || pending.length >= 16 || !['pause','resume','next','previous','seek','devices','device'].includes(value.action)) throw new Error('控制指令无效或队列已满');
+        if (stopped || pending.length >= 16 || !['pause','resume','next','previous','seek','devices','device','playIndex','repeatOff','repeatAll','repeatOne','shuffleOn','shuffleOff'].includes(value.action)) throw new Error('控制指令无效或队列已满');
         if (value.action === 'seek' && (!Number.isFinite(value.positionMs) || value.positionMs < 0)) throw new Error('无效跳转位置');
+        if (value.action === 'playIndex' && (!Number.isInteger(value.positionMs) || value.positionMs < 0 || value.positionMs >= 2000)) throw new Error('无效队列位置');
         const id = ++sequence; pending.push({ ...value, id }); schedule(); return id;
     },
     snapshot() { return { stopped, errors, initialized: !cachedContext.isNull(), posted, taskReferences: refs, discovery, scannedBytes }; },

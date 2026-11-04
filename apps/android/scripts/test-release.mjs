@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { adb, adbBytes, delay } from './emulator-cdp.mjs'
 const root = fileURLToPath(new URL('..', import.meta.url)),
   apk = process.argv[2] || path.join(root, 'app/build/outputs/apk/release/app-release.apk')
+const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version
 if (!fs.existsSync(apk)) {
   if (process.env.GITHUB_EVENT_NAME === 'pull_request') {
     console.log(
@@ -34,7 +35,7 @@ function run(command, args) {
 }
 const badging = run(path.join(tools, windows ? 'aapt.exe' : 'aapt'), ['dump', 'badging', apk])
 assert.match(badging, /name='org\.b5_software\.justaplayer'/)
-assert.match(badging, /versionName='0\.1\.5'/)
+assert(badging.includes(`versionName='${version}'`), 'Release APK version must match Android package version')
 assert.doesNotMatch(badging, /application-debuggable/)
 const signature = run(java, [
   '-jar',
@@ -46,7 +47,7 @@ const signature = run(java, [
 ])
 run(path.join(tools, windows ? 'zipalign.exe' : 'zipalign'), ['-c', '-P', '16', '4', apk])
 const checks = [
-  'Release manifest is non-debuggable and versioned 0.1.5',
+  `Release manifest is non-debuggable and versioned ${version}`,
   'APK signature verified',
   'APK 16 KiB ZIP alignment verified',
 ]

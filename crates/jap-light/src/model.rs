@@ -34,7 +34,11 @@ pub fn title(item: &Value) -> String {
         .filter(|s| !s.is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| {
-            Path::new(item["path"].as_str().unwrap_or(""))
+            let path = item["path"].as_str().unwrap_or("");
+            if let Some(url) = jap_decode::radio::parse_url(path) {
+                return url.host_str().unwrap_or("在线电台").to_owned();
+            }
+            Path::new(path)
                 .file_stem()
                 .unwrap_or_default()
                 .to_string_lossy()
@@ -89,6 +93,8 @@ pub struct Player {
     pub cover: Option<TextureHandle>,
     pub cover_image: Option<ColorImage>,
     pub cover_data: Option<String>,
+    pub cover_accent: Option<egui::Color32>,
+    pub(crate) handoff_accent: Option<(String, egui::Color32)>,
     pub error: Option<String>,
     pub actions: Vec<Value>,
     pub devices: Vec<jap_core::DeviceInfo>,
@@ -98,11 +104,14 @@ pub struct Player {
     pub viewport: [f32; 2],
     pub dialog: String,
     pub import_path: String,
+    pub radio_address: String,
+    pub radio_name: String,
     pub new_name: String,
     pub controls: serde_json::Map<String, Value>,
     pub visible: bool,
     pub mini: bool,
     pub can_return: bool,
+    shared_audio: bool,
     pub dirty: bool,
     pub meter_levels: [f32; 2],
     pub meter_peaks: [f32; 2],
@@ -127,7 +136,7 @@ impl Player {
         engine: Arc<Engine>,
         root: PathBuf,
         platform: String,
-        settings: Value,
+        mut settings: Value,
         handoff: Value,
         can_return: bool,
     ) -> Self {
@@ -323,8 +332,25 @@ impl Player {
             })
             .expect("native IO worker");
         let current = serde_json::from_value::<TrackInfo>(handoff["track"].clone()).ok();
+        if !settings.is_object() {
+            settings = json!({});
+        }
+        for key in ["themeMode", "accent", "autoAccent"] {
+            if !handoff["appearance"][key].is_null() {
+                settings[key] = handoff["appearance"][key].clone();
+            }
+        }
+        let handoff_accent = current.as_ref().and_then(|track| {
+            crate::theme::hex(handoff["appearance"]["activeAccent"].as_str()?)
+                .map(|color| (track.path.clone(), color))
+        });
+        if let Some(resolved) = handoff["appearance"]["resolved"].as_str() {
+            prefs["systemThemeFallback"] = json!(resolved);
+        }
         let state =
             serde_json::from_value(handoff["state"].clone()).unwrap_or(PlaybackState::Stopped);
+        let shared_audio = engine.shared().is_some();
+        let reuse_audio = engine.shared().is_some_and(|client| client.configured());
         let p = Self {
             root,
             platform,
@@ -348,6 +374,8 @@ impl Player {
             cover: None,
             cover_image: None,
             cover_data: None,
+            cover_accent: None,
+            handoff_accent,
             error: None,
             actions: vec![],
             devices: vec![],
@@ -357,11 +385,14 @@ impl Player {
             viewport: [0.; 2],
             dialog: String::new(),
             import_path: String::new(),
+            radio_address: String::new(),
+            radio_name: String::new(),
             new_name: String::new(),
             controls: Default::default(),
             visible: true,
             mini: false,
             can_return,
+            shared_audio,
             dirty: true,
             meter_levels: [0.; 2],
             meter_peaks: [0.; 2],
@@ -381,18 +412,22 @@ impl Player {
             external_assets_dirty: false,
             last_source_external: false,
         };
-        p.command(Command::SetVolume { gain: volume });
+        if !reuse_audio {
+            p.command(Command::SetVolume { gain: volume });
+        }
         let soundfont = p.prefs["soundfont"]
             .as_str()
             .or_else(|| p.settings["midiSoundfont"].as_str())
             .filter(|s| !s.is_empty())
             .map(str::to_owned);
         let sample_rate = p.settings["midiSampleRate"].as_u64().unwrap_or(96000) as u32;
-        p.command(Command::SetMidi {
-            soundfont,
-            sample_rate,
-        });
-        if !p.mobile() {
+        if !reuse_audio {
+            p.command(Command::SetMidi {
+                soundfont,
+                sample_rate,
+            });
+        }
+        if !p.mobile() && !reuse_audio {
             p.command(Command::SetOutput {
                 config: p.output.clone(),
             });
@@ -402,10 +437,13 @@ impl Player {
         }
         if let Some(track) = &p.current
             && !track.path.starts_with("external://")
+            && !jap_decode::radio::is_url(&track.path)
         {
             let _ = p.tx.send(Task::Resources(track.path.clone()));
         }
-        p.command(Command::QueueNext { path: None });
+        if !reuse_audio {
+            p.command(Command::QueueNext { path: None });
+        }
         if p.current.is_none() {
             let list = &p.library["lists"][p.active()];
             let id = list["id"].as_str().unwrap_or("");
@@ -415,6 +453,7 @@ impl Player {
                     .find(|i| i["id"] == memory["itemId"])
                     .or_else(|| a.first())
             }) && let Some(path) = item["path"].as_str()
+                && !jap_decode::radio::is_url(path)
             {
                 let _ = p.tx.send(Task::Preview(
                     path.into(),
@@ -424,6 +463,7 @@ impl Player {
         }
 
         if !p.mobile()
+            && !reuse_audio
             && p.state == PlaybackState::Playing
             && let Some(t) = p.current.clone()
             && !t.path.starts_with("external://")
@@ -516,13 +556,24 @@ impl Player {
                 self.cover = None;
                 self.cover_data = None;
                 self.cover_image = None;
+                self.cover_accent = None;
+                if self
+                    .handoff_accent
+                    .as_ref()
+                    .is_some_and(|(path, _)| path != &track.path)
+                {
+                    self.handoff_accent = None;
+                }
+                self.lyrics.clear();
                 self.position = 0;
                 if self.last_source_external {
                     self.external_assets_dirty = true;
-                } else {
+                } else if !jap_decode::radio::is_url(&track.path) {
                     let _ = self.tx.send(Task::Resources(track.path.clone()));
                 }
                 self.current = Some(track);
+                self.actions
+                    .push(json!({"type":"media","value":self.media()}));
                 self.queue_next();
             }
             Event::Position { position_ms, .. } => {
@@ -554,7 +605,10 @@ impl Player {
             if value["kind"] != "externalState" {
                 continue;
             }
-            let state = &value["state"];
+            let mut state = value["state"].clone();
+            if state["snapshot"].is_object() && state["snapshot"].get("queue").is_none() {
+                state["snapshot"]["queue"] = self.external_state["snapshot"]["queue"].clone();
+            }
             if let Some(id) = state["snapshot"]["track"]["id"]
                 .as_str()
                 .filter(|s| !s.is_empty())
@@ -659,6 +713,8 @@ impl Player {
                 }
                 Update::Resources(path, image, lyrics, data) => {
                     if self.current.as_ref().is_some_and(|t| t.path == path) {
+                        self.handoff_accent = None;
+                        self.cover_accent = image.as_ref().and_then(crate::theme::cover_accent);
                         self.cover = image.as_ref().filter(|_| self.visible).map(|im| {
                             ctx.load_texture(
                                 "current-cover",
@@ -741,12 +797,44 @@ impl Player {
             start_ms: Some(start),
         });
     }
+    pub fn add_radio(&mut self) -> bool {
+        let Some(url) = jap_decode::radio::parse_url(self.radio_address.trim()) else {
+            return false;
+        };
+        let active = self.active();
+        let path = url.to_string();
+        let label = self.radio_name.trim();
+        let label = if label.is_empty() {
+            url.host_str().unwrap_or("在线电台")
+        } else {
+            label
+        };
+        if let Some(items) = self.library["lists"][active]["items"].as_array_mut()
+            && !items.iter().any(|item| item["path"] == path)
+        {
+            items.push(json!({
+                "id": now_id(),
+                "path": path,
+                "title": label,
+                "album": "在线电台",
+                "durationMs": null,
+                "addedAt": 0,
+                "metaLoaded": true,
+                "missing": false,
+            }));
+        }
+        self.radio_address.clear();
+        self.radio_name.clear();
+        self.persist();
+        self.play(path, 0);
+        true
+    }
     pub fn toggle(&mut self) {
         if self.external_state["phase"] == "routing"
             || self.external_state["snapshot"]["devices"]["currentDevice"]["name"]
                 == "Just A Player HiFi Bridge (Black Hole)"
         {
-            self.external_request(if self.state == PlaybackState::Playing {
+            self.external_request(if self.external_state["snapshot"]["state"] == "playing" {
                 "pause"
             } else {
                 "resume"
@@ -773,6 +861,16 @@ impl Player {
                     self.dialog = "import".into();
                 }
             }
+        }
+    }
+    pub fn transport_playing(&self) -> bool {
+        if self.external_state["phase"] == "routing"
+            || self.external_state["snapshot"]["devices"]["currentDevice"]["name"]
+                == "Just A Player HiFi Bridge (Black Hole)"
+        {
+            self.external_state["snapshot"]["state"] == "playing"
+        } else {
+            self.state == PlaybackState::Playing
         }
     }
     fn ordered(&self) -> Vec<Value> {
@@ -831,6 +929,9 @@ impl Player {
         }
     }
     pub fn queue_next(&self) {
+        if self.last_source_external || self.external_state["phase"] == "routing" {
+            return;
+        }
         let items = self.ordered();
         let path = self
             .current
@@ -882,10 +983,13 @@ impl Player {
     }
     pub fn handoff(&mut self) -> Value {
         self.persist();
-        json!({"libraryJson":self.library.to_string(),"track":self.current,"state":self.state,"positionMs":self.position,"volume":self.volume,"output":self.output,"dsp":self.dsp,"externalForce":self.prefs["externalForce"]==true})
+        json!({"libraryJson":self.library.to_string(),"track":self.current,"state":self.state,"positionMs":self.position,"volume":self.volume,"output":self.output,"dsp":self.dsp,"externalForce":self.prefs["externalForce"]==true,"sharedAudio":self.shared_audio})
     }
     pub fn media(&self) -> Value {
         let mut value = json!({"title":self.current.as_ref().and_then(|t|t.title.clone()).unwrap_or_else(||self.current.as_ref().map(|t|title(&json!(t))).unwrap_or_default()),"artist":self.current.as_ref().and_then(|t|t.artist.clone()),"album":self.current.as_ref().and_then(|t|t.album.clone()),"positionMs":self.position,"durationMs":self.current.as_ref().and_then(|t|t.duration_ms),"state":self.state});
+        if self.external_state["phase"] == "routing" {
+            value["state"] = self.external_state["snapshot"]["state"].clone();
+        }
         value[if self.mobile() {
             "coverBase64"
         } else {

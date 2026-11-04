@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { decodeText } from '../lib/text'
 import { useSettings } from '../settings/store'
 import { engine } from '../engine/client'
+import { radioUrl } from '@shared/audio'
 
 export type LyricsSource = 'imported' | 'sidecar' | 'embedded' | 'external'
 
@@ -34,6 +35,7 @@ export async function loadLyrics(path: string | null): Promise<void> {
     return
   }
   useLyrics.setState({ path, text: null, source: null })
+  if (radioUrl(path)) return
   let bytes = await window.jap.lyricsGet(path)
   let source: LyricsSource | null = bytes ? 'imported' : null
   if (!bytes && useSettings.getState().sidecarLyrics) {

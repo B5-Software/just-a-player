@@ -5,6 +5,7 @@ import { picker, fileIo as fs } from '@kit.CoreFileKit';
 import { usbManager } from '@kit.BasicServicesKit';
 import { util } from '@kit.ArkTS';
 import { window } from '@kit.ArkUI';
+import { i18n } from '@kit.LocalizationKit';
 import player from 'libplayer.so';
 import BuildProfile from 'BuildProfile';
 
@@ -35,7 +36,7 @@ export class PlayerBridge {
   setLightweight(enabled:boolean):void { this.lightweight=enabled; this.lightVisuals=false; }
   constructor(context: common.UIAbilityContext, controller: webview.WebviewController, snapshot: string) {
     this.context=context;this.controller=controller;
-    this.root = context.filesDir; this.state = snapshot.slice(0,-1)+',"qa":'+BuildProfile.DEBUG+'}';
+    this.root = context.filesDir; this.state = snapshot.slice(0,-1)+',"systemLocale":'+JSON.stringify(i18n.System.getSystemLanguage())+',"qa":'+BuildProfile.DEBUG+'}';
     this.keepAwake = (JSON.parse(snapshot) as Snapshot).settings?.keepScreenAwake ?? false;
   }
   snapshot(): string { return this.state; }

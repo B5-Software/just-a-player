@@ -1,4 +1,4 @@
-import { baseName, pathKey } from '@shared/audio'
+import { baseName, pathKey, radioUrl } from '@shared/audio'
 import { create } from 'zustand'
 import { stripExtension } from '../lib/text'
 import { siblingKey, formatRank } from './quality'
@@ -76,7 +76,7 @@ export function makeList(name: string, items: TrackItem[] = []): Playlist {
 }
 
 export function displayTitle(item: TrackItem): string {
-  return item.title ?? stripExtension(baseName(item.path))
+  return item.title ?? radioUrl(item.path)?.hostname ?? stripExtension(baseName(item.path))
 }
 
 export interface LibraryState {
@@ -101,7 +101,7 @@ interface LibraryActions {
   duplicateList: (id: string) => void
   importList: (list: Playlist) => void
   /** 添加路径到列表，跳过已经在该列表里的路径；返回新条目的 id。 */
-  addPaths: (listId: string, paths: string[]) => string[]
+  addPaths: (listId: string, paths: string[], meta?: Partial<TrackItem>) => string[]
   removeItems: (listId: string, ids: string[]) => void
   moveItem: (listId: string, from: number, to: number) => void
   transferItems: (ids: string[], fromListId: string, toListId: string, copy: boolean) => void
@@ -232,7 +232,7 @@ export const useLibrary = create<LibraryStore>((set, get) => {
       set((s) => ({ lists: [...s.lists, list], activeListId: list.id, selected: [] }))
     },
 
-    addPaths: (listId, paths) => {
+    addPaths: (listId, paths, meta) => {
       const list = get().lists.find((l) => l.id === listId)
       if (!list) return []
       const existing = new Set(list.items.map((i) => pathKey(i.path)))
@@ -244,7 +244,7 @@ export const useLibrary = create<LibraryStore>((set, get) => {
           const path = replacements.get(siblingKey(item.path))
           if (!path || path === item.path) return item
           existing.add(pathKey(path))
-          return { ...makeItem(path), id: item.id, addedAt: item.addedAt }
+          return { ...makeItem(path, meta), id: item.id, addedAt: item.addedAt }
         })
       )
       const added: TrackItem[] = []
@@ -252,7 +252,7 @@ export const useLibrary = create<LibraryStore>((set, get) => {
         const key = pathKey(path)
         if (existing.has(key)) continue
         existing.add(key)
-        added.push(makeItem(path))
+        added.push(makeItem(path, meta))
       }
       if (added.length > 0) mapList(listId, (items) => [...items, ...added])
       return added.map((i) => i.id)

@@ -1,9 +1,11 @@
+import { ui, useLocale } from '../i18n'
 import { useState } from 'react'
 import { useSettings } from '../settings/store'
 import { SectionTitle, SettingRow } from '../ui/controls'
 import { Select } from '../ui/Select'
 import { baseName } from '@shared/audio'
 export function MidiSettings(): React.JSX.Element {
+  useLocale()
   const path = useSettings((s) => s.midiSoundfont)
   const rate = useSettings((s) => s.midiSampleRate)
   const [pending, setPending] = useState(false)
@@ -21,7 +23,7 @@ export function MidiSettings(): React.JSX.Element {
     }
   }
   return (
-    <section className="flex flex-col gap-4">
+    ui(<section className="flex flex-col gap-4">
       <SectionTitle>MIDI 音色与合成</SectionTitle>
       <SettingRow
         title={
@@ -68,9 +70,9 @@ export function MidiSettings(): React.JSX.Element {
           className="rounded-lg bg-hover p-2 text-xs"
         >
           {[44100, 48000, 96000].map((v) => (
-            <option key={v} value={v}>
+            ui(<option key={v} value={v}>
               {v / 1000} kHz · Float32
-            </option>
+            </option>)
           ))}
         </Select>
       </SettingRow>
@@ -79,6 +81,6 @@ export function MidiSettings(): React.JSX.Element {
           {error}
         </p>
       )}
-    </section>
+    </section>)
   )
 }

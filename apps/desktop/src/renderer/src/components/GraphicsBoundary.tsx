@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import { Component, Fragment, type ReactNode } from 'react'
 import { useCover } from '../cover/store'
 import { Lyrics2D } from '../lyrics/Lyrics2D'
@@ -21,15 +22,16 @@ export class GraphicsBoundary extends Component<
     return this.state.failed ? (
       this.props.fallback(this.retry)
     ) : (
-      <Fragment key={this.state.generation}>{this.props.children}</Fragment>
+      ui(<Fragment key={this.state.generation}>{this.props.children}</Fragment>)
     )
   }
 }
 
 export function CoverBackdrop(): React.JSX.Element {
+  useLocale()
   const art = useCover((state) => state.art)
   return (
-    <div
+    ui(<div
       aria-hidden
       className="pointer-events-none absolute inset-0 overflow-hidden"
       style={{
@@ -41,13 +43,14 @@ export function CoverBackdrop(): React.JSX.Element {
           <CoverFade src={art.url} />
         </div>
       )}
-    </div>
+    </div>)
   )
 }
 
 export function StageFallback({ retry }: { retry: () => void }): React.JSX.Element {
+  useLocale()
   return (
-    <div data-graphics-fallback className="absolute inset-0">
+    ui(<div data-graphics-fallback className="absolute inset-0">
       <CoverBackdrop />
       <Lyrics2D />
       <div className="glass absolute bottom-48 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 rounded-2xl px-4 py-3 text-xs text-fg">
@@ -60,6 +63,6 @@ export function StageFallback({ retry }: { retry: () => void }): React.JSX.Eleme
           重试 3D
         </button>
       </div>
-    </div>
+    </div>)
   )
 }

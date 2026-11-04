@@ -3,6 +3,7 @@
 mod convert;
 mod engine;
 mod producer;
+pub mod remote;
 mod resample;
 mod ring;
 mod session;

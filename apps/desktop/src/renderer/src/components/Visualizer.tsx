@@ -1,9 +1,11 @@
+import { ui, useLocale } from '../i18n'
 import { useEffect, useRef } from 'react'
 import { VizHost } from '../viz/VizHost'
 export let activeVizHost: VizHost | null = null
 
 /** WebGL 画布容器；渲染器的生命周期与组件同步，StrictMode 下的重复挂载也能干净收尾。 */
 export function Visualizer(): React.JSX.Element {
+  useLocale()
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -19,5 +21,5 @@ export function Visualizer(): React.JSX.Element {
     }
   }, [])
 
-  return <div ref={ref} data-viz-stage className="absolute inset-0 touch-none select-none" />
+  return ui(<div ref={ref} data-viz-stage className="absolute inset-0 touch-none select-none" />)
 }

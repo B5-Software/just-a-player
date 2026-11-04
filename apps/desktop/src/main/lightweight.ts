@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { finishUiHandoff } from '@jap/engine'
 import { spawn } from 'node:child_process'
 import {
   existsSync,
@@ -14,6 +15,8 @@ import type { LightweightHandoff } from '../shared/lightweight'
 import { isAudioPath } from '../shared/audio'
 
 let opening = false
+let handingOff = false
+export function isHandingOff(): boolean { return handingOff }
 const path = (name: string): string => join(app.getPath('userData'), name)
 export function wantsLightweight(): boolean {
   if (process.argv.includes('--jap-full') || process.env['JAP_E2E']) return false
@@ -35,7 +38,7 @@ export function takeLightweightHandoff(): LightweightHandoff | null {
 }
 export async function openLightweight(
   handoff?: LightweightHandoff,
-  releaseEngine?: () => void
+  releaseEngine?: () => Promise<void>
 ): Promise<void> {
   if (opening) return
   opening = true
@@ -46,7 +49,6 @@ export async function openLightweight(
       ? join(process.resourcesPath, 'lightweight', exe)
       : join(root, 'target/debug', exe)
     if (!existsSync(binary)) throw new Error('未找到轻量播放程序，请先运行 pnpm light:build。')
-    releaseEngine?.()
     mkdirSync(app.getPath('userData'), { recursive: true })
     const ready = path(`light-ready-${process.pid}`)
     if (existsSync(ready)) unlinkSync(ready)
@@ -61,10 +63,12 @@ export async function openLightweight(
     ]
     if (!appImage) args.push('--ready-file', ready)
     if (!app.isPackaged) args.push('--return-entry', join(__dirname, 'index.js'))
+    const endpoint = process.env['JAP_AUDIO_ENDPOINT']
+    if (endpoint) args.push('--audio-endpoint', endpoint)
     if (process.env['JAP_E2E'] === 'lightweight') args.push('--qa')
     if (handoff) {
       const file = path('light-start.json')
-      writeFileSync(file, JSON.stringify(handoff))
+      writeFileSync(file, JSON.stringify({ ...handoff, sharedAudio: !!endpoint }))
       args.push('--handoff', file)
     }
     const files = process.argv.filter(value => isAudioPath(value) && existsSync(value))
@@ -113,8 +117,14 @@ export async function openLightweight(
       })
     })
     writeFileSync(path('lightweight-mode.json'), '{"enabled":true}')
+    handingOff = true
+    await releaseEngine?.()
+    child.removeAllListeners('error')
     child.unref()
-    setTimeout(() => app.quit(), 150)
+    setTimeout(() => {
+      if (process.platform === 'win32') app.once('quit', () => finishUiHandoff())
+      app.quit()
+    }, 150)
   } finally {
     opening = false
   }

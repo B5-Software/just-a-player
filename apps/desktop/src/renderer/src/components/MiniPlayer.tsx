@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import { baseName } from '@shared/audio'
 import { usePlayer } from '../engine/store'
 import { ArrowsOut } from '../icons'
@@ -12,11 +13,12 @@ import { CoverFade } from './CoverFade'
 
 /** Selecting floating playback folds this same window into a small audio controller. */
 export function MiniPlayer(): React.JSX.Element {
+  useLocale()
   const track = usePlayer((s) => s.track)
   const art = useCover((s) => s.art)
   const backdrop = useSettings((s) => s.miniCoverBackdrop)
   return (
-    <div data-mini-player className="absolute inset-0 flex flex-col bg-surface text-fg">
+    ui(<div data-mini-player className="absolute inset-0 flex flex-col bg-surface text-fg">
       {backdrop && art && (
         <div
           data-mini-backdrop
@@ -51,10 +53,10 @@ export function MiniPlayer(): React.JSX.Element {
         <div data-mini-meta className="drag-region flex min-w-0 items-center gap-3">
           <CoverArt size={52} />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-semibold">
+            <h1 translate={track ? 'no' : undefined} className="truncate text-sm font-semibold">
               {track ? (track.title ?? stripExtension(baseName(track.path))) : '准备好了'}
             </h1>
-            <p className="mt-1 truncate text-xs text-fg-muted">
+            <p translate={track?.artist || track?.album ? 'no' : undefined} className="mt-1 truncate text-xs text-fg-muted">
               {track
                 ? [track.artist, track.album].filter(Boolean).join(' · ') || '未知艺术家'
                 : '打开音频文件开始播放'}
@@ -67,6 +69,6 @@ export function MiniPlayer(): React.JSX.Element {
           <VolumeControl compact />
         </div>
       </div>
-    </div>
+    </div>)
   )
 }

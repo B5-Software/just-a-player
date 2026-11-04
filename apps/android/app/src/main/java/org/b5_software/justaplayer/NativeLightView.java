@@ -1,6 +1,7 @@
 package org.b5_software.justaplayer;
 
 import android.content.*;
+import android.content.res.Configuration;
 import android.graphics.*;
 import android.os.*;
 import android.view.*;
@@ -94,6 +95,13 @@ final class NativeLightView extends View {
               .put("height", height)
               .put("visible", MainActivity.visible)
               .put("mini", activity.isInPictureInPictureMode())
+              .put("systemLocale", getResources().getConfiguration().getLocales().get(0).toLanguageTag())
+              .put(
+                  "systemTheme",
+                  (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                          == Configuration.UI_MODE_NIGHT_YES
+                      ? "dark"
+                      : "light")
               .put("events", new JSONArray(events.toString()));
       while (events.length() > 0) events.remove(events.length() - 1);
       JSONObject result = new JSONObject(Native.lightDraw(bitmap, input.toString()));

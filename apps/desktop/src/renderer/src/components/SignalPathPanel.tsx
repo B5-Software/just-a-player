@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import type { Fidelity } from '@shared/protocol/Fidelity'
 import { usePlayer } from '../engine/store'
 import { TONE_CLASS, VERDICT_LABEL } from '../lib/verdict'
@@ -16,11 +17,12 @@ const FIDELITY_TEXT: Record<Fidelity, string> = {
 
 /** 实时信号链（浮层内容）：从文件到 DAC 的每一步，以及每一步有没有动过样本。 */
 export function SignalPathPanel(): React.JSX.Element {
+  useLocale()
   const path = usePlayer((s) => s.signalPath)
   const verdict = path ? VERDICT_LABEL[path.verdict] : null
 
   return (
-    <div className="flex flex-col gap-4">
+    ui(<div className="flex flex-col gap-4">
       {verdict && (
         <span
           className={`self-start rounded-full px-2.5 py-1 text-xs font-semibold ring-1 m-0.5 ${TONE_CLASS[verdict.tone]}`}
@@ -32,7 +34,7 @@ export function SignalPathPanel(): React.JSX.Element {
       {path ? (
         <ol className="relative flex flex-col gap-0.5 pr-1">
           {path.nodes.map((node, i) => (
-            <li
+            ui(<li
               key={`${i}-${node.kind}-${node.title}`}
               className="relative flex gap-3.5 pb-4 last:pb-0"
             >
@@ -49,7 +51,7 @@ export function SignalPathPanel(): React.JSX.Element {
                 </div>
                 <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">{node.detail}</p>
               </div>
-            </li>
+            </li>)
           ))}
         </ol>
       ) : (
@@ -57,6 +59,6 @@ export function SignalPathPanel(): React.JSX.Element {
           开始播放后，这里会显示音频到达耳机之前经过的每一步。
         </p>
       )}
-    </div>
+    </div>)
   )
 }

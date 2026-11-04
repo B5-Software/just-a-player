@@ -1,3 +1,4 @@
+import { ui, useLocale } from '../i18n'
 import { useState } from 'react'
 import { parseVisualPlugin } from '@shared/visual-plugin'
 import { LEGACY_VISUALS } from '@shared/visual-builtins'
@@ -9,6 +10,7 @@ import { useViz } from '../viz/store'
 import { SectionTitle, SettingRow, Toggle } from '../ui/controls'
 import { confirmAction } from '../ui/dialog-store'
 export function VisualPluginSettings(): React.JSX.Element {
+  useLocale()
   const legacy = useSettings((s) => s.enabledLegacyVisuals),
     disabled = useSettings((s) => s.disabledVisuals),
     plugins = useSettings((s) => s.visualPlugins)
@@ -56,26 +58,26 @@ export function VisualPluginSettings(): React.JSX.Element {
     }
   }
   return (
-    <section className="flex flex-col gap-4" data-visual-plugins>
+    ui(<section className="flex flex-col gap-4" data-visual-plugins>
       <SectionTitle>可视化插件</SectionTitle>
       <p className="text-xs leading-relaxed text-fg-muted">
         每个效果可独立启用或卸下。新的材质场景共用实时、HDR
         与离线导出定义；全部关闭时保留封面与歌词。
       </p>
       {STUDIO_PLUGINS.map((plugin) => (
-        <SettingRow key={plugin.id} title={plugin.name} hint={plugin.description}>
+        ui(<SettingRow key={plugin.id} title={plugin.name} hint={plugin.description}>
           <Toggle
             label={`启用 ${plugin.name}`}
             checked={!disabled.includes(plugin.id)}
             onChange={(on) => toggle(plugin.id, on)}
           />
-        </SettingRow>
+        </SettingRow>)
       ))}
       <div className="rounded-2xl bg-hover/50 p-4">
         <p className="mb-3 text-xs text-fg-muted">附加场景与专业仪表 · 默认关闭，逐项启用</p>
         <div className="flex flex-col gap-4">
           {LEGACY_VISUALS.map((plugin) => (
-            <SettingRow key={plugin.id} title={plugin.name} hint={plugin.hint}>
+            ui(<SettingRow key={plugin.id} title={plugin.name} hint={plugin.hint}>
               <Toggle
                 label={`启用 ${plugin.name}`}
                 checked={legacy.includes(plugin.id)}
@@ -89,14 +91,14 @@ export function VisualPluginSettings(): React.JSX.Element {
                     })
                 }
               />
-            </SettingRow>
+            </SettingRow>)
           ))}
         </div>
         {loading && <p className="mt-2 text-xs text-fg-muted">正在加载旧版插件…</p>}
       </div>
       {plugins.map((plugin) => (
-        <div key={plugin.id} className="rounded-2xl bg-hover/40 p-3">
-          <SettingRow title={plugin.name} hint={`${plugin.author} · ${plugin.license}`}>
+        ui(<div key={plugin.id} className="rounded-2xl bg-hover/40 p-3">
+          <SettingRow title={<span translate="no">{plugin.name}</span>} hint={<span translate="no">{plugin.author} · {plugin.license}</span>}>
             <Toggle
               label={`启用 ${plugin.name}`}
               checked={!disabled.includes('user-' + plugin.id)}
@@ -113,7 +115,7 @@ export function VisualPluginSettings(): React.JSX.Element {
           >
             卸下插件
           </button>
-        </div>
+        </div>)
       ))}
       <button
         className="rounded-xl bg-hover px-4 py-3 text-sm text-accent-text disabled:opacity-40"
@@ -127,6 +129,6 @@ export function VisualPluginSettings(): React.JSX.Element {
           {error || registryError}
         </p>
       )}
-    </section>
+    </section>)
   )
 }

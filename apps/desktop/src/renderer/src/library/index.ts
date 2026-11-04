@@ -15,6 +15,7 @@ import {
 } from './playback'
 import { refreshMissing, requestMetadata } from './metadata'
 import { expandDiscItems } from './discs'
+import { externalOwnsTransport } from '../external/store'
 
 let saveTimer = 0
 
@@ -82,7 +83,7 @@ async function loadSaved(): Promise<void> {
 export function initLibrary(): void {
   engine.onEvent((event) => {
     if (event.type === 'trackChanged') onTrackChanged(event.track)
-    if (event.type === 'queueEnded') playNeighbour(1)
+    if (event.type === 'queueEnded' && !externalOwnsTransport() && !usePlayer.getState().track?.path.startsWith('external://')) playNeighbour(1)
     if (event.type === 'position') useLibrary.getState().rememberPosition(event.positionMs)
     if (event.type === 'state' && event.state !== 'playing' && useLibrary.getState().loaded) {
       useLibrary.getState().rememberPosition(livePositionMs())
