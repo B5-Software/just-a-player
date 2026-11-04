@@ -19,6 +19,11 @@ jobs:
   build:
     if: github.event_name != 'workflow_dispatch' || !inputs.android_only
     name: ${{ matrix.target.platform }} · ${{ matrix.target.arch }} · ${{ matrix.midi }}
+    defaults:
+      run:
+        # PowerShell's default only reports the last native command's exit code.
+        # Every failed command must stop a multi-command QA step.
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -31,7 +36,7 @@ jobs:
           - { os: ubuntu-24.04, platform: linux, arch: x64 }
           - { os: ubuntu-24.04-arm, platform: linux, arch: arm64 }
     runs-on: ${{ matrix.target.os }}
-    timeout-minutes: ${{ matrix.target.os == 'macos-15-intel' && 90 || 45 }}
+    timeout-minutes: ${{ (matrix.target.platform == 'win' || matrix.target.os == 'macos-15-intel') && 90 || 45 }}
     env:
       JAP_BUNDLE_MIDI: ${{ matrix.midi == 'with-midi' && '1' || '0' }}
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'

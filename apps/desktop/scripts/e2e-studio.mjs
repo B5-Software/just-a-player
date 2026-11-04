@@ -10,14 +10,17 @@ import { wave } from '../../../scripts/fixtures/pcm.mjs'
 const cwd = fileURLToPath(new URL('..', import.meta.url)),
   out = path.join(cwd, 'test-results/studio')
 fs.mkdirSync(out, { recursive: true })
-const vuTone=path.join(out,'Original VU Tone.wav'),vuPcm=wave()
+const vuTone=path.join(out,'Original VU Tone.wav'),vuPcm=wave({seconds:12})
 for(let at=44;at<vuPcm.length;at+=4){vuPcm.writeInt16LE(Math.round(vuPcm.readInt16LE(at)*.55),at);vuPcm.writeInt16LE(Math.round(vuPcm.readInt16LE(at+2)*.38),at+2)}
 fs.writeFileSync(vuTone,vuPcm)
+// Independent reference: RMS of a sine is amplitude / sqrt(2), with a meter
+// spanning -48..0 dBFS. No DSP is part of this calibration.
+const expectedVu=[.55,.38].map(gain=>(20*Math.log10(.25*gain/Math.SQRT2)+48)/48)
 const app = await electron.launch({
   executablePath: electronPath,
   args: ['.', ...graphicsArgs],
   cwd,
-  env: { ...process.env, JAP_E2E: 'studio' },
+  env: { ...process.env, JAP_E2E: 'studio', JAP_E2E_USERDATA: fs.mkdtempSync(path.join(out, 'session-')) },
 })
 const page = await app.firstWindow(),
   errors = [],
@@ -47,7 +50,9 @@ try {
     j.useViz.getState().setAuto(false)
     j.useViz.getState().setZoom(1)
     j.useViz.getState().setOffset({ x: 0, y: 0, z: 0 })
+    j.useDsp.getState().update({enabled:false})
   })
+  await page.waitForFunction(()=>!window.__jap.useDsp.getState().config.enabled)
   assert.ok(await page.getByText('丝境', { exact: true }).count())
   for (const id of ['silk-studio', 'tidal-studio', 'dune-studio', 'glass-studio']) {
     await page.evaluate((id) => window.__jap.useViz.getState().setScene(id), id)
@@ -90,8 +95,9 @@ try {
     if(id==='vu') {
       await page.evaluate(path=>{const p=__jap.usePlayer.getState();p.setOutput({api:'null',dsdMode:'pcm'});p.setVolume(0);p.play(path)},vuTone)
       await page.waitForFunction(()=>__jap.usePlayer.getState().position.ms>700)
+      await page.waitForFunction(expected=>{const meter=__japViz.current.nativeShader().uniforms.uVu;return expected.every((value,ch)=>Math.abs(meter[ch]-value)<.015)},expectedVu,{timeout:5000})
       const meter=await page.evaluate(()=>__japViz.current.nativeShader().uniforms.uVu)
-      assert.ok(meter[0]>.48&&meter[0]<.61&&meter[1]>.32&&meter[1]<.43,JSON.stringify(meter))
+      assert.ok(expectedVu.every((value,ch)=>Math.abs(meter[ch]-value)<.015),JSON.stringify({meter,expectedVu}))
       assert.ok(meter[2]>meter[0]&&meter[3]>meter[1])
       await page.screenshot({path:path.join(out,'vu.png')})
       await page.evaluate(()=>__jap.usePlayer.getState().stop())
