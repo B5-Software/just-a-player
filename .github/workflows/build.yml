@@ -19,11 +19,6 @@ jobs:
   build:
     if: github.event_name != 'workflow_dispatch' || !inputs.android_only
     name: ${{ matrix.target.platform }} · ${{ matrix.target.arch }} · ${{ matrix.midi }}
-    defaults:
-      run:
-        # PowerShell's default only reports the last native command's exit code.
-        # Every failed command must stop a multi-command QA step.
-        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -90,12 +85,16 @@ jobs:
           node apps/lightweight/test-native.mjs
       - run: pnpm build
       - run: pnpm typecheck
-      - name: External adapter version gates and lyric timing
-        run: |
-          node apps/desktop/scripts/test-external-agents.mjs
-          node apps/desktop/scripts/test-external-lyrics.mjs
-          node apps/desktop/scripts/test-external-cover.mjs
-          node apps/desktop/scripts/test-external-routing.mjs
+      # Separate native commands so PowerShell reports every failure, not just
+      # the final command's exit status. Retain each platform's default shell.
+      - name: External adapter version gates
+        run: node apps/desktop/scripts/test-external-agents.mjs
+      - name: External lyric timing
+        run: node apps/desktop/scripts/test-external-lyrics.mjs
+      - name: External artwork validation
+        run: node apps/desktop/scripts/test-external-cover.mjs
+      - name: External stream routing
+        run: node apps/desktop/scripts/test-external-routing.mjs
       - name: Native external audio pipe (Windows)
         if: runner.os == 'Windows'
         run: node apps/lightweight/test-external-protocol.mjs
@@ -126,13 +125,18 @@ jobs:
       - name: System language fallback and live language switching (Windows)
         if: runner.os == 'Windows'
         run: node apps/desktop/scripts/e2e-i18n.mjs
-      - name: Visual plugins and isolated GPU video export (Windows)
+      - name: Visual plugins and VU calibration (Windows)
         if: runner.os == 'Windows'
-        run: |
-          pnpm --filter desktop test:e2e:studio
-          pnpm --filter desktop test:e2e:discs
-          pnpm --filter desktop test:e2e:lyrics
-          pnpm --filter desktop test:e2e:export
+        run: pnpm --filter desktop test:e2e:studio
+      - name: Disc subsongs (Windows)
+        if: runner.os == 'Windows'
+        run: pnpm --filter desktop test:e2e:discs
+      - name: Embedded word lyrics (Windows)
+        if: runner.os == 'Windows'
+        run: pnpm --filter desktop test:e2e:lyrics
+      - name: Isolated GPU video export (Windows)
+        if: runner.os == 'Windows'
+        run: pnpm --filter desktop test:e2e:export
       - name: Desktop smoke test (Xvfb)
         if: runner.os == 'Linux'
         run: xvfb-run -a pnpm --filter desktop test:e2e:smoke
