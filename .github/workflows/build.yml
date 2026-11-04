@@ -224,6 +224,16 @@ jobs:
       JAP_BUNDLE_MIDI: ${{ matrix.midi == 'with-midi' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Reclaim hosted Android runner disk space
+        shell: bash
+        run: |
+          df -h /
+          # The four native ABIs, HQ bank, signed APK and 16-KiB emulator need
+          # space together. These preinstalled SDKs are not used by this job.
+          if [ "${RUNNER_ENVIRONMENT:-}" = 'github-hosted' ]; then
+            sudo rm -rf -- /usr/share/dotnet /usr/local/.ghcup /opt/ghc /usr/share/swift
+          fi
+          df -h /
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -287,7 +297,9 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Release build daemon memory before emulator QA
-        run: node apps/android/scripts/gradle.mjs --stop
+        run: |
+          node apps/android/scripts/gradle.mjs --stop
+          df -h /
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 36
