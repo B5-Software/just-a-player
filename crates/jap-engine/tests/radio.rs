@@ -1,4 +1,4 @@
-use std::io::{BufRead, BufReader, Cursor, Write};
+use std::io::{BufRead, BufReader, Cursor, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -13,6 +13,24 @@ use jap_output::CaptureBackend;
 fn send_wave(mut stream: TcpStream, bytes: &[u8]) {
     let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nIcy-Name: Test Radio\r\nConnection: close\r\n\r\n");
     let _ = stream.write_all(bytes);
+}
+
+fn request_path(stream: &TcpStream) -> Option<String> {
+    let mut reader = BufReader::new(stream).take(8192);
+    let mut first = String::new();
+    if reader.read_line(&mut first).ok()? == 0 {
+        return None;
+    }
+    let path = first.split_whitespace().nth(1)?.to_owned();
+    loop {
+        let mut header = String::new();
+        if reader.read_line(&mut header).ok()? == 0 {
+            return None;
+        }
+        if header == "\r\n" || header == "\n" {
+            return Some(path);
+        }
+    }
 }
 
 fn await_event(events: &Receiver<Event>, pred: impl Fn(&Event) -> bool) {
@@ -49,7 +67,7 @@ fn radio_resolves_playlist_reconnects_and_cancels_without_blocking_controls() {
             .unwrap();
     }
     wav.finalize().unwrap();
-    let audio = bytes.into_inner();
+    let audio = Arc::new(bytes.into_inner());
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let address = listener.local_addr().unwrap();
@@ -59,7 +77,7 @@ fn radio_resolves_playlist_reconnects_and_cancels_without_blocking_controls() {
     let server = thread::spawn({
         let (connects, stopped, stalled) = (connects.clone(), stopped.clone(), stalled.clone());
         move || {
-            let mut held = None;
+            let mut workers = Vec::new();
             while !stopped.load(Ordering::Relaxed) {
                 let Ok((mut stream, _)) = listener.accept() else {
                     thread::sleep(Duration::from_millis(5));
@@ -68,29 +86,47 @@ fn radio_resolves_playlist_reconnects_and_cancels_without_blocking_controls() {
                 stream
                     .set_read_timeout(Some(Duration::from_secs(2)))
                     .unwrap();
-                let mut request = String::new();
-                let _ = BufReader::new(&stream).read_line(&mut request);
-                match request.split_whitespace().nth(1) {
-                    Some("/station.pls") => {
-                        let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: audio/x-scpls\r\nConnection: close\r\n\r\n[playlist]\nFile1=./redirect\n");
+                let (audio, connects, stopped, stalled) = (
+                    audio.clone(),
+                    connects.clone(),
+                    stopped.clone(),
+                    stalled.clone(),
+                );
+                // An idle or cancelled connection must not block acceptance of
+                // the next real request. Each reader has a bounded timeout.
+                workers.push(thread::spawn(move || {
+                    let Some(request) = request_path(&stream) else {
+                        return;
+                    };
+                    match request.as_str() {
+                        "/station.pls" => {
+                            let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: audio/x-scpls\r\nConnection: close\r\n\r\n[playlist]\nFile1=./redirect\n");
+                        }
+                        "/redirect" => {
+                            let _ = stream.write_all(b"HTTP/1.1 302 Found\r\nLocation: /Stream?Case=Yes\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                        }
+                        "/Stream?Case=Yes" => {
+                            connects.fetch_add(1, Ordering::Relaxed);
+                            send_wave(stream, &audio);
+                        }
+                        "/stall" => {
+                            stalled.store(true, Ordering::Release);
+                            while !stopped.load(Ordering::Relaxed) {
+                                thread::sleep(Duration::from_millis(5));
+                            }
+                        }
+                        _ => panic!("unexpected request: {request}"),
                     }
-                    Some("/redirect") => {
-                        let _ = stream.write_all(b"HTTP/1.1 302 Found\r\nLocation: /Stream?Case=Yes\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-                    }
-                    Some("/Stream?Case=Yes") => {
-                        connects.fetch_add(1, Ordering::Relaxed);
-                        send_wave(stream, &audio);
-                    }
-                    Some("/stall") => {
-                        stalled.store(true, Ordering::Release);
-                        held = Some(stream);
-                    }
-                    _ => panic!("unexpected request: {request}"),
-                }
+                }));
             }
-            drop(held);
+            for worker in workers {
+                worker.join().unwrap();
+            }
         }
     });
+    // Reproduce a speculative or cancelled connection before the real HTTP
+    // request. It must not consume a stream request or terminate the fixture.
+    drop(TcpStream::connect(address).unwrap());
     let backend = CaptureBackend::new(true);
     let capture = backend.captured();
     let (tx, rx) = crossbeam_channel::unbounded();
@@ -141,6 +177,9 @@ fn radio_resolves_playlist_reconnects_and_cancels_without_blocking_controls() {
     });
     engine.send(Command::Resume);
     await_event(&rx, |e| matches!(e, Event::TrackChanged { .. }));
+    // Keep another connection idle while a real request starts. One idle
+    // reader must not serialize or delay the stalled-stream control test.
+    let idle = TcpStream::connect(address).unwrap();
     play(&format!("http://{address}/stall"));
     let deadline = Instant::now() + Duration::from_secs(2);
     while !stalled.load(Ordering::Acquire) && Instant::now() < deadline {
@@ -158,6 +197,7 @@ fn radio_resolves_playlist_reconnects_and_cancels_without_blocking_controls() {
         )
     });
     assert!(start.elapsed() < Duration::from_secs(1));
+    drop(idle);
     play(&station);
     await_event(
         &rx,
