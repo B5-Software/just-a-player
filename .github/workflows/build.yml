@@ -311,7 +311,7 @@ jobs:
           # Keep guest animations: the action's immediate post-boot settings
           # calls can race the production image's ADB reconnect.
           disable-animations: false
-          emulator-options: -no-window -memory 4096 -gpu swiftshader_indirect -feature -Vulkan -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -memory 6144 -gpu swiftshader_indirect -feature -Vulkan -noaudio -no-boot-anim -camera-back none
           script: |
             adb -s emulator-5554 shell getconf PAGESIZE
             test "$(adb -s emulator-5554 shell getconf PAGESIZE | tr -d '\r')" = 16384
@@ -329,6 +329,15 @@ jobs:
             adb -s emulator-5554 shell pm disable-user --user 0 com.google.android.dialer
             adb -s emulator-5554 shell pm disable-user --user 0 com.google.android.apps.messaging
             adb -s emulator-5554 shell pm disable-user --user 0 com.google.android.gms
+            # A fresh 16-KiB image also starts partner setup and wellbeing jobs.
+            # Keep their first-boot allocations out of playback/renderer QA.
+            for package in com.google.android.partnersetup com.google.android.apps.wellbeing com.google.android.apps.restore com.google.android.setupwizard; do
+              if adb -s emulator-5554 shell pm path "$package" | grep -q '^package:'; then
+                adb -s emulator-5554 shell pm disable-user --user 0 "$package"
+              fi
+            done
+            sleep 5
+            adb -s emulator-5554 shell cat /proc/meminfo
             node apps/android/scripts/test-emulator.mjs --install
             node apps/android/scripts/test-hdr-gpu.mjs
             node apps/android/scripts/test-hifi.mjs

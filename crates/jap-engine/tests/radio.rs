@@ -33,6 +33,7 @@ fn request_path(stream: &TcpStream) -> Option<String> {
     }
 }
 
+#[track_caller]
 fn await_event(events: &Receiver<Event>, pred: impl Fn(&Event) -> bool) {
     let deadline = Instant::now() + Duration::from_secs(6);
     loop {
