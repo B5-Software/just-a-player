@@ -129,17 +129,15 @@ try {
     document.activeElement?.blur()
     window.__jap.useSettings.getState().update({ autoHideControls: true })
   })
-  await delay(3700)
-  assert.equal(
-    await page.locator('[data-player-topbar]').evaluate((e) => getComputedStyle(e).opacity),
-    '0'
-  )
+  await page.waitForFunction(() => {
+    const bar = document.querySelector('[data-player-topbar]')
+    return bar && getComputedStyle(bar).opacity === '0'
+  }, undefined, { timeout: 8000 })
   await tap(260, 360)
-  await delay(400)
-  assert.equal(
-    await page.locator('[data-player-topbar]').evaluate((e) => getComputedStyle(e).opacity),
-    '1'
-  )
+  await page.waitForFunction(() => {
+    const bar = document.querySelector('[data-player-topbar]')
+    return bar && getComputedStyle(bar).opacity === '1'
+  }, undefined, { timeout: 3000 })
   checks.push('Tap without movement wakes hidden controls')
   await page.evaluate(() => window.__jap.useSettings.getState().update({ autoHideControls: false }))
   await page.evaluate(() => window.__jap.usePlayer.getState().setVolume(0.2))

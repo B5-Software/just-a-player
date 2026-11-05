@@ -313,31 +313,7 @@ jobs:
           disable-animations: false
           emulator-options: -no-window -memory 6144 -gpu swiftshader_indirect -feature -Vulkan -noaudio -no-boot-anim -camera-back none
           script: |
-            adb -s emulator-5554 shell getconf PAGESIZE
-            test "$(adb -s emulator-5554 shell getconf PAGESIZE | tr -d '\r')" = 16384
-            adb -s emulator-5554 shell cat /proc/meminfo
-            adb -s emulator-5554 shell dumpsys webviewupdate
-            adb -s emulator-5554 shell svc wifi disable
-            adb -s emulator-5554 shell svc data disable
-            # The offline player has no dependency on these Google/telephony apps.
-            # Their first-boot install/activation storm can exhaust this VM and
-            # LMK even a foreground renderer; isolate the app's QA workload.
-            adb -s emulator-5554 shell pm disable-user --user 0 com.android.vending
-            adb -s emulator-5554 shell pm disable-user --user 0 com.google.android.googlequicksearchbox
-            # Disable telephony first: otherwise its "enable GMS" warning can
-            # interrupt native audio focus while unrelated touch tests run.
-            adb -s emulator-5554 shell pm disable-user --user 0 com.google.android.dialer
-            adb -s emulator-5554 shell pm disable-user --user 0 com.google.android.apps.messaging
-            adb -s emulator-5554 shell pm disable-user --user 0 com.google.android.gms
-            # A fresh 16-KiB image also starts partner setup and wellbeing jobs.
-            # Keep their first-boot allocations out of playback/renderer QA.
-            for package in com.google.android.partnersetup com.google.android.apps.wellbeing com.google.android.apps.restore com.google.android.setupwizard; do
-              if adb -s emulator-5554 shell pm path "$package" | grep -q '^package:'; then
-                adb -s emulator-5554 shell pm disable-user --user 0 "$package"
-              fi
-            done
-            sleep 5
-            adb -s emulator-5554 shell cat /proc/meminfo
+            node apps/android/scripts/prepare-emulator.mjs
             node apps/android/scripts/test-emulator.mjs --install
             node apps/android/scripts/test-hdr-gpu.mjs
             node apps/android/scripts/test-hifi.mjs
