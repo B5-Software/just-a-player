@@ -16,6 +16,9 @@ fn send_wave(mut stream: TcpStream, bytes: &[u8]) {
 }
 
 fn request_path(stream: &TcpStream) -> Option<String> {
+    // BSD accepts may inherit O_NONBLOCK from the listener. A partial request
+    // must wait for its remaining headers instead of closing a live client.
+    stream.set_nonblocking(false).unwrap();
     let mut reader = BufReader::new(stream).take(8192);
     let mut first = String::new();
     if reader.read_line(&mut first).ok()? == 0 {
@@ -31,6 +34,29 @@ fn request_path(stream: &TcpStream) -> Option<String> {
             return Some(path);
         }
     }
+}
+
+#[test]
+fn delayed_http_headers_survive_an_inherited_nonblocking_socket() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let (accepted, ready) = crossbeam_channel::bounded(1);
+    let server = thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        // Reproduce BSD inheritance on every test platform.
+        stream.set_nonblocking(true).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        accepted.send(()).unwrap();
+        request_path(&stream)
+    });
+    let mut client = TcpStream::connect(address).unwrap();
+    ready.recv_timeout(Duration::from_secs(2)).unwrap();
+    client.write_all(b"GET /station.pls HTTP/1.1\r\n").unwrap();
+    thread::sleep(Duration::from_millis(50));
+    client.write_all(b"Host: localhost\r\n\r\n").unwrap();
+    assert_eq!(server.join().unwrap().as_deref(), Some("/station.pls"));
 }
 
 #[track_caller]
