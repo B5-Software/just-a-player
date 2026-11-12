@@ -3,7 +3,7 @@
 import { createInterface } from 'node:readline'
 import { join, dirname } from 'node:path'
 import { readCover } from '@jap/engine'
-import { ExternalPlayer } from './external-player'
+import { ExternalConnection } from './external-connection'
 import { externalLyrics } from '../renderer/src/external/lyrics'
 import type { ExternalAction } from '../shared/external-player'
 import type { Event } from '../shared/protocol/Event'
@@ -31,7 +31,7 @@ const engine = {
   pushLive: (pts: number, frames: number, data: Buffer): void => output({ kind: 'audio', pts, frames }, data),
   closeLive: (): void => output({ kind: 'closeLive' }),
 }
-const adapter = new ExternalPlayer(engine,
+const adapter = new ExternalConnection(engine,
   process.env['JAP_VIRTUAL_OUTPUT_PATH'] || join(dirname(process.execPath), 'resources', 'virtual-output', 'jap_virtual_output.dll'),
   state => {
     const { cover, ...rest } = state

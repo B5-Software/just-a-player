@@ -49,7 +49,7 @@ fn remember(p: &mut Player, id: &str, r: &egui::Response) {
 }
 fn button(ui: &mut egui::Ui, p: &mut Player, id: &str, label: &str) -> bool {
     if matches!(
-        id,
+        id.strip_prefix("system-").unwrap_or(id),
         "play" | "previous" | "next" | "settings" | "import" | "reset" | "radio"
     ) {
         let width = if p.mini {
@@ -338,10 +338,11 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
                                     frame(ui).show(ui, |ui| {
                                         ui.set_width((side - 36.).max(180.));
                                         ui.set_height((body_height - 36.).max(20.));
-                                        let external = matches!(
-                                            p.external_state["phase"].as_str(),
-                                            Some("routing" | "ready")
-                                        );
+                                        let external = p.external_state["source"] != "system-media"
+                                            && matches!(
+                                                p.external_state["phase"].as_str(),
+                                                Some("routing" | "ready")
+                                            );
                                         if external && p.prefs["externalLocalQueue"] != true {
                                             external_queue(ui, p, body_height);
                                             return;
@@ -582,6 +583,62 @@ pub fn draw(ui: &mut egui::Ui, p: &mut Player) {
     };
     ui.ctx()
         .request_repaint_after(std::time::Duration::from_millis(delay));
+}
+
+fn system_media_details(ui: &mut egui::Ui, p: &mut Player) {
+    let snapshot = &p.external_state["snapshot"];
+    let Some(title) = snapshot["track"]["title"].as_str() else {
+        return;
+    };
+    ui.horizontal(|ui| {
+        if let Some(cover) = &p.system_media_cover {
+            ui.add(
+                egui::Image::new(cover)
+                    .max_size(vec2(48., 48.))
+                    .corner_radius(8),
+            );
+        }
+        ui.vertical(|ui| {
+            ui.label(RichText::new(title).strong());
+            let details = ["artist", "album"]
+                .into_iter()
+                .filter_map(|key| {
+                    snapshot["track"][key]
+                        .as_str()
+                        .filter(|text| !text.is_empty())
+                })
+                .collect::<Vec<_>>()
+                .join(" · ");
+            if !details.is_empty() {
+                ui.label(details);
+            }
+            let duration = snapshot["track"]["durationMs"].as_f64().unwrap_or_default() as u64;
+            if duration > 0 {
+                let position = snapshot["positionMs"].as_f64().unwrap_or_default() as u64;
+                ui.label(format!("{} / {}", clock(position), clock(duration)));
+            }
+        });
+    });
+    let playing = snapshot["state"] == "playing";
+    let buttons = [
+        ("system-previous", "上一首", "previous", "previous"),
+        if playing {
+            ("system-play", "暂停", "pause", "pause")
+        } else {
+            ("system-play", "播放", "play", "resume")
+        },
+        ("system-next", "下一首", "next", "next"),
+    ];
+    ui.horizontal(|ui| {
+        for (id, label, capability, action) in buttons {
+            let enabled = p.external_state["controls"][capability] == true;
+            ui.add_enabled_ui(enabled, |ui| {
+                if icon_button(ui, p, id, label, 38.) {
+                    p.external_request(action);
+                }
+            });
+        }
+    });
 }
 
 fn external_queue(ui: &mut egui::Ui, p: &mut Player, height: f32) {
@@ -1078,12 +1135,21 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                             }
                         }
                         "external" => {
-                            ui.label(RichText::new(tr("原生 HiFi 通路")).color(palette.accent_text).strong());
-                            ui.label(tr("客户端输出进入专用黑洞，原始音频交给此窗口的 Rust 引擎。歌词、封面与系统控制同步。"));
                             let phase=p.external_state["phase"].as_str().unwrap_or("disconnected").to_owned();
                             let connected=matches!(phase.as_str(),"ready"|"routing");
-                            ui.add_enabled_ui(phase!="connecting" && p.external_connection.is_some(),|ui| {
-                                if switch(ui,p,"external-connect",tr("连接网易云音乐"),connected) {
+                            let system = p.external_state["source"] == "system-media";
+                            let available = phase != "connecting" && p.external_connection.is_some();
+                            ui.add_enabled_ui(available && (!connected || system), |ui| {
+                                if switch(ui, p, "external-system", "系统媒体同步", system) {
+                                    p.external_request(if system { "disconnect" } else { "connectSystem" });
+                                }
+                            });
+                            ui.label(tr("通过 Windows 同步播放详情和控制，音频由网易云播放。"));
+                            if system { system_media_details(ui, p); }
+                            ui.label(RichText::new(tr("原生 HiFi 通路")).color(palette.accent_text).strong());
+                            ui.label(tr("客户端输出进入专用黑洞，原始音频交给此窗口的 Rust 引擎。歌词、封面与系统控制同步。"));
+                            ui.add_enabled_ui(available && !system,|ui| {
+                                if switch(ui,p,"external-connect",tr("连接网易云音乐"),connected && !system) {
                                     p.external_request(if connected {"disconnect"}else{"connect"});
                                 }
                             });
@@ -1092,10 +1158,10 @@ fn dialog(ctx: &egui::Context, p: &mut Player) {
                                     p.prefs["externalForce"]=json!(p.prefs["externalForce"]!=true);p.persist();
                                 }
                             });
-                            if phase=="ready" && button(ui,p,"external-route",tr("切换客户端到黑洞设备")) {p.external_request("route");}
+                            if phase=="ready" && !system && button(ui,p,"external-route",tr("切换客户端到黑洞设备")) {p.external_request("route");}
                             if p.external_connection.is_none() {ui.label(tr("需要安装包中的连接组件；开发时请从完整版进入原生模式。"));}
-                            if let Some(message)=p.external_state["message"].as_str() {ui.label(RichText::new(message).size(12.).color(palette.accent_text));}
-                            if connected {
+                            if let Some(message)=p.external_state["message"].as_str().filter(|text| !text.is_empty()) {ui.label(RichText::new(tr(message)).size(12.).color(palette.accent_text));}
+                            if connected && !system {
                                 let packets=p.external_state["audioPackets"].as_u64().unwrap_or(0);
                                 let bytes=p.external_state["nullBytes"].as_str().and_then(|s|s.parse::<u64>().ok()).unwrap_or(0);
                                 ui.label(tr_text(format!("音频包 {packets}    黑洞 {:.1} MiB",bytes as f64/1048576.)));

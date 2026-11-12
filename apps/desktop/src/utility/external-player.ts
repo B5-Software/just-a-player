@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Script, Session } from 'frida'
 import type { ExternalAction, ExternalDevice, ExternalPlayerState, ExternalSnapshot } from '../shared/external-player'
+import { externalPosition } from '../shared/external-player'
 import type { TrackInfo } from '../shared/protocol/TrackInfo'
 import type { SampleFormat } from '../shared/protocol/SampleFormat'
 import type { Event } from '../shared/protocol/Event'
@@ -27,6 +28,8 @@ interface AudioPacket {
 }
 const EMPTY = (): ExternalPlayerState => ({ phase: 'disconnected', message: '', snapshot: null, path: null, cover: null, audioPackets: 0, nullBytes: '0' })
 const NULL_NAME = 'Just A Player HiFi Bridge (Black Hole)'
+const STALE_PROGRESS = '客户端未更新播放进度，已暂停自动同步。'
+const SYNC_TIMEOUT = 8000
 const exec = promisify(execFile)
 
 /** An explicit, local connection to one verified NetEase desktop client. */
@@ -59,6 +62,7 @@ export class ExternalPlayer {
   private seekStreamFloor = 0
   private engineStopped = true
   private audiblePositionMs = 0
+  private sourcePositionChangedAt = Date.now()
   private lastSeekAt = 0
   private readonly stopWaiters = new Set<() => void>()
   private coverGeneration = 0
@@ -87,8 +91,21 @@ export class ExternalPlayer {
     }
     // A failed library probe/analysis is unrelated to this live transport.
     if (event.type === 'error' && this.routing && !this.closing && /输出设备中断|output device|live input|实时流.*(?:错误|失败)/i.test(event.message)) void this.fail(event.message)
-    if (event.type === 'bufferReset' && event.automatic && this.routing && !this.closing && !this.capturePaused && Date.now() - this.lastSeekAt > 1500)
+    if (event.type === 'bufferReset' && event.automatic && this.canAutoSeek())
       void this.action('seek', this.audiblePositionMs).catch(error => this.fail(String(error)))
+  }
+
+  private sourcePosition(snapshot = this.state.snapshot): number | undefined {
+    const position = externalPosition(snapshot)
+    if (this.routing && snapshot?.state === 'playing' && position !== undefined &&
+        Date.now() - this.sourcePositionChangedAt >= 3000 && this.audiblePositionMs - position >= 3000)
+      return undefined
+    return position
+  }
+
+  private canAutoSeek(position = this.sourcePosition()): boolean {
+    return this.routing && !this.closing && !this.capturePaused && this.seekTargetMs === null &&
+      position !== undefined && Date.now() - this.lastSeekAt > 1500
   }
   private async stopRust(): Promise<void> {
     this.engine.closeLive()
@@ -146,7 +163,11 @@ export class ExternalPlayer {
         await this.rpc(this.audio, 'enable', false)
       }
       if (action === 'resume' && this.capturePaused) {
-        const position = this.state.snapshot?.positionMs ?? 0
+        const position = this.sourcePosition()
+        if (position === undefined) {
+          await this.command('resume')
+          return this.state
+        }
         this.prepareSeek(position)
         await this.rpc(this.audio, 'enable', true)
         this.capturePaused = false
@@ -155,7 +176,9 @@ export class ExternalPlayer {
         return this.state
       }
       if (action === 'seek') {
-        this.prepareSeek(positionMs ?? 0)
+        if (positionMs === undefined || !Number.isSafeInteger(positionMs) || positionMs < 0)
+          throw new Error('没有可用的播放位置')
+        this.prepareSeek(positionMs)
       }
       await this.command(action, action === 'seek' || action === 'playIndex' ? { positionMs } : {})
     }
@@ -180,7 +203,9 @@ export class ExternalPlayer {
 
   private enableCapture(position: number): void {
     if (this.resumeCapture) return
+    const control = this.controlSequence
     this.resumeCapture = this.rpc(this.audio, 'enable', true).then(() => {
+      if (this.closing || control !== this.controlSequence || this.sourcePosition() === undefined) return
       this.capturePaused = false
       return this.action('seek', position).then(() => {})
     }).catch(error => { if (!this.closing) this.update({ message: String(error) }) })
@@ -266,20 +291,33 @@ export class ExternalPlayer {
       this.update({ nullBytes: stats.discardedBytes })
       await this.command('devices')
       this.pollFailures = 0
-      if (this.routing && this.state.snapshot?.state === 'playing') {
-        if (this.capturePaused) this.enableCapture(this.state.snapshot.positionMs)
-        // A missed start packet must not strand the next song forever. Ask the
-        // source to regenerate from the current audible position, without
-        // detaching the hooks or switching physical output devices.
-        if (Date.now() - this.lastAudioAt > 8000 && Date.now() - this.lastSeekAt > 8000)
-          await this.action('seek', this.state.snapshot.positionMs)
+      const snapshot = this.state.snapshot
+      const position = this.sourcePosition(snapshot)
+      if (this.routing && snapshot?.state === 'playing') {
+        if (!this.capturePaused && this.seekTargetMs !== null && Date.now() - this.lastSeekAt > SYNC_TIMEOUT) {
+          await this.fail('等待新播放位置超时，已停止接管')
+          return
+        }
+        if (position === undefined && externalPosition(snapshot) !== undefined) {
+          if (this.state.message !== STALE_PROGRESS) this.update({ message: STALE_PROGRESS })
+        } else if (position !== undefined) {
+          if (this.state.message === STALE_PROGRESS) this.update({ message: '' })
+          if (this.capturePaused) this.enableCapture(position)
+          else if (this.canAutoSeek(position) && Date.now() - this.lastAudioAt > SYNC_TIMEOUT &&
+              Date.now() - this.lastSeekAt > SYNC_TIMEOUT)
+            await this.action('seek', position)
+        }
       }
       if (stats.buffers > 0 && this.state.snapshot?.devices?.currentDevice.name === NULL_NAME && !this.routing) {
+        if (position === undefined) {
+          await this.fail('客户端播放进度暂不可用，已停止接管')
+          return
+        }
         this.stream = ''; this.engine.send(JSON.stringify({ type: 'stop' }))
         this.update({ phase: 'routing', message: '客户端输出已进入黑洞，正在接收音频…' })
         // Re-read from the audible source position instead of skipping its decoder read-ahead.
-        await this.action('seek', this.state.snapshot.positionMs)
-      } else if (this.routing && this.state.snapshot?.devices?.currentDevice.name !== NULL_NAME) {
+        await this.action('seek', position)
+      } else if (this.routing && snapshot?.devices && snapshot.devices.currentDevice.name !== NULL_NAME) {
         this.engine.send(JSON.stringify({ type: 'stop' })); this.engine.closeLive(); this.stream = ''
         this.update({ phase: 'ready', message: '客户端已切回其他设备，Rust 路由已停止' })
       }
@@ -295,6 +333,14 @@ export class ExternalPlayer {
 
   private onSnapshot(value: ExternalSnapshot): void {
     if (!value.found) return
+    const previous = this.state.snapshot
+    const previousPosition = this.sourcePosition(previous)
+    const reported = externalPosition(value)
+    if (reported === undefined) value = {
+      ...value,
+      positionValid: false,
+      positionMs: previous?.track.id === value.track.id ? previous.positionMs : 0
+    }
     if (value.queue === undefined && this.state.snapshot?.queue) value = {...value,queue:this.state.snapshot.queue}
     if (this.closing) { this.state = { ...this.state, snapshot: value }; return }
     for (const id of value.acks) {
@@ -322,10 +368,13 @@ export class ExternalPlayer {
       }
     }
     this.lastSnapshotAt = Date.now()
-    const previous = this.state.snapshot
     const oldId = previous?.track.id
+    if (oldId !== value.track.id || previous?.state !== value.state || externalPosition(previous) !== reported)
+      this.sourcePositionChangedAt = this.lastSnapshotAt
+    const position = this.sourcePosition(value)
     this.update({ snapshot: value })
-    const repeated = previous && previous.track.durationMs > 0 && previous.positionMs > previous.track.durationMs - 2500 && value.positionMs < 1000
+    const repeated = previous && previousPosition !== undefined && position !== undefined &&
+      previous.track.durationMs > 0 && previousPosition > previous.track.durationMs - 2500 && position < 1000
     if (oldId && (oldId !== value.track.id || repeated) && this.routing) {
       const activeGeneration = Number(this.stream.split(':')[1]) || 0
       this.engine.closeLive(); this.stream = ''; this.nextFrame = 0
@@ -335,9 +384,10 @@ export class ExternalPlayer {
       // Natural EOF is owned by NetEase. Do not issue another next/seek from
       // our local queue. Start with buffered packets from its next decoder.
     }
-    else if (previous && oldId === value.track.id && this.routing && !this.capturePaused && this.seekTargetMs === null && previous.positionMs - value.positionMs > 1500) {
-      this.prepareSeek(value.positionMs)
-      void this.command('seek',{positionMs:value.positionMs}).catch(error => this.update({message:String(error)}))
+    else if (previousPosition !== undefined && position !== undefined && oldId === value.track.id &&
+        this.canAutoSeek(position) && previousPosition - position > 1500) {
+      this.prepareSeek(position)
+      void this.command('seek',{positionMs:position}).catch(error => this.update({message:String(error)}))
     }
     if (this.routing && value.state !== this.lastNativeState) {
       if (value.state === 'paused') {
@@ -346,7 +396,7 @@ export class ExternalPlayer {
         this.engine.send(JSON.stringify({ type: 'pause' }))
         void this.rpc(this.audio, 'enable', false).catch(error => this.fail(String(error)))
       } else if (value.state === 'playing' && this.capturePaused) {
-        this.enableCapture(value.positionMs)
+        if (position !== undefined) this.enableCapture(position)
       } else if (value.state === 'playing') this.engine.send(JSON.stringify({ type: 'resume' }))
       else {
         // A stopped snapshot also occurs between songs while NetEase loads the
@@ -372,12 +422,21 @@ export class ExternalPlayer {
     const s = this.state.snapshot
     if (!this.routing || !s?.track.id || this.closing || this.capturePaused) return
     if (s.speed !== 1) { void this.fail('路由模式需要客户端使用 1× 播放速度'); return }
+    if (/^flac$/i.test(p.codec) && (p.encoding !== 'flac' || p.pts === null)) {
+      void this.fail('原始 FLAC 数据无法验证，已停止接管')
+      return
+    }
+    const position = this.sourcePosition(s)
     const key = `${s.track.id}:${p.stream}:${p.encoding}:${p.pcmFormat ?? ''}`
     let pts: number
     if (p.pts === null) {
       const raw = Number(p.rawPts)
       const continuous = this.clockKey === key && this.previousRawPts !== null && raw > this.previousRawPts
-      pts = continuous ? this.nextFrame : Math.round(s.positionMs * p.sampleRate / 1000)
+      if (!Number.isSafeInteger(raw) || (!continuous && position === undefined)) {
+        void this.fail('客户端提供了不可验证的时间戳')
+        return
+      }
+      pts = continuous ? this.nextFrame : Math.round(position! * p.sampleRate / 1000)
       this.clockKey = key; this.previousRawPts = raw
     } else pts = Number(p.pts)
     if (!Number.isSafeInteger(pts) || pts < 0) { void this.fail('客户端提供了不可验证的时间戳'); return }
@@ -389,7 +448,7 @@ export class ExternalPlayer {
     let trimStartFrames = 0
     if (this.seekTargetMs !== null) {
       const target = Math.round(this.seekTargetMs * p.sampleRate / 1000)
-      const seekAcknowledged = Math.abs(s.positionMs - this.seekTargetMs) <= 1100
+      const seekAcknowledged = position !== undefined && Math.abs(position - this.seekTargetMs) <= 1100
       if (p.stream <= this.seekStreamFloor && !(seekAcknowledged && pts !== this.nextFrame && !this.transitionAt)) return
       if (pts + p.frames <= target) return
       // A decoder can finish old read-ahead after a seek. Only the packet
@@ -397,14 +456,10 @@ export class ExternalPlayer {
       if (pts > target) return
       trimStartFrames = Math.max(0, target - pts)
     }
-    if (this.stream && pts !== this.nextFrame) {
-      // Duplicate/late packets and other decoder contexts do not replace the
-      // active stream. A gap in that stream asks the source to resynchronize.
-      if (pts > this.nextFrame && key === this.stream && Date.now() - this.lastSeekAt > 1500)
-        void this.action('seek', this.audiblePositionMs).catch(error => this.fail(String(error)))
-      return
-    }
-    if (pts * 1000 / p.sampleRate + 2000 < s.positionMs) {
+    // A packet gap does not imply a seek request. Recovery waits for the
+    // source clock and never sends a competing seek from the packet callback.
+    if (this.stream && pts !== this.nextFrame) return
+    if (position !== undefined && pts * 1000 / p.sampleRate + 2000 < position) {
       this.bufferAudio(p, data, receivedAt)
       return
     }
@@ -467,7 +522,8 @@ export class ExternalPlayer {
   private async fail(message: string): Promise<void> {
     if (this.closing) return
     await this.disconnect()
-    this.update({ phase: 'error', message })
+    const restoreError = this.state.phase === 'error' ? this.state.message : ''
+    this.update({ phase: 'error', message: restoreError ? `${message}。${restoreError}` : message })
   }
 
   private async recoverConnection(): Promise<void> {
@@ -545,6 +601,7 @@ export class ExternalPlayer {
     this.capturePaused = false
     this.pollFailures = 0; this.lastSnapshotAt = 0; this.lastAudioAt = 0; this.transitionAt = 0; this.resumeCapture = null
     this.audiblePositionMs = 0; this.lastSeekAt = 0
+    this.sourcePositionChangedAt = Date.now()
     this.clockKey = ''; this.previousRawPts = null; this.lastSourceStream = 0; this.seekTargetMs = null; this.seekStreamFloor = 0
     this.update({ ...EMPTY(), ...(restoreFailed ? { phase: 'error', message: '连接已关闭；未确认客户端输出恢复，请在网易云中检查输出设备。' } : { message: restored ? `已断开，客户端输出已恢复到 ${restored}${fallback ? '（原设备记录不可用，使用系统默认）' : ''}` : '' }) }); this.closing = false
   }

@@ -61,7 +61,7 @@ const tool =
 /** 播放列表：多个列表、递归添加、搜索、排序、多选、拖拽排序，以及导入导出。 */
 export function PlaylistPanel(): React.JSX.Element {
   useLocale()
-  const connected = useExternal(s => s.phase === 'routing' || s.phase === 'ready')
+  const connected = useExternal(s => s.source !== 'system-media' && (s.phase === 'routing' || s.phase === 'ready'))
   const [local, setLocal] = useState(false)
   return ui(<div className="min-h-0">
     {connected && !local ? <ExternalQueue onLocal={() => setLocal(true)}/> : <>

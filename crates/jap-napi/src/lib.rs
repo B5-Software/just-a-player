@@ -4,8 +4,10 @@
 
 use std::path::Path;
 mod desktop;
+mod external_system_media;
 mod gpu;
 mod original_audio;
+pub use external_system_media::external_system_media;
 pub use gpu::gpu_adapters;
 pub use original_audio::unwrap_original_audio;
 mod system_media;

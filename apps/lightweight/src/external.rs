@@ -136,7 +136,7 @@ impl Client {
                         "externalState" => {
                             let phase = value["state"]["phase"].as_str().unwrap_or("");
                             routing.store(phase == "routing" || (phase == "ready" && value["state"]["snapshot"]["devices"]["currentDevice"]["name"] == "Just A Player HiFi Bridge (Black Hole)"), Ordering::Release);
-                            connected.store(matches!(phase, "ready" | "routing" | "connecting"), Ordering::Release);
+                            connected.store(value["state"]["source"] != "system-media" && matches!(phase, "ready" | "routing" | "connecting"), Ordering::Release);
                             let mut queue = updates.lock().unwrap();
                             // Coalesce position/device snapshots, but retain image deltas.
                             if data.is_empty() { queue.retain(|(v, d)| !d.is_empty() || v["kind"] != "externalState") }
@@ -176,7 +176,7 @@ impl Client {
 }
 impl Connection for Client {
     fn request(&self, action: &str, position_ms: Option<u64>, force: bool) -> Result<(), String> {
-        if action == "connect" {
+        if matches!(action, "connect" | "connectSystem") {
             self.start()?
         }
         if action == "disconnect" {

@@ -1754,7 +1754,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jap-analysis"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "jap-core",
  "realfft",
@@ -1762,7 +1762,7 @@ dependencies = [
 
 [[package]]
 name = "jap-android"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "base64 0.22.1",
  "jap-core",
@@ -1777,7 +1777,7 @@ dependencies = [
 
 [[package]]
 name = "jap-cli"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "clap",
@@ -1791,7 +1791,7 @@ dependencies = [
 
 [[package]]
 name = "jap-core"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "serde",
  "ts-rs",
@@ -1799,7 +1799,7 @@ dependencies = [
 
 [[package]]
 name = "jap-decode"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "aes",
  "base64 0.22.1",
@@ -1822,7 +1822,7 @@ dependencies = [
 
 [[package]]
 name = "jap-engine"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "base64 0.22.1",
  "crossbeam-channel",
@@ -1843,7 +1843,7 @@ dependencies = [
 
 [[package]]
 name = "jap-harmony"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "base64 0.22.1",
  "jap-core",
@@ -1859,7 +1859,7 @@ dependencies = [
 
 [[package]]
 name = "jap-light"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "base64 0.22.1",
  "egui",
@@ -1877,7 +1877,7 @@ dependencies = [
 
 [[package]]
 name = "jap-lightweight"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1907,7 +1907,7 @@ dependencies = [
 
 [[package]]
 name = "jap-napi"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "hound",
  "jap-analysis",
@@ -1926,7 +1926,7 @@ dependencies = [
 
 [[package]]
 name = "jap-output"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "alsa",
  "cpal",
@@ -1943,7 +1943,7 @@ dependencies = [
 
 [[package]]
 name = "jap-virtual-output"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "windows 0.62.2",
 ]

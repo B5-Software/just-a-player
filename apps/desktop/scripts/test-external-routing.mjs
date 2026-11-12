@@ -46,3 +46,66 @@ transient.state={phase:'ready',snapshot,audioPackets:0,nullBytes:'0',cover:null}
 let attempts=0;transient.rpc=async()=>{if(++attempts<=2)throw Error('Temporary timeout');return{buffers:0,discardedBytes:'0'}};transient.command=async()=>{}
 await transient.poll();await transient.poll();assert.equal(transient.snapshot().phase,'ready');await transient.poll();assert.equal(transient.pollFailures,0)
 console.log('Live routing passed: exact seek, stale generations, natural next/read-ahead, transient retry, unrelated probe errors, JPEG and cover retry.')
+
+const unsafe = new ExternalPlayer({
+  send() {}, closeLive() {},
+  openLive() { assert.fail('unverified audio opened a Rust stream') },
+  pushLive() { assert.fail('unverified audio reached Rust') }
+}, 'unused', () => {})
+unsafe.state = { phase: 'routing', snapshot, audioPackets: 0, nullBytes: '0', cover: null }
+unsafe.lastNativeState = 'playing'
+const errors = [], seeks = []
+unsafe.fail = async error => { errors.push(error) }
+unsafe.command = async action => { seeks.push(action) }
+unsafe.onSnapshot({ ...snapshot, positionMs: 0, positionValid: false })
+assert.equal(unsafe.snapshot().snapshot.positionMs, snapshot.positionMs)
+assert.equal(unsafe.snapshot().snapshot.positionValid, false)
+assert.deepEqual(seeks, [])
+unsafe.onAudio({ ...packet, encoding: 'pcm', pcmFormat: 'i16' }, Buffer.alloc(4))
+unsafe.onAudio({ ...packet, pts: null }, Buffer.alloc(4))
+assert.equal(errors.length, 2)
+assert.equal(unsafe.snapshot().audioPackets, 0)
+
+const sync = new ExternalPlayer(engine, 'unused', () => {})
+const syncAttempts = []
+const syncFailures = []
+sync.virtual = {}
+sync.rpc = async () => ({ buffers: 0, discardedBytes: '0' })
+sync.command = async () => {}
+sync.action = async (action, position) => { syncAttempts.push([action, position]) }
+sync.fail = async message => {
+  syncFailures.push(message)
+  sync.state.phase = 'error'
+}
+sync.state = { ...unsafe.state, snapshot: { ...snapshot, positionMs: 0, positionValid: true } }
+sync.lastNativeState = 'playing'
+const realNow = Date.now
+let clockMs = realNow()
+Date.now = () => clockMs
+try {
+  sync.onSnapshot({ ...sync.state.snapshot, positionMs: 0 })
+  sync.engineEvent({ type: 'position', positionMs: 4000, durationMs: 60000 })
+  clockMs += 4000
+  await sync.poll()
+  sync.engineEvent({ type: 'bufferReset', automatic: true })
+  assert.deepEqual(syncAttempts, [], 'stalled source timing must not request a seek back to zero')
+  assert.match(sync.snapshot().message, /未更新播放进度/)
+
+  sync.onSnapshot({ ...sync.state.snapshot, positionMs: 12000 })
+  sync.seekTargetMs = 12000
+  sync.lastSeekAt = clockMs
+  clockMs += 3000
+  sync.engineEvent({ type: 'bufferReset', automatic: true })
+  await sync.poll()
+  assert.deepEqual(syncAttempts, [], 'pending sync must suppress competing auto-seeks')
+  assert.equal(syncFailures.length, 0)
+
+  clockMs += 6000
+  await sync.poll()
+  assert.deepEqual(syncAttempts, [], 'a failed sync must not restart the seek loop')
+  assert.match(syncFailures[0], /超时/)
+  assert.equal(sync.snapshot().phase, 'error')
+} finally {
+  Date.now = realNow
+}
+console.log('Live routing pauses sync for a frozen source and stops after one unconfirmed seek.')

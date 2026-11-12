@@ -10,11 +10,11 @@ export const useExternal = create<ExternalPlayerState>(() => ({ phase: 'disconne
 let lastPath = '', lastLyrics = '', lastCover: Uint8Array | null = null
 engine.onExternal(state => {
   const wasRouting = useExternal.getState().phase === 'routing'
-  useExternal.setState(state)
+  useExternal.setState({ ...state, source: state.source, controls: state.controls })
   if (wasRouting && (state.phase === 'disconnected' || state.phase === 'error') && usePlayer.getState().track?.path.startsWith('external://'))
     usePlayer.setState({ track: null, signalPath: null, state: 'stopped', position: { ms: 0, at: performance.now() } })
   const s = state.snapshot
-  if (!s?.track.id) { lastPath = ''; return }
+  if (!s?.track.id || state.source === 'system-media') { lastPath = ''; return }
   const path = `external://netease/${encodeURIComponent(s.track.id)}`, lyrics = externalLyrics(s)
   if (state.phase !== 'routing' && !(state.phase === 'ready' && usePlayer.getState().track?.path === path)) { lastPath = ''; return }
   if (path !== lastPath || (lyrics ?? '') !== lastLyrics) {

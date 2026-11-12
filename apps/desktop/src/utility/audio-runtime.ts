@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { HostToRenderer, RendererToHost } from '../shared/ipc'
 import type { Event } from '../shared/protocol/Event'
+import { externalPosition } from '../shared/external-player'
 import { VIZ } from '../shared/viz'
-import { ExternalPlayer } from './external-player'
+import { ExternalConnection } from './external-connection'
 import { externalLyrics } from '../renderer/src/external/lyrics'
 
 
@@ -39,7 +40,7 @@ function post(message: HostToRenderer): void {
   publish(message)
 }
 
-let external: ExternalPlayer | null = null
+let external: ExternalConnection | null = null
 let configured = false
 const engine = new Engine((json: string) => {
   const event = JSON.parse(json) as Event
@@ -50,7 +51,7 @@ const engine = new Engine((json: string) => {
   if (REPLAYABLE.includes(event.type)) latest[event.type] = event
   post({ kind: 'event', event })
 })
-external = new ExternalPlayer(
+external = new ExternalConnection(
   engine,
   process.env['JAP_VIRTUAL_OUTPUT_PATH'] || join(process.resourcesPath, 'virtual-output', 'jap_virtual_output.dll'),
   (state) => post({ kind: 'externalState', state: { ...state, lyricsText: state.snapshot ? externalLyrics(state.snapshot) : null } }),
@@ -129,7 +130,15 @@ function onPortMessage(message: RendererToHost, reply: { postMessage(message: Ho
         }
         if (command.type === 'queueNext' && external.ownsTransport) return
         if (external.ownsTransport && (command.type === 'resetBuffer' || command.type === 'setOutput')) {
-          const position = (latest.position?.type === 'position' ? latest.position.positionMs : undefined) ?? external.snapshot().snapshot?.positionMs ?? 0
+          const state = external.snapshot()
+          const enginePosition = latest.trackChanged?.type === 'trackChanged' &&
+            latest.trackChanged.track.path === state.path &&
+            latest.position?.type === 'position' ? latest.position.positionMs : undefined
+          const position = enginePosition ?? externalPosition(state.snapshot)
+          if (position === undefined) {
+            post({ kind: 'event', event: { type: 'error', message: '客户端播放进度暂不可用，请稍后重试' } })
+            return
+          }
           if (command.type === 'setOutput') {
             engine.send(JSON.stringify({ type: 'stop' }))
             engine.send(JSON.stringify(command))

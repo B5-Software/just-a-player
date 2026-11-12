@@ -10,6 +10,7 @@ export interface ExternalSnapshot {
   track: { id: string; title: string; artist: string; album: string; durationMs: number; coverUrl: string; localPath?: string }
   state: 'playing' | 'paused' | 'stopped'
   positionMs: number
+  positionValid?: boolean
   speed: number
   mode?: 'off' | 'all' | 'one' | 'shuffle' | 'fm' | 'ai'
   queue?: {
@@ -31,6 +32,8 @@ export interface ExternalSnapshot {
   deviceError: string | null
 }
 export interface ExternalPlayerState {
+  source?: 'system-media'
+  controls?: { play: boolean; pause: boolean; next: boolean; previous: boolean }
   lyricsText?: string | null
   phase: 'disconnected' | 'connecting' | 'ready' | 'routing' | 'error'
   message: string
@@ -41,4 +44,9 @@ export interface ExternalPlayerState {
   audioPackets: number
   nullBytes: string
 }
-export type ExternalAction = 'connect' | 'disconnect' | 'route' | 'pause' | 'resume' | 'next' | 'previous' | 'seek' | 'status' | 'playIndex' | 'repeatOff' | 'repeatAll' | 'repeatOne' | 'shuffleOn' | 'shuffleOff'
+export function externalPosition(snapshot: ExternalSnapshot | null | undefined): number | undefined {
+  if (snapshot && snapshot.positionValid !== false && Number.isSafeInteger(snapshot.positionMs) && snapshot.positionMs >= 0)
+    return snapshot.positionMs
+  return undefined
+}
+export type ExternalAction = 'connect' | 'connectSystem' | 'disconnect' | 'route' | 'pause' | 'resume' | 'next' | 'previous' | 'seek' | 'status' | 'playIndex' | 'repeatOff' | 'repeatAll' | 'repeatOne' | 'shuffleOn' | 'shuffleOff'

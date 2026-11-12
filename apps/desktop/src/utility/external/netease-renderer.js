@@ -73,9 +73,17 @@ function collect(commands, finish, forceMode) {
     const queueName = String(p.curPlaying?.text || '网易云播放队列').slice(0,160);
     const queueChanged = bridge.queueSource !== list || bridge.queueUpdate !== state.playingList?.updateNumber || bridge.queueName !== queueName;
     bridge.queueSource = list; bridge.queueUpdate = state.playingList?.updateNumber; bridge.queueName = queueName;
+    let positionMs = null;
+    try {
+        const value = bridge.progress.getValue();
+        if (typeof value === 'number' || (typeof value === 'string' && value.trim())) {
+            const ms = Math.round(Number(value) * 1000);
+            if (Number.isSafeInteger(ms) && ms >= 0) positionMs = ms;
+        }
+    } catch { /* A transition can temporarily leave progress unavailable. */ }
     const snapshot = {
         found: true, acks, track: { id, title: String(p.resourceName || ''), artist: (p.resourceArtists || []).map(x => x.name).join(' / '), album: String(track.album?.name || track.al?.name || ''), durationMs: Math.round((Number(p.resourceDuration) || 0) * 1000), coverUrl, localPath },
-        state: p.playingState === 2 ? 'playing' : p.playingState === 1 ? 'paused' : 'stopped', positionMs: Math.round((Number(bridge.progress.getValue()) || 0) * 1000), speed: Number(p.playingSpeed) || 1,
+        state: p.playingState === 2 ? 'playing' : p.playingState === 1 ? 'paused' : 'stopped', positionMs: positionMs ?? 0, positionValid: positionMs !== null, speed: Number(p.playingSpeed) || 1,
         mode: {playOrder:'off',playCycle:'all',playOneCycle:'one',playRandom:'shuffle',playFm:'fm',playAi:'ai'}[p.playingMode] || 'all',
         queue: queueChanged ? { name: queueName, total: list.length, truncated: list.length > 2000, items: list.slice(0,2000).map(item => {
             const t=item.track || item.localTrack || {};

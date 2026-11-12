@@ -54,6 +54,25 @@ pub fn now_id() -> String {
             .as_nanos()
     )
 }
+
+fn system_thumbnail(ctx: &egui::Context, bytes: &[u8]) -> Option<TextureHandle> {
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .ok()?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(4096);
+    limits.max_image_height = Some(4096);
+    limits.max_alloc = Some(32 * 1024 * 1024);
+    reader.limits(limits);
+    let image = reader.decode().ok()?.thumbnail(128, 128).to_rgba8();
+    let size = [image.width() as usize, image.height() as usize];
+    Some(ctx.load_texture(
+        "external-system-cover",
+        ColorImage::from_rgba_unmultiplied(size, image.as_raw()),
+        egui::TextureOptions::LINEAR,
+    ))
+}
+
 enum Task {
     Import(Vec<String>, String),
     Resources(String),
@@ -86,6 +105,7 @@ pub struct Player {
     pub engine: Arc<Engine>,
     pub external_connection: Option<Arc<dyn crate::external::Connection>>,
     pub external_state: Value,
+    pub system_media_cover: Option<TextureHandle>,
     pub external_auto_route: bool,
     pub external_auto_resume: bool,
     pub frame: Vec<f32>,
@@ -367,6 +387,7 @@ impl Player {
             engine,
             external_connection: None,
             external_state: json!({"phase":"disconnected"}),
+            system_media_cover: None,
             external_auto_route: false,
             external_auto_resume: false,
             frame: vec![0.; 648],
@@ -497,7 +518,7 @@ impl Player {
             .ok_or_else(|| "连接组件不可用，请通过完整安装包启动原生模式".to_string())
             .and_then(|e| e.request(action, None, force))
         {
-            Ok(()) if action == "connect" => {
+            Ok(()) if matches!(action, "connect" | "connectSystem") => {
                 self.external_state = json!({"phase":"connecting","message":"正在连接网易云音乐…"})
             }
             Ok(()) => {}
@@ -606,6 +627,15 @@ impl Player {
                 continue;
             }
             let mut state = value["state"].clone();
+            if state["source"] == "system-media" {
+                if state.get("cover").is_some() {
+                    self.system_media_cover = system_thumbnail(ctx, &data);
+                }
+                self.external_state = state;
+                self.dirty = true;
+                continue;
+            }
+            self.system_media_cover = None;
             if state["snapshot"].is_object() && state["snapshot"].get("queue").is_none() {
                 state["snapshot"]["queue"] = self.external_state["snapshot"]["queue"].clone();
             }
