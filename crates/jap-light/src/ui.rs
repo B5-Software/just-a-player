@@ -924,9 +924,9 @@ fn meter(ui: &mut egui::Ui, p: &Player, index: usize) {
                 ));
             }
             2 => {
-                for ch in 0..2 {
+                for (ch, &rms) in p.meter_levels.iter().enumerate() {
                     let y = r.top() + ch as f32 * 39. + 5.;
-                    let level = vu_position(p.meter_levels[ch]);
+                    let level = vu_position(rms);
                     painter.rect_filled(
                         egui::Rect::from_min_size(pos2(r.left(), y), vec2(r.width() * level, 16.)),
                         4.,
@@ -939,7 +939,7 @@ fn meter(ui: &mut egui::Ui, p: &Player, index: usize) {
                             Stroke::new(1.0_f32, palette.line),
                         );
                     }
-                    let db = 20. * p.meter_levels[ch].abs().max(1e-8).log10();
+                    let db = 20. * rms.abs().max(1e-8).log10();
                     painter.text(
                         pos2(r.left() + 4., y + 20.),
                         egui::Align2::LEFT_TOP,
