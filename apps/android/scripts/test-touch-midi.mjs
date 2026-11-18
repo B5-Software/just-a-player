@@ -145,6 +145,7 @@ async function awake(expected) {
 }
 try {
   await wait(`!!window.__jap&&__jap.usePlayer.getState().connected`)
+  await c.evaluate("__jap.useSettings.getState().update({language:'zh-CN'})")
   if (!(await c.evaluate('window.jap.bundledMidi'))) {
     const bank = fileURLToPath(new URL('../../../scripts/fixtures/sine.sf2', import.meta.url))
     const target = `/storage/emulated/0/Android/data/${app}/files/Music/OriginalSine.sf2`
@@ -249,32 +250,29 @@ try {
   )
   await delay(300)
   const es = '[role="slider"][aria-label="EQ 31.25 Hz"]'
+  const thumb = es + ' .jap-range-thumb'
   await wait(`document.querySelector(${q(es)})?.getAttribute('aria-valuenow')==='0'`)
   await c.evaluate(`document.querySelector(${q(es)}).scrollIntoView({block:'center'})`)
-  let er = await rect(es),
+  const er = await rect(es),
     eq = await value(es)
-  // Stream input without waiting for each remote acknowledgement: that wait
-  // can accidentally hold the finger still for >220 ms on a busy CI emulator.
-  // Chromium still assigns the real event timestamps; no host clock is used.
-  await c.evaluate(`(()=>{window.__eqTouchQA=[];const e=document.querySelector(${q(es)});for(const type of ['pointerdown','pointermove','pointerup','pointercancel'])e.addEventListener(type,p=>__eqTouchQA.push({type,pointerType:p.pointerType,time:p.timeStamp,firstTime:p.getCoalescedEvents?.()[0]?.timeStamp??p.timeStamp,x:p.clientX,y:p.clientY,trusted:p.isTrusted}),{capture:true,passive:true})})()`)
-  const swipeInputs = [touch('touchStart', er.x + er.w / 2, er.y + er.h / 2)]
-  for (let n = 1; n <= 6; n++) {
-    await delay(20)
-    swipeInputs.push(touch('touchMove', er.x + er.w / 2, er.y + er.h / 2 - 25 * n / 6))
-  }
-  swipeInputs.push(touch('touchEnd'))
-  await Promise.all(swipeInputs)
-  await delay(120)
-  report.eqScrollInput = await c.evaluate('__eqTouchQA')
-  const swipeDown = report.eqScrollInput.find(e => e.type === 'pointerdown'),
-    swipeMove = report.eqScrollInput.find(e => e.type === 'pointermove')
-  assert.ok(swipeDown?.trusted && swipeMove?.trusted && swipeMove.pointerType === 'touch')
-  assert.ok(swipeMove.firstTime - swipeDown.time < 220, 'Scroll must move before the hold threshold')
+  const scroll = `document.querySelector(${q(es)}).closest('.overflow-y-auto').scrollTop`
+  const beforeScroll = await c.evaluate(scroll)
+  await drag(er.x + er.w / 2, er.y + er.h * 0.85, 0, -42)
+  await wait(`${scroll} > ${beforeScroll}`, 'Vertical swipe on the EQ rail scrolls the panel')
   assert.equal(await value(es), eq)
-  er = await rect(es)
-  await drag(er.x + er.w / 2, er.y + er.h / 2, 0, -25, 240)
-  assert.notEqual(await value(es), eq)
-  report.checks.push('Vertical EQ distinguishes scrolling from hold-and-drag')
+  await c.evaluate(`document.querySelector(${q(es)}).scrollIntoView({block:'center'})`)
+  await delay(200)
+  let knob = await rect(thumb)
+  await tap(knob.x + knob.w / 2, knob.y + knob.h / 2)
+  assert.equal(await value(es), eq)
+  await drag(knob.x + knob.w / 2, knob.y + knob.h / 2, 0, -25)
+  const eqValue = `Number(document.querySelector(${q(es)}).getAttribute('aria-valuenow'))`
+  await wait(`${eqValue} >= ${eq + 4}`, 'Thumb moves up on an immediate swipe', 3000)
+  knob = await rect(thumb)
+  await drag(knob.x + knob.w / 2, knob.y + knob.h / 2, 0, 45)
+  await wait(`${eqValue} <= ${eq - 3}`, 'Thumb moves down on an immediate swipe', 3000)
+  assert.ok(await c.evaluate('__jap.useDsp.getState().config.eqDb.slice(1).every(gain => gain === 0)'))
+  report.checks.push('Vertical EQ thumb moves in both directions immediately and ignores taps')
   await c.evaluate(
     `__jap.useUi.getState().closePanel();__jap.useDsp.getState().update({enabled:false});__jap.useSettings.getState().update({lyricsPosition:'custom',lyricsOffset:{x:0,y:0,z:0},lyricsRotation:{x:0,y:0,z:0},lyricsPose:'none'});__jap.useUi.getState().setOnboardingOpen(true)`
   )

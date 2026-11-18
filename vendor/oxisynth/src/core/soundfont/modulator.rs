@@ -9,6 +9,16 @@ use soundfont::raw::{
     ModulatorTransform, SourceDirection, SourcePolarity, SourceType,
 };
 
+// SF2 2.04 sections 8.4.6 and 9.5.3: a 7-bit bipolar source centers at 64
+// and has endpoints -1 and 127/128.
+fn bipolar_linear(value: f32, range: f32) -> f32 {
+    if value == range - 1.0 {
+        value / range
+    } else {
+        2.0 * value / range - 1.0
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Mod {
     pub dest: GeneratorType,
@@ -108,7 +118,8 @@ impl Mod {
             return 0.0;
         }
 
-        let mut range1: f32 = 127.0f32;
+        // Linear 7-bit sources divide by the number of values, not the last value.
+        let mut range1 = 128.0;
         // get the initial value of the first source
         let mut v1 = if self.src.index > 0 {
             use GeneralPalette::*;
@@ -137,11 +148,11 @@ impl Mod {
                 // 0
                 (Linear, Unipolar, Positive) => v1 / range1,
                 // 1
-                (Linear, Unipolar, Negative) => 1.0 - v1 / range1,
+                (Linear, Unipolar, Negative) => (range1 - 1.0 - v1) / range1,
                 // 2
-                (Linear, Bipolar, Positive) => -1.0 + 2.0 * v1 / range1,
+                (Linear, Bipolar, Positive) => bipolar_linear(v1, range1),
                 // 3
-                (Linear, Bipolar, Negative) => 1.0 - 2.0 * v1 / range1,
+                (Linear, Bipolar, Negative) => bipolar_linear(range1 - 1.0 - v1, range1),
 
                 // 4
                 (Concave, Unipolar, Positive) => concave(v1),
@@ -229,7 +240,7 @@ impl Mod {
             return 0.0;
         }
 
-        let range2: f32 = 127.0f32;
+        let mut range2 = 128.0;
         // get the second input source
         let v2 = if self.src2.index > 0 {
             use GeneralPalette::*;
@@ -241,7 +252,10 @@ impl Mod {
                     NoteOnKeyNumber => voice.key() as f32,
                     PolyPressure => chan.key_pressure(voice.key() as usize) as f32,
                     ChannelPressure => chan.channel_pressure() as f32,
-                    PitchWheel => chan.pitch_bend() as f32,
+                    PitchWheel => {
+                        range2 = 0x4000 as f32;
+                        chan.pitch_bend() as f32
+                    }
                     PitchWheelSensitivity => chan.pitch_wheel_sensitivity() as f32,
                     _ => {
                         // https://github.com/divideconcept/FluidLite/blob/fdd05bad03cdb24d1f78b5fe3453842890c1b0e8/src/fluid_mod.c#L282
@@ -262,11 +276,11 @@ impl Mod {
                 // 0
                 (Linear, Unipolar, Positive) => v2 / range2,
                 // 1
-                (Linear, Unipolar, Negative) => 1.0 - v2 / range2,
+                (Linear, Unipolar, Negative) => (range2 - 1.0 - v2) / range2,
                 // 2
-                (Linear, Bipolar, Positive) => -1.0 + 2.0 * v2 / range2,
+                (Linear, Bipolar, Positive) => bipolar_linear(v2, range2),
                 // 3
-                (Linear, Bipolar, Negative) => -1.0 + 2.0 * v2 / range2,
+                (Linear, Bipolar, Negative) => bipolar_linear(range2 - 1.0 - v2, range2),
 
                 // 4
                 (Concave, Unipolar, Positive) => concave(v2),

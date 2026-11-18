@@ -95,13 +95,19 @@ pub(crate) fn handle_event(synth: &mut Core, event: MidiEvent) -> Result<(), Oxi
         MidiEvent::SystemReset => {
             synth.voices.system_reset();
 
-            let preset = synth.font_bank.find_preset(0, 0).map(|p| p.1);
+            let drums = synth.settings.drums_channel_active;
             for channel in synth.channels.iter_mut() {
-                channel.init(preset.clone());
+                channel.init(synth.settings.interpolation);
                 channel.init_ctrl(false);
+                if channel.id() == 9 && drums {
+                    channel.set_banknum(128);
+                }
+                program_change(channel, &synth.font_bank, 0, drums);
             }
 
+            let chorus_params = synth.chorus.params();
             synth.chorus.reset();
+            synth.chorus.set_params(&chorus_params);
             synth.reverb.reset();
         }
     };
@@ -458,11 +464,14 @@ fn cc(
                 return;
             }
 
-            // FIXME: according to the Downloadable Sounds II specification,
-            // bit 31 should be set when we receive the message on channel
-            // 10 (drum channel)
-            channel
-                .set_banknum((value as u32 & 0x7f).wrapping_add((channel.bank_msb() as u32) << 7));
+            let msb = u32::from(channel.bank_msb());
+            // A GS-style bank followed by the default LSB still names that bank.
+            let bank = if value == 0 {
+                msb
+            } else {
+                (msb << 7) | u32::from(value)
+            };
+            channel.set_banknum(bank);
         }
 
         AllNotesOff => {
@@ -579,14 +588,20 @@ pub(crate) fn program_change(
     program_id: u8,
     drums_channel_active: bool,
 ) {
-    let banknum = channel.banknum();
+    let banknum = if channel.id() == 9 && drums_channel_active {
+        128
+    } else {
+        channel.banknum()
+    };
     channel.set_prognum(program_id);
 
-    let mut preset = if channel.id() == 9 && drums_channel_active {
-        font_bank.find_preset(128, program_id)
-    } else {
-        font_bank.find_preset(banknum, program_id)
-    };
+    let mut preset = font_bank.find_preset(banknum, program_id);
+    let msb = u32::from(channel.bank_msb());
+    let lsb = u32::from(channel.cc(ControlFunction::BankSelectLsb as usize));
+    if preset.is_none() && msb != 0 && lsb != 0 && banknum == ((msb << 7) | lsb) {
+        // SF2 usually stores GS variations by CC0. Retain an exact combined-bank match if present.
+        preset = font_bank.find_preset(msb, program_id);
+    }
 
     if preset.is_none() {
         let mut subst_bank = banknum as i32;

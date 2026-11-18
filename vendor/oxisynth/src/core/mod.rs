@@ -70,7 +70,7 @@ impl Core {
 
             output: OutputBuffer::new(nbuf as usize),
 
-            reverb: Reverb::new(),
+            reverb: Reverb::with_sample_rate(settings.sample_rate),
             chorus: Chorus::new(settings.sample_rate),
 
             settings,

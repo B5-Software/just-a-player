@@ -16,7 +16,8 @@ input[type='range'] { min-height: 32px; }
 .jap-range[data-range-vertical] { cursor: ns-resize; }
 .jap-range[data-range-vertical] .jap-range-track { width: 5px; height: auto; left: calc(50% - 2.5px); top: 0; bottom: 0; right: auto; }
 .jap-range[data-range-vertical] .jap-range-fill { position: absolute; bottom: 0; width: 100%; }
-.jap-range[data-range-vertical] .jap-range-thumb { left: 50%; top: auto; transform: translate(-50%, 50%); }
+.jap-range[data-range-vertical] .jap-range-thumb { left: 50%; top: auto; transform: translate(-50%, 50%); touch-action: none; }
+.jap-range[data-range-vertical] .jap-range-thumb::before { content: ''; position: absolute; inset: -11px -9px; }
 [data-panel-root], .file-browser-body, [role='listbox'] { overscroll-behavior: contain; }
 @media (pointer: coarse) {
   [data-panel-root] button, .app-dialog button, [data-toolbar] button { min-height: 40px; }

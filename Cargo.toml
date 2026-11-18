@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-exclude = ["vendor/oxisynth", "vendor/symphonia-common", "vendor/symphonia-bundle-flac"]
+exclude = ["vendor/oxisynth", "vendor/oxisynth-reverb", "vendor/symphonia-common", "vendor/symphonia-bundle-flac"]
 members = [
     "crates/jap-analysis",
     "crates/jap-core",

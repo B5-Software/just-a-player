@@ -47,9 +47,18 @@ import type { Surface } from '../shared/desktop'
 import { discoverAudioTools } from './tools'
 import { installFileOpening, attachFileOpening } from './file-opening'
 import { registerSoundfonts } from './soundfonts'
-import { openLightweight, wantsLightweight, takeLightweightHandoff, isHandingOff } from './lightweight'
+import {
+  bundledRendererEntry,
+  isHandingOff,
+  openLightweight,
+  returningToFull,
+  takeLightweightHandoff,
+  wantsLightweight,
+} from './lightweight'
 
 const isDev = !app.isPackaged
+// electron-vite's dev server exits with the Electron process that launched Native mode.
+const devRendererUrl = isDev && !returningToFull ? process.env['ELECTRON_RENDERER_URL'] : undefined
 process.env['JAP_VIRTUAL_OUTPUT_PATH'] ||= isDev
   ? join(__dirname, '../../build/virtual-output/jap_virtual_output.dll')
   : join(process.resourcesPath, 'virtual-output/jap_virtual_output.dll')
@@ -136,8 +145,7 @@ function installContentSecurityPolicy(): void {
 
 function isTrustedSender(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
   const url = event.senderFrame?.url ?? ''
-  const devUrl = process.env['ELECTRON_RENDERER_URL']
-  return isDev && devUrl ? url.startsWith(devUrl) : url.startsWith('file://')
+  return devRendererUrl ? url.startsWith(devRendererUrl) : url.startsWith('file://')
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -430,10 +438,9 @@ function loadSurface(other: BrowserWindow, surface: Surface): void {
   surfaces.set(other.webContents.id, surface)
   if (surface === 'wallpaper' || surface === 'export')
     other.webContents.on('did-finish-load', () => attachEngine(other, surface))
-  const devUrl = process.env['ELECTRON_RENDERER_URL']
-  if (isDev && devUrl) void other.loadURL(`${devUrl}?surface=${surface}${isE2E ? '&e2e=1' : ''}`)
+  if (devRendererUrl) void other.loadURL(`${devRendererUrl}?surface=${surface}${isE2E ? '&e2e=1' : ''}`)
   else
-    void other.loadFile(join(__dirname, '../renderer/index.html'), {
+    void other.loadFile(bundledRendererEntry, {
       query: { surface, ...(isE2E ? { e2e: '1' } : {}) },
     })
 }
@@ -499,11 +506,10 @@ function createWindow(): void {
   })
   win.webContents.on('will-navigate', (event) => event.preventDefault())
 
-  const devUrl = process.env['ELECTRON_RENDERER_URL']
-  if (isDev && devUrl) void win.loadURL(devUrl)
+  if (devRendererUrl) void win.loadURL(devRendererUrl)
   else
     void win.loadFile(
-      join(__dirname, '../renderer/index.html'),
+      bundledRendererEntry,
       isE2E ? { query: { e2e: '1' } } : {}
     )
 }

@@ -106,13 +106,14 @@ impl Channel {
         chan
     }
 
-    pub fn init(&mut self, preset: Option<Arc<Preset>>) {
+    pub fn init(&mut self, interpolation: InterpolationMethod) {
         self.prognum = 0;
         self.banknum = 0;
+        self.bank_msb = 0;
         self.sfontnum = None;
 
-        self.preset = preset;
-        self.interp_method = Default::default();
+        self.preset = None;
+        self.interp_method = interpolation;
         self.tuning = None;
         self.nrpn_select = 0;
         self.nrpn_active = 0;

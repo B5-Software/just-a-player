@@ -97,7 +97,7 @@ fn invalid(message: impl Into<String>) -> DecodeError {
 #[derive(Clone, Copy)]
 enum Action {
     Midi(MidiEvent),
-    Gain(f32),
+    MasterVolume(f64),
 }
 #[derive(Clone, Copy)]
 struct Scheduled {
@@ -168,6 +168,32 @@ fn convert(channel: u8, m: MidiMessage) -> MidiEvent {
             channel,
             value: bend.0.as_int(),
         },
+    }
+}
+fn sysex(data: &[u8]) -> Option<Action> {
+    let payload = data.strip_suffix(&[0xf7]).unwrap_or(data);
+    match payload {
+        [0x7e, 0..=127, 9, 1 | 3] | [0x41, 0..=127, 0x42, 0x12, 0x40, 0, 0x7f, 0, 0x41] => {
+            Some(Action::Midi(MidiEvent::SystemReset))
+        }
+        [0x7f, 0..=127, 4, 1, lsb @ 0..=127, msb @ 0..=127] => {
+            let value = u16::from(*lsb) | (u16::from(*msb) << 7);
+            Some(Action::MasterVolume(f64::from(value) / 16383.0))
+        }
+        [
+            0x41,
+            0..=127,
+            0x42,
+            0x12,
+            0x40,
+            0,
+            4,
+            volume @ 0..=127,
+            checksum @ 0..=127,
+        ] if (0x44 + u16::from(*volume) + u16::from(*checksum)) % 128 == 0 => {
+            Some(Action::MasterVolume(f64::from(*volume) / 127.0))
+        }
+        _ => None,
     }
 }
 fn parse(data: &[u8], rate: u32) -> Result<Sequence> {
@@ -244,14 +270,7 @@ fn parse(data: &[u8], rate: u32) -> Result<Sequence> {
                     }
                     None
                 }
-                TrackEventKind::SysEx(d) if d.len() >= 4 && d[0] == 0x7e && d[2] == 9 => {
-                    Some(Action::Midi(MidiEvent::SystemReset))
-                }
-                TrackEventKind::SysEx(d) if d.len() >= 6 && d[0] == 0x7f && d[2..4] == [4, 1] => {
-                    Some(Action::Gain(
-                        f32::from(u16::from(d[4]) | u16::from(d[5]) << 7) / 16383.,
-                    ))
-                }
+                TrackEventKind::SysEx(data) => sysex(data),
                 _ => None,
             };
             if let Some(action) = action {
@@ -296,6 +315,7 @@ pub struct MidiSource {
     font: SoundFont,
     cursor: u64,
     index: usize,
+    master_volume: f64,
     warned_missing_preset: bool,
 }
 impl MidiSource {
@@ -354,6 +374,7 @@ impl MidiSource {
             font,
             cursor: 0,
             index: 0,
+            master_volume: 1.0,
             warned_missing_preset: false,
         })
     }
@@ -375,6 +396,12 @@ impl MidiSource {
                 && self.sequence.events[self.index].frame <= self.cursor
             {
                 match self.sequence.events[self.index].action {
+                    Action::Midi(MidiEvent::SystemReset) => {
+                        self.synth
+                            .send_event(MidiEvent::SystemReset)
+                            .map_err(|e| invalid(e.to_string()))?;
+                        self.master_volume = 1.0;
+                    }
                     Action::Midi(e) => match self.synth.send_event(e) {
                         Ok(()) => {}
                         Err(
@@ -390,7 +417,7 @@ impl MidiSource {
                         }
                         Err(e) => return Err(invalid(e.to_string())),
                     },
-                    Action::Gain(gain) => self.synth.set_gain(gain * 0.2),
+                    Action::MasterVolume(volume) => self.master_volume = volume,
                 }
                 self.index += 1;
             }
@@ -401,7 +428,14 @@ impl MidiSource {
                 .map_or(target, |e| e.frame.min(target));
             let start = out.len();
             out.resize(start + (end - self.cursor) as usize * 2, 0.);
-            self.synth.write(&mut out[start..]);
+            let samples = &mut out[start..];
+            self.synth.write(&mut *samples);
+            // Apply MIDI master volume after mixing voices and effects, including their tails.
+            if self.master_volume != 1.0 {
+                for sample in samples {
+                    *sample *= self.master_volume;
+                }
+            }
             self.cursor = end;
         }
         Ok(())
@@ -423,6 +457,7 @@ impl AudioSource for MidiSource {
             self.synth = Self::synth(&self.font, self.info.format.sample_rate)?;
             self.cursor = 0;
             self.index = 0;
+            self.master_volume = 1.0;
         }
         let mut scratch = Vec::with_capacity(BLOCK * 2);
         while self.cursor < target {
@@ -453,6 +488,247 @@ mod tests {
             data.extend(*track);
         }
         data
+    }
+    #[test]
+    fn hq_bank_selection_and_reset_preserve_the_intended_instruments() {
+        if !default_font().exists() {
+            return;
+        }
+        let mut synth = MidiSource::synth(&load_font(&default_font()).unwrap(), 48000).unwrap();
+        assert_eq!(synth.channel_preset(9).unwrap().banknum(), 128);
+        synth.send_event(MidiEvent::SystemReset).unwrap();
+        assert_eq!(synth.channel_preset(9).unwrap().banknum(), 128);
+        for lsb in [0, 1] {
+            for (ctrl, value) in [(0, 20), (32, lsb)] {
+                synth
+                    .send_event(MidiEvent::ControlChange {
+                        channel: 0,
+                        ctrl,
+                        value,
+                    })
+                    .unwrap();
+            }
+            synth
+                .send_event(MidiEvent::ProgramChange {
+                    channel: 0,
+                    program_id: 48,
+                })
+                .unwrap();
+            assert_eq!(synth.channel_preset(0).unwrap().banknum(), 20);
+        }
+        synth.send_event(MidiEvent::SystemReset).unwrap();
+        synth
+            .send_event(MidiEvent::ControlChange {
+                channel: 0,
+                ctrl: 32,
+                value: 0,
+            })
+            .unwrap();
+        synth
+            .send_event(MidiEvent::ProgramChange {
+                channel: 0,
+                program_id: 48,
+            })
+            .unwrap();
+        assert_eq!(synth.channel_preset(0).unwrap().banknum(), 0);
+    }
+
+    fn render_fixture(name: &str, track: &[u8], rate: u32) -> Vec<f64> {
+        let path = std::env::temp_dir().join(format!("jap-{name}-{}.mid", std::process::id()));
+        fs::write(&path, smf(0, 480, &[track])).unwrap();
+        let font = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/fixtures/sine.sf2");
+        let mut source =
+            MidiSource::open_with(&path, Some(font.to_string_lossy().into_owned()), rate).unwrap();
+        let mut audio = Vec::new();
+        while source.read(&mut audio).unwrap() > 0 {}
+        fs::remove_file(path).unwrap();
+        audio
+    }
+
+    #[test]
+    fn master_volume_mutes_the_mix_without_losing_sustained_notes() {
+        #[rustfmt::skip]
+        let track = [
+            0, 0xb0, 91, 127, // send to reverb so the master volume also covers effects
+            0, 0x90, 69, 100,
+            0x83, 0x60, 0xf0, 7, 0x7f, 0x7f, 4, 1, 0, 0, 0xf7,
+            0x83, 0x60, 0xf0, 7, 0x7f, 0x7f, 4, 1, 0x7f, 0x7f, 0xf7,
+            0x83, 0x60, 0x80, 69, 0,
+            0, 0xff, 0x2f, 0,
+        ];
+        let audio = render_fixture("midi-master-volume", &track, 48000);
+        assert!(audio[48_000..96_000].iter().all(|sample| *sample == 0.));
+        assert!(
+            audio[100_000..120_000]
+                .iter()
+                .any(|sample| sample.abs() > 0.001)
+        );
+    }
+
+    #[test]
+    fn effects_returns_are_restored_after_reset() {
+        let render = |rate, controller, send, reset| {
+            let mut track = Vec::new();
+            if reset {
+                track.extend([0, 0xf0, 5, 0x7e, 0x7f, 9, 1, 0xf7]);
+            }
+            track.extend([
+                0, 0xb0, controller, send, 0, 0x90, 69, 100, 0x87, 0x40, 0x80, 69, 0, 0, 0xff,
+                0x2f, 0,
+            ]);
+            render_fixture("midi-effects", &track, rate)
+        };
+        for rate in [48000, 96000] {
+            for controller in [91, 93] {
+                let dry = render(rate, controller, 0, false);
+                let wet = render(rate, controller, 127, false);
+                let after_reset = render(rate, controller, 127, true);
+                assert!(wet != dry, "CC{controller} has no effect at {rate} Hz");
+                assert!(
+                    wet == after_reset,
+                    "CC{controller} changed after reset at {rate} Hz"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn soundfont_effect_controllers_add_to_the_send_without_changing_dry_audio() {
+        use oxisynth::GeneratorType;
+
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/fixtures/sine.sf2");
+        let font = load_font(&fixture).unwrap();
+        for (ctrl, generator) in [
+            (91, GeneratorType::ReverbSend),
+            (93, GeneratorType::ChorusSend),
+        ] {
+            let render = |send, value, fx| {
+                let mut synth = Synth::new(SynthDescriptor {
+                    reverb_active: fx,
+                    chorus_active: fx,
+                    ..Default::default()
+                })
+                .unwrap();
+                synth.add_font(font.clone(), true);
+                synth.set_gen(0, generator, send).unwrap();
+                synth
+                    .send_event(MidiEvent::ControlChange {
+                        channel: 0,
+                        ctrl,
+                        value,
+                    })
+                    .unwrap();
+                synth
+                    .send_event(MidiEvent::NoteOn {
+                        channel: 0,
+                        key: 69,
+                        vel: 100,
+                    })
+                    .unwrap();
+                let mut pcm = vec![0.0_f32; 16384];
+                synth.write(pcm.as_mut_slice());
+                pcm
+            };
+            // SF2 2.04 §8.4.8–9: add 200 × 64/128 to the existing send of 250.
+            // Compare real rendered samples, including the effect return.
+            assert!(render(250.0, 64, true) == render(350.0, 0, true));
+            assert!(render(250.0, 127, true) == render(448.4375, 0, true));
+            assert!(render(250.0, 127, false) == render(250.0, 0, false));
+        }
+    }
+
+    #[test]
+    fn channel_volume_expression_and_velocity_preserve_stereo_mix_ratios() {
+        let audio = render_fixture(
+            "midi-channel-balance",
+            &[
+                0, 0xb0, 10, 0, 0, 0xb1, 10, 127, // hard-pan two identical parts
+                0, 0xb0, 7, 127, 0, 0xb1, 7, 127, 0, 0x90, 69, 100, 0, 0x91, 69, 100, 0x83, 0x60,
+                0xb1, 7, 64, // reduce right channel volume
+                0x83, 0x60, 0xb1, 7, 127, 0, 0xb1, 11, 64, // reduce expression instead
+                0x83, 0x60, 0xb1, 11, 127, 0, 0x81, 69, 0, 0, 0x91, 69, 50, 0x83, 0x60, 0x80, 69,
+                0, 0, 0x81, 69, 0, 0, 0xff, 0x2f, 0,
+            ],
+            48000,
+        );
+        for (window, expected_db) in [
+            (0, 0.0),
+            (1, 40.0 * (64.0_f64 / 127.0).log10()),
+            (2, 40.0 * (64.0_f64 / 127.0).log10()),
+            (3, 40.0 * (50.0_f64 / 100.0).log10()),
+        ] {
+            let start = window * 48_000 + 20_000;
+            let (frames, _) = audio[start..start + 20_000].as_chunks::<2>();
+            let (left, right) =
+                frames
+                    .iter()
+                    .fold((0.0, 0.0), |(left_power, right_power), &[left, right]| {
+                        (left_power + left * left, right_power + right * right)
+                    });
+            let actual_db = 10.0 * (right / left).log10();
+            assert!(
+                (actual_db - expected_db).abs() < 0.2,
+                "window {window}: {actual_db:.2} dB vs {expected_db:.2} dB"
+            );
+        }
+    }
+
+    #[test]
+    fn soundfont_pan_controller_centers_at_sixty_four() {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/fixtures/sine.sf2");
+        let mut synth = Synth::new(SynthDescriptor {
+            reverb_active: false,
+            chorus_active: false,
+            ..Default::default()
+        })
+        .unwrap();
+        synth.add_font(load_font(&fixture).unwrap(), true);
+        synth
+            .send_event(MidiEvent::ControlChange {
+                channel: 0,
+                ctrl: 10,
+                value: 64,
+            })
+            .unwrap();
+        synth
+            .send_event(MidiEvent::NoteOn {
+                channel: 0,
+                key: 69,
+                vel: 100,
+            })
+            .unwrap();
+        let mut audio = [0.0_f64; 4096];
+        synth.write(audio.as_mut_slice());
+        assert!(audio.iter().any(|sample| sample.abs() > 1e-4));
+        assert!(
+            audio
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .all(|[left, right]| left == right)
+        );
+    }
+
+    #[test]
+    fn reset_and_master_volume_sysex_match_supported_messages() {
+        for data in [
+            &[0x7e, 0x7f, 9, 1, 0xf7][..],
+            &[0x41, 0x10, 0x42, 0x12, 0x40, 0, 0x7f, 0, 0x41, 0xf7],
+        ] {
+            assert!(matches!(
+                sysex(data),
+                Some(Action::Midi(MidiEvent::SystemReset))
+            ));
+        }
+        assert!(matches!(
+            sysex(&[0x7f, 0x7f, 4, 1, 0x7f, 0x7f, 0xf7]),
+            Some(Action::MasterVolume(1.0))
+        ));
+        assert!(
+            matches!(sysex(&[0x41, 0x10, 0x42, 0x12, 0x40, 0, 4, 63, 125, 0xf7]), Some(Action::MasterVolume(v)) if v == 63.0 / 127.0)
+        );
+        assert!(sysex(&[0x7e, 0x7f, 9, 2, 0xf7]).is_none());
+        assert!(sysex(&[0x41, 0x10, 0x42, 0x12, 0x40, 0, 4, 63, 126, 0xf7]).is_none());
     }
     #[test]
     fn tempo_running_status_and_tail() {

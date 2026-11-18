@@ -71,7 +71,7 @@ version = "0.4.14"
 version = "0.1.0"
 
 [dependencies.oxisynth-reverb]
-version = "0.1.0"
+path = "../oxisynth-reverb"
 
 [dependencies.rand]
 version = "0.9.1"

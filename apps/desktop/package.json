@@ -15,7 +15,7 @@
   "description": "Just A Player",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "node scripts/ensure-electron.mjs && node ../../scripts/build-lightweight.mjs --debug && node ../../scripts/build-virtual-output.mjs --debug && node ../../scripts/prepare-soundfonts.mjs && node scripts/prepare-media-tools.mjs && electron-vite dev",
+    "dev": "node scripts/ensure-electron.mjs && node ../../scripts/build-lightweight.mjs --debug && node ../../scripts/build-virtual-output.mjs --debug && node ../../scripts/prepare-soundfonts.mjs && node scripts/prepare-media-tools.mjs && electron-vite build && electron-vite dev",
     "build": "node ../../scripts/build-lightweight.mjs && node ../../scripts/build-virtual-output.mjs && node ../../scripts/prepare-soundfonts.mjs && node scripts/prepare-media-tools.mjs && electron-vite build",
     "package": "node ../../scripts/prepare-soundfonts.mjs && node scripts/prepare-media-tools.mjs && node scripts/prepare-package.mjs && node scripts/package.mjs",
     "media:prepare": "node scripts/prepare-media-tools.mjs",

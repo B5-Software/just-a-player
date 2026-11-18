@@ -7,6 +7,9 @@ impl Synth {
         self.core.settings.set_sample_rate(sample_rate);
         self.core.voices.set_sample_rate(sample_rate);
 
+        let reverb_params = self.core.reverb.params();
+        self.core.reverb = oxisynth_reverb::Reverb::with_sample_rate(sample_rate);
+        self.core.reverb.set_params(&reverb_params);
         self.core.chorus = oxisynth_chorus::Chorus::new(sample_rate);
     }
 

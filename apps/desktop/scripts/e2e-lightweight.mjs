@@ -10,6 +10,7 @@ import { connect } from 'node:net'
 const cwd = fileURLToPath(new URL('..', import.meta.url))
 const packaged = process.argv.includes('--packaged')
 const liveClient = process.argv.includes('--external') && process.argv.includes('--live-client')
+const stopDevServer = !packaged && !liveClient
 const executable = packaged
   ? join(
       cwd,
@@ -23,12 +24,8 @@ const root = resolve(cwd, '../..'),
 mkdirSync(data, { recursive: true })
 const path = join(data, '交接测试.wav')
 writeFileSync(path, wave({ seconds: 60 }))
-const app = await electron.launch({
-  executablePath: executable,
-  cwd,
-  args: [...(packaged ? [] : ['.']), ...graphicsArgs],
-  env: { ...process.env, JAP_E2E: 'lightweight', JAP_E2E_USERDATA: data },
-})
+let app
+let devServer
 let observer
 let returnedBrowser
 const requests = new Map()
@@ -41,6 +38,24 @@ const externalRequest = action => new Promise((resolve,reject)=>{
 const transitions = []
 let observing = false, position = 0
 try {
+  const env = { ...process.env, JAP_E2E: 'lightweight', JAP_E2E_USERDATA: data }
+  delete env.ELECTRON_RENDERER_URL
+  if (stopDevServer) {
+    const { preview } = await import('vite')
+    devServer = await preview({
+      configFile: false,
+      root: cwd,
+      build: { outDir: 'out/renderer' },
+      preview: { host: '127.0.0.1', port: 0 },
+    })
+    env.ELECTRON_RENDERER_URL = `http://127.0.0.1:${devServer.httpServer.address().port}/?e2e=1`
+  }
+  app = await electron.launch({
+    executablePath: executable,
+    cwd,
+    args: [...(packaged ? [] : ['.']), ...graphicsArgs],
+    env,
+  })
   const page = await app.firstWindow()
   await page.waitForFunction(
     () =>
@@ -129,6 +144,11 @@ try {
       setTimeout(() => reject(Error('Electron did not exit')), 10000)
     ),
   ])
+  if (devServer) {
+    assert.equal(page.url(), env.ELECTRON_RENDERER_URL)
+    await devServer.close()
+    devServer = undefined
+  }
   observing=false
   assert(!transitions.some(e=>e.type==='state'&&e.state!=='playing'),'mode switch must not pause/stop the engine')
   assert(!transitions.some(e=>e.type==='trackChanged'),'mode switch must not reopen the source')
@@ -158,7 +178,8 @@ try {
   }
   assert(returnedBrowser, 'Returned full interface must start its browser process')
   const context = returnedBrowser.contexts()[0]
-  const returnedPage = context.pages().find(page => page.url().includes('/renderer/index.html')) ?? await context.waitForEvent('page')
+  const returnedPage = context.pages()[0] ?? await context.waitForEvent('page', { timeout: 15000 })
+  await returnedPage.waitForURL(url => url.protocol === 'file:' && url.pathname.endsWith('/renderer/index.html'), { timeout: 15000 })
   await returnedPage.waitForFunction(() => window.__jap?.usePlayer.getState().connected && window.__jap.usePlayer.getState().state === 'playing')
   await returnedPage.locator('[data-now-playing] h1').waitFor({ state: 'visible' })
   assert(Math.abs(await returnedPage.evaluate(() => window.__jap.usePlayer.getState().volume) - 0.07) < 1e-5, 'Full UI must keep the native volume')
@@ -183,6 +204,7 @@ try {
         passed: true,
         renderer: state.renderer,
         liveClient,
+        stoppedDevServer: stopDevServer,
         webview: false,
         checks: [
           'Electron exits after native Rust window opens',
@@ -207,7 +229,8 @@ try {
   }
   observer?.destroy()
   await returnedBrowser?.close().catch(() => {})
-  if (app.process().exitCode === null) app.process().kill()
+  if (app?.process().exitCode === null) app.process().kill()
+  await devServer?.close()
   // Only QA instances with this exact isolated user-data directory belong to us.
   if (process.platform === 'win32') {
     const { spawnSync } = await import('node:child_process')

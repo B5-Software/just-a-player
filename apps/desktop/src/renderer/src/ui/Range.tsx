@@ -11,7 +11,7 @@ interface Props extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange' | 'onInp
   onCommit?: (value: number) => void
   onCancel?: () => void
 }
-/** A tap never changes a touch slider. Vertical EQ faders require a brief hold. */
+/** Touch starts a vertical drag on the thumb. Swipes elsewhere scroll the panel. */
 export function Range({
   min = 0,
   max = 100,
@@ -36,12 +36,8 @@ export function Range({
     y: number
     origin: number
     latest: number
-    start: number
     touch: boolean
     active: boolean
-    scrolling: boolean
-    scroll: HTMLElement | null
-    scrollTop: number
   } | null>(null)
   const [active, setActive] = useState(false)
   const elementRef = useRef<HTMLDivElement>(null)
@@ -90,7 +86,7 @@ export function Range({
       style={
         {
           ...style,
-          touchAction: vertical ? 'none' : 'pan-y',
+          touchAction: 'pan-y',
           writingMode: 'horizontal-tb',
           direction: 'ltr',
         } as CSSProperties
@@ -99,20 +95,16 @@ export function Range({
         if (disabled || span <= 0 || e.button !== 0 || !e.isPrimary || gesture.current) return
         const r = e.currentTarget.getBoundingClientRect(),
           touch = e.pointerType === 'touch'
-        let parent = e.currentTarget.parentElement
-        while (parent && parent.scrollHeight <= parent.clientHeight) parent = parent.parentElement
+        if (touch && vertical && !(e.target instanceof Element && e.target.closest('.jap-range-thumb')))
+          return
         gesture.current = {
           id: e.pointerId,
           x: e.clientX,
           y: e.clientY,
           origin: number,
           latest: number,
-          start: e.timeStamp,
           touch,
           active: !touch,
-          scrolling: false,
-          scroll: parent,
-          scrollTop: parent?.scrollTop ?? 0,
         }
         e.currentTarget.setPointerCapture(e.pointerId)
         if (!touch) {
@@ -136,21 +128,7 @@ export function Range({
           dy = e.clientY - g.y,
           along = vertical ? -dy : dx,
           across = vertical ? dx : dy
-        if (g.scrolling) {
-          if (g.scroll) g.scroll.scrollTop = g.scrollTop - dy
-          return
-        }
         if (!g.active) {
-          // Even a slow continuous swipe belongs to scrolling. It must not turn
-          // into a fader drag simply because its total duration exceeds the hold.
-          const firstMove = e.nativeEvent.getCoalescedEvents?.()[0] ?? e.nativeEvent
-          const elapsed = firstMove.timeStamp - g.start
-          if (vertical && Math.hypot(dx, dy) > 3 && elapsed < 220) {
-            g.scrolling = true
-            if (g.scroll) g.scroll.scrollTop = g.scrollTop - dy
-            return
-          }
-          if (vertical && elapsed < 220) return
           if (Math.abs(along) < 10 || Math.abs(along) < Math.abs(across) * 1.4) return
           g.active = true
           setActive(true)

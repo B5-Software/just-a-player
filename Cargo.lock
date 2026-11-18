@@ -2889,8 +2889,6 @@ dependencies = [
 [[package]]
 name = "oxisynth-reverb"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdbb2d72d399b03dc7546c1087fabcdba68402f987bea903fe284c946fcca7aa"
 
 [[package]]
 name = "parking"

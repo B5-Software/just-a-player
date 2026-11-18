@@ -17,9 +17,11 @@ import { isAudioPath } from '../shared/audio'
 let opening = false
 let handingOff = false
 export function isHandingOff(): boolean { return handingOff }
+export const returningToFull = process.argv.includes('--jap-full')
+export const bundledRendererEntry = join(__dirname, '../renderer/index.html')
 const path = (name: string): string => join(app.getPath('userData'), name)
 export function wantsLightweight(): boolean {
-  if (process.argv.includes('--jap-full') || process.env['JAP_E2E']) return false
+  if (returningToFull || process.env['JAP_E2E']) return false
   try {
     return JSON.parse(readFileSync(path('lightweight-mode.json'), 'utf8')).enabled === true
   } catch {
@@ -43,6 +45,8 @@ export async function openLightweight(
   if (opening) return
   opening = true
   try {
+    if (!app.isPackaged && !existsSync(bundledRendererEntry))
+      throw new Error('缺少完整界面的本地构建，请重新运行 pnpm dev。')
     const exe = process.platform === 'win32' ? 'jap-lightweight.exe' : 'jap-lightweight'
     const root = resolve(__dirname, '../../../..')
     const binary = app.isPackaged
