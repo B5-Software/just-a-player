@@ -25,6 +25,7 @@ export interface VideoRequest {
   visual: {
     viewport?: { width: number; height: number }
     sceneId: string
+    nativeScene?: boolean
     auto: boolean
     offset: { x: number; y: number; z: number }
     zoom: number

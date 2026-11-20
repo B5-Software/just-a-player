@@ -32,6 +32,8 @@ export interface SceneDef {
   name: string
   hint: string
   create(): VizScene
+  /** Fragment-only variant for the Android native HDR surface. */
+  createNative?: () => VizScene
 }
 
 export function disposeScene(scene: THREE.Scene): void {

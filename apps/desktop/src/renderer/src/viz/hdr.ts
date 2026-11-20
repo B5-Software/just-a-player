@@ -76,6 +76,9 @@ export class HdrPresenter {
     this.formatKey = ''
     this.floatStorage = false
   }
+  get wantsNativeScene(): boolean {
+    return this.native?.wantsNativeScene ?? false
+  }
   private async initialize(): Promise<void> {
     if (this.pending || this.gpu || this.disposed) return
     this.pending = true
@@ -117,13 +120,13 @@ export class HdrPresenter {
     renderer: THREE.WebGLRenderer,
     report = false,
     offline = false,
-    shader?: NativeShaderFrame
+    hasNativeShader = false
   ): boolean {
     if (window.jap.nativeHdr) {
       this.hide()
       renderer.toneMapping = THREE.ACESFilmicToneMapping
       if (this.native) {
-        const status = this.native.configure(offline, shader)
+        const status = this.native.configure(offline, hasNativeShader)
         if (report) {
           const old = useHdr.getState()
           if (

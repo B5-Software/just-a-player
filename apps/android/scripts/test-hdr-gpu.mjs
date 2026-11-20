@@ -48,7 +48,7 @@ try {
     console.log(`Comparing shader: ${id}`)
     if (id !== 'antialias-test')
       await c.evaluate(
-        `(async()=>{__jap.useUi.getState().setOnboardingOpen(false);__jap.useSettings.getState().update({renderScale:.25,renderFps:15,enabledLegacyVisuals:${JSON.stringify(id.endsWith('-studio') ? [] : [id])},disabledVisuals:[],autoBackdrop:false});await __jap.prepareScenes();__jap.useViz.getState().setScene(${JSON.stringify(id)})})()`
+        `(async()=>{__jap.useUi.getState().setOnboardingOpen(false);__jap.useSettings.getState().update({renderScale:.25,renderFps:15,enabledLegacyVisuals:${JSON.stringify(id.endsWith('-studio') ? [] : [id])},disabledVisuals:[],autoBackdrop:false,hdrEnabled:false});await __jap.prepareScenes();__jap.useViz.getState().setScene(${JSON.stringify(id)})})()`
       )
     for (let n = 0; n < 100 && id !== 'antialias-test'; n++) {
       if (await c.evaluate(`window.__japViz?.currentId===${JSON.stringify(id)}`)) break
@@ -58,7 +58,13 @@ try {
     const frameExpression =
       id === 'antialias-test'
         ? `await (async()=>{const aa=await (await fetch('shaders/antialias.glsl')).text();return {fragment:'uniform highp sampler2D uLabels;uniform vec2 uRes;\\n#define JA_TEXTURE texture\\n'+aa+'\\nvec3 visualize(vec2 uv){return jaAntialias(uLabels,uv,uRes)*2.;}',uniforms:{},textures:[{name:'uLabels',width:32,height:18,version:1,data:Uint8Array.from({length:32*18},(_,i)=>(i%32)>Math.floor(i/32)*1.4?255:0)}]}})()`
-        : '__japViz.current.nativeShader()'
+        : `(() => {
+            const definition = __jap.useSceneRegistry.getState().scenes.find(s => s.id === ${JSON.stringify(id)});
+            if (!definition?.createNative) return __japViz.current.nativeShader();
+            if (__japViz.current.nativeShader) throw new Error('Original theme is missing in Android SDR');
+            const variant = definition.createNative();
+            try { return variant.nativeShader(); } finally { variant.dispose(); }
+          })()`
     const r = await c.evaluate(`(async()=>{
    const frame=${frameExpression};frame.uniforms=JSON.parse(JSON.stringify({...frame.uniforms,uRes:[32,18],uView:[0,0,1],uTime:3.25,uAudio:[.1,.05,.02,.08],uBackdropOn:0}));
    for(const key of ['uBands','uHold','uWave'])if(Array.isArray(frame.uniforms[key]))frame.uniforms[key]=frame.uniforms[key].map((_,i)=>key==='uWave'?Math.sin(i*.12)*.3:.15+.55*Math.exp(-Math.pow((i-48)/20,2))+(key==='uHold'?.05:0));

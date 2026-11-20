@@ -6,6 +6,7 @@ const fragment = /* glsl */ `
 ${GLSL_NOISE}
 ${GLSL_BANDS}
 uniform vec2 uRes;
+uniform vec3 uView;
 uniform float uTime;
 uniform float uBass;
 uniform float uMid;
@@ -57,8 +58,9 @@ vec3 background(vec2 uv){
 
 void main(){
   vec2 uv = (vUv * 2.0 - 1.0) * vec2(uRes.x / uRes.y, 1.0);
+  vec2 view = (uv - 2.0 * uView.xy * vec2(uRes.x / uRes.y, 1.0)) / uView.z;
   vec3 ro = vec3(0.0, 0.0, 6.2);
-  vec3 rd = normalize(vec3(uv, -1.9));
+  vec3 rd = normalize(vec3(view, -1.9));
   float ang = uTime * 0.12;
   mat2 rot = mat2(cos(ang), -sin(ang), sin(ang), cos(ang));
   ro.xz = rot * ro.xz;
@@ -105,6 +107,7 @@ function create(): VizScene {
   const uniforms = {
     uBands: { value: new Float32Array(128) },
     uRes: { value: new THREE.Vector2(1, 1) },
+    uView: { value: new THREE.Vector3(0, 0, 1) },
     uTime: { value: 0 },
     uBass: { value: 0 },
     uMid: { value: 0 },
@@ -147,6 +150,9 @@ function create(): VizScene {
     },
     resize(w, h) {
       uniforms.uRes.value.set(w, h)
+    },
+    setView(x, y, zoom) {
+      uniforms.uView.value.set(x, -y, zoom)
     },
     setBackdrop(texture, gain) {
       uniforms.uBackdrop.value = texture ?? EMPTY_TEXTURE

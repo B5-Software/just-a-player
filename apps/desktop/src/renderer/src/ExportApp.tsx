@@ -17,7 +17,8 @@ if (window.jap.surface === 'export') {
           z: job.visual.offset.z,
         }
       : job.visual.offset
-    useViz.setState({ ...job.visual, offset, auto: false })
+    const { nativeScene, ...visual } = job.visual
+    useViz.setState({ ...visual, offset, auto: false })
     let previous = -1
     let reportedAt = 0
     const unsubscribe = useVideoExport.subscribe((value) => {
@@ -38,7 +39,7 @@ if (window.jap.surface === 'export') {
       if (value.running) window.jap.videoProgress({ id: job.id, ...value })
     }, 1000)
     void prepareScenes()
-      .then(() => renderVideoJob({ ...job.options, queueId: job.id }))
+      .then(() => renderVideoJob({ ...job.options, queueId: job.id }, nativeScene))
       .finally(() => {
         clearInterval(heartbeat)
         unsubscribe()

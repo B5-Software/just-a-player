@@ -48,9 +48,12 @@ export class NativeHdrPresenter {
     }
     document.documentElement.dataset.nativeHdr = state.active ? '1' : ''
   })
+  get wantsNativeScene(): boolean {
+    return this.api.info.supported && useSettings.getState().hdrEnabled && !this.failure
+  }
   configure(
     offline: boolean,
-    shader?: NativeShaderFrame
+    hasShader: boolean
   ): { supported: boolean; active: boolean; reason: string } {
     const settings = useSettings.getState()
     if (!settings.hdrEnabled) this.failure = ''
@@ -58,8 +61,7 @@ export class NativeHdrPresenter {
     const visible =
       document.documentElement.dataset.windowMode !== 'mini' &&
       document.documentElement.dataset.renderSuspended !== '1'
-    const wanted =
-      display && !!shader && settings.hdrEnabled && !offline && visible && !this.failure
+    const wanted = this.wantsNativeScene && hasShader && !offline && visible
     if (wanted !== this.enabled) {
       this.enabled = wanted
       this.shader = ''
@@ -72,13 +74,13 @@ export class NativeHdrPresenter {
       })
     }
     return {
-      supported: display && !!shader && !this.failure,
+      supported: display && hasShader && !this.failure,
       active: this.active,
       reason: this.failure
         ? `HDR 输出失败：${this.failure}`
         : !display
           ? `Android 当前显示器未报告 HDR（WebView ${this.api.info.webView}）。`
-          : !shader
+          : !hasShader
             ? '当前场景未提供原生 HDR 着色器。'
             : this.active
               ? 'Android 原生 GPU HDR · 分辨率与帧率跟随画质设置 · 无逐帧像素回读。'

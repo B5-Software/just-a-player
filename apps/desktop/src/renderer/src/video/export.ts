@@ -11,6 +11,7 @@ import { loadCover } from '../cover/store'
 import { parseLRC, sungWidth } from '../lyrics/parse'
 import { useSettings } from '../settings/store'
 import { useViz } from '../viz/store'
+import { useHdr } from '../viz/hdr'
 import { activeAccents } from '../theme/store'
 import type { VideoOptions, VideoQueueItem } from '@shared/video'
 import { isMidiPath, discTrack, isDiscImage } from '@shared/audio'
@@ -34,6 +35,7 @@ export async function exportVideo(options: VideoOptions): Promise<VideoQueueItem
     visual: {
       viewport: { width: innerWidth, height: innerHeight },
       sceneId: v.sceneId,
+      nativeScene: Boolean(window.jap.nativeHdr && useHdr.getState().active),
       auto: false,
       offset: v.offset,
       zoom: v.zoom,
@@ -49,7 +51,7 @@ export const useVideoExport = create<{
   error: string | null
   target: string | null
 }>(() => ({ running: false, progress: 0, status: '', cancel: false, error: null, target: null }))
-export async function renderVideoJob(options: VideoOptions): Promise<void> {
+export async function renderVideoJob(options: VideoOptions, nativeScene = false): Promise<void> {
   if (window.jap.surface !== 'export') throw Error('视频任务必须由独立后台进程执行')
   if (useVideoExport.getState().running) return
   const state = useVideoExport.setState
@@ -170,7 +172,8 @@ export async function renderVideoJob(options: VideoOptions): Promise<void> {
         options.start + music,
         w,
         h,
-        options.fps
+        options.fps,
+        nativeScene
       )
       c.drawImage(stage, 0, 0, w, h)
       const debug = new URLSearchParams(location.search).has('e2e') && i === 30

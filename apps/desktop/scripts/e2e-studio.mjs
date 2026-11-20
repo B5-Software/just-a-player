@@ -62,7 +62,7 @@ try {
     await page.screenshot({ path: path.join(out, id + '.png') })
   }
   checks.push('All four studio shaders compile and render without black frames')
-  for (const id of [
+  const originalThemes = [
     'orb',
     'galaxy',
     'tunnel',
@@ -70,6 +70,9 @@ try {
     'ribbon',
     'plasma',
     'terrain',
+  ]
+  for (const id of [
+    ...originalThemes,
     'scope',
     'spectrum',
     'spectrogram',
@@ -83,15 +86,42 @@ try {
     }, id)
     await page.waitForFunction((id) => window.__japViz.currentId === id, id)
     await page.waitForTimeout(150)
-    assert.ok(
-      await page.evaluate(() => !!window.__japViz.current.nativeShader()),
-      id + ' has shared native HDR shader'
+    const scene = await page.evaluate((id) => ({
+      usesSharedShader: Boolean(window.__japViz.current.nativeShader),
+      hasNativeVariant: Boolean(window.__jap.useSceneRegistry.getState().scenes.find(s => s.id === id)?.createNative),
+    }), id)
+    const original = originalThemes.includes(id)
+    assert.deepEqual(
+      scene,
+      { usesSharedShader: !original, hasNativeVariant: original },
+      id + ' uses its original theme or unchanged meter and retains Android HDR support'
     )
     assert.deepEqual(
       await page.evaluate(() => window.__jap.useSettings.getState().enabledLegacyVisuals),
       [id]
     )
     assert.equal(await page.evaluate(() => window.__japViz.lastRenderError), null)
+    if (id === 'orb') {
+      const exports = await page.evaluate(() => {
+        const host = window.__japViz
+        const input = new Float32Array(8 + 128 + 256 + 256)
+        try {
+          const classic = host.renderOffline(input, 2, 160, 90, 30).toDataURL()
+          const usesOriginal = !host.current.nativeShader
+          let stage = host.renderOffline(input, 2, 160, 90, 30, true)
+          for (let i = 1; i <= 21; i++) {
+            stage = host.renderOffline(input, 2 + i / 30, 160, 90, 30, true)
+          }
+          const native = stage.toDataURL()
+          return { usesOriginal, usesNative: Boolean(host.current.nativeShader), differs: classic !== native }
+        } finally {
+          host.endOffline()
+        }
+      })
+      assert.deepEqual(exports, { usesOriginal: true, usesNative: true, differs: true })
+      await page.waitForFunction(() => !window.__japViz.current.nativeShader)
+      checks.push('Offline rendering uses the selected theme variant and restores the live scene afterwards')
+    }
     if(id==='vu') {
       await page.evaluate(path=>{const p=__jap.usePlayer.getState();p.setOutput({api:'null',dsdMode:'pcm'});p.setVolume(0);p.play(path)},vuTone)
       await page.waitForFunction(()=>__jap.usePlayer.getState().position.ms>700)
@@ -108,7 +138,7 @@ try {
     window.__jap.useSettings.getState().update({ enabledLegacyVisuals: [] })
   )
   await page.waitForFunction(() => window.__japViz.currentId === 'silk-studio')
-  checks.push('All twelve additional effects including opt-in VU expose shared HDR shaders')
+  checks.push('Seven original themes and five meters can be enabled individually and retain Android HDR support')
   const plugin = {
       apiVersion: 1,
       id: 'qa-plugin',

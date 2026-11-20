@@ -42,7 +42,7 @@ import { useHdr } from './viz/hdr'
 import { initMidi } from './audio/midi'
 import { initFileOpening } from './library/file-opening'
 import { serializeNativeTextures } from './viz/native-hdr'
-import { prepareScenes } from './viz/scenes'
+import { prepareScenes, useSceneRegistry } from './viz/scenes'
 import { initLightweightHandoff } from './platform/lightweight'
 import { useExternal } from './external/store'
 
@@ -146,6 +146,7 @@ if (new URLSearchParams(location.search).has('e2e')) {
     playDefaultOrResume,
     serializeNativeTextures,
     prepareScenes,
+    useSceneRegistry,
     useDialogs,
     exportVideo,
     useVideoExport,

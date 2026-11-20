@@ -7,7 +7,7 @@ import { activeAccents, useTheme } from '../theme/store'
 import { audio } from './audio'
 import { Palette } from './palette'
 import { PostStack } from './post'
-import { SCENES, useSceneRegistry, type VizScene } from './scenes'
+import { SCENES, useSceneRegistry, type SceneDef, type VizScene } from './scenes'
 import { useViz } from './store'
 import { useUi } from '../ui/store'
 import { usePlayer } from '../engine/store'
@@ -33,6 +33,8 @@ export class VizHost {
   private readonly unsubscribe: Array<() => void> = []
 
   private current: VizScene | null = null
+  private currentDefinition: SceneDef | null = null
+  private prefersNativeScene = false
   private currentId = ''
   private pendingId: string | null = null
   private fade = 1
@@ -47,7 +49,8 @@ export class VizHost {
     time: number,
     width: number,
     height: number,
-    fps: number
+    fps: number,
+    nativeScene = false
   ): HTMLCanvasElement {
     if (!this.exporting || this.width !== width || this.height !== height) {
       this.exporting = true
@@ -63,7 +66,7 @@ export class VizHost {
       this.fade = 0
     }
     audio.offline(frame, time, 1 / fps)
-    this.draw(time * 1000, true)
+    this.draw(time * 1000, true, nativeScene)
     return this.renderer.domElement
   }
   endOffline(): void {
@@ -213,15 +216,16 @@ export class VizHost {
     this.pendingId = id
   }
 
-  private swapScene(id: string): void {
+  private swapScene(id: string, native: boolean): void {
     const def = SCENES.find((s) => s.id === id) ?? SCENES[0]!
     try {
-      const next = def.create()
+      const next = native && def.createNative ? def.createNative() : def.create()
       next.resize(this.width, this.height)
       this.renderer.compile(next.scene, next.camera)
       if (this.current && this.hasFrame) this.post.capture()
       const previous = this.current
       this.current = next
+      this.currentDefinition = def
       this.fade = previous && this.hasFrame ? 1 : 0
       this.defaultBackground = this.current.scene.background
       this.currentId = def.id
@@ -408,7 +412,7 @@ export class VizHost {
       this.renderer.domElement.style.visibility = 'hidden'
     }
   }
-  private draw(now: number, offline = false): void {
+  private draw(now: number, offline = false, offlineNativeScene = false): void {
     if (
       (!offline &&
         ((document.hidden && document.documentElement.dataset['windowMode'] !== 'wallpaper') ||
@@ -444,9 +448,14 @@ export class VizHost {
     }
 
     this.fade = Math.max(0, this.fade - dt / 0.65)
-    if (this.pendingId !== null) {
-      this.swapScene(this.pendingId)
+    const native = offline ? offlineNativeScene : this.hdr.wantsNativeScene
+    if (
+      this.pendingId !== null ||
+      (native !== this.prefersNativeScene && this.currentDefinition?.createNative)
+    ) {
+      this.swapScene(this.pendingId ?? this.currentId, native)
     }
+    this.prefersNativeScene = native
 
     const scene = this.current
     if (!scene) return
@@ -493,12 +502,14 @@ export class VizHost {
       this.renderer,
       window.jap.surface === 'main',
       offline,
-      scene.nativeShader?.()
+      Boolean(scene.nativeShader || this.currentDefinition?.createNative)
     )
     if (
       !offline &&
+      native &&
       this.hdr.presentNative(scene.nativeShader?.(), this.width, this.height, this.backdropCanvas)
     ) {
+      this.hasFrame = false
       this.lastRenderError = null
       this.frameVersion++
       return
